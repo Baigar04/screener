@@ -211,7 +211,10 @@ def congress(cache):
         for o in pc.get(f["doc"], []):
             trades.append({**o, "nombre": f["nombre"], "distrito": f["distrito"], "fecha_decl": f["fecha_decl"], "doc": f["doc"],
                            "url": f"{CLERK}/ptr-pdfs/{f['year']}/{f['doc']}.pdf"})
-    trades.sort(key=lambda o: o["fecha_op"], reverse=True)
+    for o in trades:
+        if o["fecha_op"] > o["fecha_decl"]:
+            o["dudosa"] = True  # fecha de operación posterior a la declaración: error en el documento original
+    trades.sort(key=lambda o: min(o["fecha_op"], o["fecha_decl"]), reverse=True)
     return trades, pc
 
 

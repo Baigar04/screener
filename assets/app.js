@@ -6,7 +6,7 @@ const NAV = [
   ["pulso", "Pulso del mercado", true],
   ["sectores", "Sectores", true],
   ["screener", "Screener", true],
-  ["smart", "Smart money", false],
+  ["smart", "Smart money", true],
   ["carteras", "Carteras", false],
   ["adelantarse", "Adelantarse", false],
 ];

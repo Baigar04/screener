@@ -364,3 +364,7 @@ th[data-tip],button[data-tip]{cursor:pointer}
   .cx-menu{right:auto;left:0;min-width:260px}
   .tipbox{display:none}
 }
+
+/* smart money */
+.sm-head{margin-bottom:4px}
+.tk{font-family:var(--mono);font-size:11.5px;font-weight:600}

@@ -52,6 +52,7 @@ const TIPS = {
   resultados: "Próxima fecha de presentación de resultados (Yahoo; confirmar con la empresa).",
   beta: "Beta: sensibilidad del valor a los movimientos del mercado (1 = igual que el mercado).",
   sector: "Sector según la clasificación de Yahoo Finance.",
+  n_smart: "Número de superinversores de Dataroma que lo tienen en su último 13F.",
   atr_pct: "ATR: rango medio diario de 14 sesiones, en % del precio.",
   vol_rel: "Volumen medio de 5 sesiones / volumen medio de 60.",
 };
@@ -207,6 +208,9 @@ const FILTERS = [
   ["mm200", "Precio vs MM200", 2, opt(["sobre", "Por encima"], ["bajo", "Por debajo"]), (r, v) => r.sobre_mm200 != null && (v === "sobre" ? r.sobre_mm200 : !r.sobre_mm200)],
   ["rsi", "RSI", 2, opt(["<30", "Sobreventa (< 30)"], ["30-70", "Neutral"], [">70", "Sobrecompra (> 70)"]),
     (r, v) => r.rsi != null && (v === "<30" ? r.rsi < 30 : v === ">70" ? r.rsi > 70 : r.rsi >= 30 && r.rsi <= 70)],
+  ["smart", "Superinversores", 1, opt(["1", "En ≥ 1 cartera"], ["3", "En ≥ 3 carteras"], ["5", "En ≥ 5 carteras"], ["buy", "Comprado el último trimestre"], ["cong", "Comprado en el Congreso (12 m)"]),
+    (r, v) => { const p = window.SCRSmart?.data()?.por_valor?.[r.sym]; if (!p) return false;
+      if (v === "buy") return p.f.some((x) => /^(Add|Buy)/.test(x[2] || "")); if (v === "cong") return p.c.some((x) => x[1] === "Compra"); return p.f.length >= +v; }],
   ["resultados", "Resultados", 1, opt(["30", "En los próximos 30 días"], ["7", "En los próximos 7 días"]),
     (r, v) => { if (!r.resultados) return false; const d = (new Date(r.resultados) - Date.now()) / 864e5; return d >= -1 && d <= +v; }],
 ];
@@ -241,6 +245,7 @@ const COLS = [
   ["vol3m", "Volatilidad", 9, (v) => pct(v)], ["rsi", "RSI", 2, (v) => nf(v, 0)],
   ["veredicto", "Técnico", 0, (v) => (v ? `<span class="badge ${v === "Alcista" ? "Favorable" : v === "Bajista" ? "Defensivo" : "Neutral"}">${v}</span>` : "—")],
   ["resultados", "Resultados", 1, (v) => (v ? fmtDate(v) : "—")],
+  ["n_smart", "Superinv.", 1, (v) => (v == null ? "—" : v || "·")],
 ];
 const colsFor = (lv) => (E.cols && E.cols.length ? E.cols : COLS.filter((c) => c[2] <= lv).map((c) => c[0]));
 
@@ -302,8 +307,14 @@ function rangePanel() {
   }).join("")}</div>`;
 }
 
+function enrichSmart() {
+  const d = window.SCRSmart?.data(); if (!d || E._smartDone === d) return;
+  E.uni.filas.forEach((r) => { const p = d.por_valor[r.sym]; r.n_smart = p ? p.f.length : 0; r.n_cong = p ? p.c.length : 0; });
+  E._smartDone = d;
+}
 function renderScreener() {
   if (!E.uni) { ensure(); return stateBox(); }
+  window.SCRSmart?.ensure(); enrichSmart();
   const lv = H.S.level, base = rowsRegion(), rows = filtered();
   const fdefs = FILTERS.filter((f) => f[2] <= lv);
   const cols = colsFor(lv).map((k) => COLS.find((c) => c[0] === k)).filter(Boolean);
@@ -396,8 +407,7 @@ function fichaTab(tab, r, d) {
   const lv = H.S.level;
   if (!d) return `<div class="skel" style="height:220px"></div>`;
   if (tab === "grafico") return `<div id="fchart" class="fchart"></div>`;
-  if (tab === "pers") return `<div class="soon-box"><h3>Personalidades</h3>Qué inversores de Dataroma, fondos (13F) y figuras públicas con carteras declaradas tienen ${esc(r.sym)}.
-    Se construirá en una fase aparte. Las fechas de operación y de declaración irán separadas, con el desfase de hasta 45 días.</div>`;
+  if (tab === "pers") return window.SCRSmart ? window.SCRSmart.persTab(r.sym) : `<div class="err-box">Módulo de smart money no disponible.</div>`;
   if (tab === "comparar") {
     const list = [r.sym, ...E.cmp.filter((s) => s !== r.sym)].slice(0, 4);
     return list.length < 2 ? `<div class="soon-box">Añade otros valores al comparador desde el screener (casilla ⇄) o con «+ Comparar» en su ficha. Máximo 4.</div>`
@@ -644,6 +654,8 @@ H.closeDrawer = () => { if (E.chartApi) { E.chartApi.destroy(); E.chartApi = nul
 document.addEventListener("click", (e) => { if (e.target.closest("#drawerClose") || e.target.id === "overlay") { if (E.chartApi) { E.chartApi.destroy(); E.chartApi = null; } E.ficha = null; document.getElementById("drawer").classList.remove("full"); } }, true);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.fullscreenElement) { E.ficha = null; document.getElementById("drawer").classList.remove("full"); } });
 
+window.SCRUni = () => (E.uni ? E.uni.filas : []);
+if (window.SCRSmart) window.SCRSmart.onload = () => { if (E.ficha && E.ficha.tab === "pers") paintFicha(); };
 H.modules.sectores = renderSectores;
 H.modules.screener = renderScreener;
 H.handlers.push(onClick);
