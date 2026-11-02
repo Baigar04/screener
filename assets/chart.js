@@ -126,7 +126,7 @@ function baseOptions(LW) {
     crosshair: { mode: LW.CrosshairMode.Normal },
     rightPriceScale: { borderColor: css("--border") },
     timeScale: { borderColor: css("--border"), rightOffset: 4, minBarSpacing: 0.5 },
-    localization: { locale: "es-ES", priceFormatter: (p) => fmt(p, Math.abs(p) < 10 ? 3 : 2) },
+    localization: { locale: "es-ES", priceFormatter: (p) => (Math.abs(p) >= 1e5 ? fmtVol(p) : fmt(p, Math.abs(p) < 10 ? 3 : 2)) },
   };
 }
 
@@ -218,7 +218,9 @@ async function mount(el, sym, opts = {}) {
       pane++;
       try { window.SCRKonkorde.draw(chart, LW, D, pane, series); heights.push(110); } catch (e) { note.textContent = "Konkorde: " + e.message; }
     }
-    try { const ps = chart.panes(); heights.forEach((h, i) => ps[i + 1]?.setHeight(h)); } catch (e) { /* versión sin paneles ajustables */ }
+    const wrap = host.parentElement, mainH = window.innerWidth < 640 ? 300 : 380;
+    if (!root.classList.contains("fs") && !document.fullscreenElement) wrap.style.height = mainH + heights.reduce((a, b) => a + b, 0) + "px";
+    requestAnimationFrame(() => { try { const ps = chart.panes(); heights.forEach((h, i) => ps[i + 1]?.setHeight(h)); } catch (e) { /* sin paneles ajustables */ } });
     setPeriod();
     chart.subscribeCrosshairMove((p) => showLegend(p));
     showLegend(null);

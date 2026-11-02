@@ -69,6 +69,7 @@ async function ensure(force) {
   } catch (e) { E.err = e.message || String(e); }
   E.loading = false;
   H.render();
+  if (document.getElementById("gq")?.value) paintSearch();
 }
 
 /* ---------- formato ---------- */

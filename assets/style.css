@@ -333,7 +333,7 @@ svg.mini{width:100%;height:auto;display:block}
 .cx-row input[type=checkbox]{accent-color:var(--accent)}
 .cx-num{width:54px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--text);font:12px var(--font);padding:3px 5px;margin-left:4px}
 .cx:fullscreen,.cx.fs{position:fixed;inset:0;z-index:100;padding:12px;background:var(--surface)}
-.cx:fullscreen .cx-wrap,.cx.fs .cx-wrap{flex:1;height:auto}
+.cx:fullscreen .cx-wrap,.cx.fs .cx-wrap{flex:1;height:auto!important}
 
 /* estados */
 .skel{background:linear-gradient(90deg,var(--surface-2) 25%,var(--surface-3) 50%,var(--surface-2) 75%);background-size:200% 100%;animation:sk 1.2s linear infinite;border-radius:8px}
