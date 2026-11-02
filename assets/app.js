@@ -7,8 +7,8 @@ const NAV = [
   ["sectores", "Sectores", true],
   ["screener", "Screener", true],
   ["smart", "Smart money", true],
-  ["carteras", "Carteras", false],
-  ["adelantarse", "Adelantarse", false],
+  ["carteras", "Carteras", true],
+  ["adelantarse", "Adelantarse", true],
 ];
 const LEVELS = ["Principiante", "Intermedio", "Avanzado", "Experto inversor"];
 const LEVELS_SHORT = ["Principiante", "Intermedio", "Avanzado", "Experto"];
@@ -333,7 +333,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDra
 
 const MODULES = {}, HANDLERS = [];
 function go(v) { S.view = v; render(); window.scrollTo(0, 0); }
-window.SCR = { S, esc, nf, sgn, fmtDate, store, dropdown, openDrawer, closeDrawer, render, go, modules: MODULES, handlers: HANDLERS };
+window.SCR = { S, esc, nf, sgn, fmtDate, store, dropdown, openDrawer, closeDrawer, render, go, seriesDrawer, modules: MODULES, handlers: HANDLERS };
 render();
 load();
 })();

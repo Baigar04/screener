@@ -739,6 +739,9 @@ document.addEventListener("click", (e) => { if (e.target.closest("#drawerClose")
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.fullscreenElement) { E.ficha = null; document.getElementById("drawer").classList.remove("full"); } });
 
 window.SCRUni = () => (E.uni ? E.uni.filas : []);
+window.SCRFiltered = () => (E.uni ? filtered() : []);
+window.SCREnsureUni = () => ensure();
+window.SCROpen = (sym) => companyDrawer(sym);
 if (window.SCRSmart) window.SCRSmart.onload = () => { if (E.ficha && E.ficha.tab === "pers") paintFicha(); };
 H.modules.sectores = renderSectores;
 H.modules.screener = renderScreener;

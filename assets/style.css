@@ -384,3 +384,10 @@ th[data-tip],button[data-tip]{cursor:pointer}
 .dr-canvas{position:absolute;left:0;top:0;z-index:4;pointer-events:none;touch-action:none}
 .dr-tools button{display:inline-flex;align-items:center;padding:3px 6px}
 .dr-tools svg{width:15px;height:15px}
+
+/* carteras */
+.txt{flex:1;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font:12.5px var(--font);padding:6px 9px}
+.txt:focus{outline:0;border-color:var(--accent)}
+.note{padding:5px 0;border-bottom:1px solid var(--border);font-size:12.5px}
+label.icon-btn{cursor:pointer}
+@media (max-width:640px){.kpis[style*="repeat(6"]{grid-template-columns:repeat(2,minmax(0,1fr))!important}.views[style*="repeat(2"]{grid-template-columns:1fr!important}}

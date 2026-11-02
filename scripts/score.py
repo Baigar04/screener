@@ -156,8 +156,12 @@ def main():
     last = hist["semanas"][-1]["fecha"] if hist["semanas"] else None
     if not last or (NOW - datetime.fromisoformat(last)).days >= 7:
         hist["semanas"].append({"fecha": NOW.isoformat(timespec="seconds"), "top": [[s, tot[s], price[s]] for s in top],
-                                "precios": {k: v for k, v in price.items() if v}})
+                                "precios": {k: v for k, v in price.items() if v},
+                                "senales": {r["sym"]: [r["veredicto"], r["precio"]] for r in rows if r.get("veredicto") in ("Alcista", "Bajista") and r.get("precio")}})
         hist["semanas"] = hist["semanas"][-104:]
+    lw = hist["semanas"][-1]
+    if "senales" not in lw and (NOW - datetime.fromisoformat(lw["fecha"])).days <= 2:
+        lw["senales"] = {r["sym"]: [r["veredicto"], r["precio"]] for r in rows if r.get("veredicto") in ("Alcista", "Bajista") and r.get("precio")}
     res = []
     for w in hist["semanas"]:
         tr = [price[s] / p0 - 1 for s, _, p0 in w["top"] if price.get(s) and p0]
@@ -165,8 +169,22 @@ def main():
         res.append({"fecha": w["fecha"], "dias": (NOW - datetime.fromisoformat(w["fecha"])).days, "n": len(tr),
                     "top": round(100 * sum(tr) / len(tr), 2) if tr else None, "universo": round(100 * sum(ur) / len(ur), 2) if ur else None,
                     "valores": [s for s, _, _ in w["top"]]})
+    # acierto de las señales técnicas: alcista acierta si sube más que el universo; bajista, si sube menos
+    sig = []
+    for w in hist["semanas"]:
+        d = (NOW - datetime.fromisoformat(w["fecha"])).days
+        if d < 21 or not w.get("senales"):
+            continue
+        ur = [price[s] / p0 - 1 for s, p0 in w["precios"].items() if price.get(s) and p0]
+        u = sum(ur) / len(ur) if ur else 0
+        for kind in ("Alcista", "Bajista"):
+            rs = [price[s] / p0 - 1 for s, (v, p0) in w["senales"].items() if v == kind and price.get(s) and p0]
+            if rs:
+                hits = sum(1 for x in rs if (x > u if kind == "Alcista" else x < u))
+                sig.append({"fecha": w["fecha"], "dias": d, "tipo": kind, "n": len(rs), "aciertos": round(100 * hits / len(rs), 1),
+                            "rent_media": round(100 * sum(rs) / len(rs), 2), "universo": round(100 * u, 2)})
     json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot,
-               "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res,
+               "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res, "senales": sig,
                "metodo": "Cada factor es el percentil (0-100) del valor dentro de su sector; momentum y smart money, dentro de todo el universo. "
                          "Un veredicto técnico bajista limita la nota a 60. El encaje macro es una heurística de rotación sectorial según el régimen de EE. UU."},
               open(os.path.join(DATA, "score.json"), "w"), ensure_ascii=False, separators=(",", ":"))

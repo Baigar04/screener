@@ -401,6 +401,19 @@ def main():
         r["med_per_sector"] = st["sector"].get(r.get("sector") or "", {}).get("per")
         r["med_per_industria"] = st["industria"].get(r.get("industria") or "", {}).get("per")
 
+    # índices de referencia para carteras y comparaciones (no entran en el screener)
+    for ysym_, fname in (("^GSPC", "IDX_SP500"), ("^STOXX50E", "IDX_STOXX50"), ("^IBEX", "IDX_IBEX")):
+        try:
+            idf = yf.download(ysym_, period="5y", interval="1d", auto_adjust=False, progress=False)
+            if isinstance(idf.columns, pd.MultiIndex):
+                idf.columns = idf.columns.get_level_values(0)
+            idf = drop_open_session(".MC" if ysym_ != "^GSPC" else "X", idf.dropna(subset=["Close"]))
+            json.dump({"sym": fname, "fuente": "Yahoo Finance", "t": [d.strftime("%Y-%m-%d") for d in idf.index],
+                       "o": [jnum(x, 2) for x in idf["Open"]], "h": [jnum(x, 2) for x in idf["High"]], "l": [jnum(x, 2) for x in idf["Low"]],
+                       "c": [jnum(x, 2) for x in idf["Close"]], "v": [int(x) if x == x else None for x in idf["Volume"]]},
+                      open(os.path.join(DATA, "p", fname + ".json"), "w"), separators=(",", ":"))
+        except Exception as e:  # noqa: BLE001
+            ERRORS.append({"fuente": "Yahoo Finance", "serie": ysym_, "motivo": str(e)[:150]})
     try:
         rot = rrg(frames, rows)
     except Exception as e:  # noqa: BLE001
