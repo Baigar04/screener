@@ -155,33 +155,47 @@ function renderSectores() {
   h += `<div class="tbl-wrap"><table><thead><tr><th>Sector</th>${cols.map(([k, t, , , , d]) => `<th class="${k === m ? "sorted" : ""}" data-tip="${esc(d)}" data-secsort="${k}">${t}</th>`).join("")}</tr></thead><tbody>
     ${rows.map(([s, d]) => `<tr data-sector="${esc(s)}"><td>${esc(sn(s))}</td>${cols.map(([k, , good, , fmt]) => `<td class="num" style="${d[k] == null ? "" : heatColor(ranks[k].indexOf(d[k]), ranks[k].length, good)}">${fmt(d[k])}</td>`).join("")}</tr>`).join("")}
     </tbody></table></div>`;
-  if (lv >= 1 && E.sec.rrg && Object.keys(E.sec.rrg).length) h += rrgChart(E.sec.rrg);
+  if (lv >= 1 && E.sec.rrg && Object.keys(E.sec.rrg).length) h += rrgChart();
   return h;
 }
-function rrgChart(R) {
-  const W = 640, Hh = 420, P = 36;
-  const all = Object.values(R).flatMap((r) => r.cola);
-  const span = Math.max(1.2, ...all.map((p) => Math.abs(p[1] - 100)), ...all.map((p) => Math.abs(p[2] - 100))) * 1.15;
+const RRG_HZ = [["corto", "Corto · 10 semanas"], ["medio", "Medio · 40 semanas"], ["largo", "Largo · 100 semanas"]];
+const RRG_PAL = ["#5aa9ff", "#36c690", "#f2b44c", "#ff6b78", "#b48cff", "#4fd1c5", "#f78fb3", "#a3e635", "#fb923c", "#94a3b8", "#e879f9", "#38bdf8"];
+E.rrgH = store.get("rrg_h", "corto"); E.rrgSel = null;
+const rrgMap = () => { const R = E.sec?.rrg || {}; return R.corto ? R[E.rrgH] || {} : R; };
+function rrgChart() {
+  const R = rrgMap(), entries = Object.entries(R);
+  if (!entries.length) return "";
+  const W = 680, Hh = 440, P = 36;
+  const all = entries.flatMap(([, r]) => r.cola);
+  const span = Math.max(1.2, ...all.map((p) => Math.abs(p[1] - 100)), ...all.map((p) => Math.abs(p[2] - 100))) * 1.12;
   const X = (v) => P + ((v - (100 - span)) / (2 * span)) * (W - 2 * P), Y = (v) => Hh - P - ((v - (100 - span)) / (2 * span)) * (Hh - 2 * P);
   const q = [["Mejorando", "var(--accent)", P, P], ["Liderando", "var(--pos)", X(100), P], ["Rezagado", "var(--neg)", P, Y(100)], ["Debilitándose", "var(--warn)", X(100), Y(100)]];
-  const pal = ["#5aa9ff", "#36c690", "#f2b44c", "#ff6b78", "#b48cff", "#4fd1c5", "#f78fb3", "#a3e635", "#fb923c", "#94a3b8", "#e879f9"];
-  let i = 0;
-  const series = Object.entries(R).map(([s, r]) => {
-    const col = pal[i++ % pal.length], l = r.cola[r.cola.length - 1];
-    return `<g data-sector="${esc(s)}" style="cursor:pointer"><polyline points="${r.cola.map((p) => `${X(p[1]).toFixed(1)},${Y(p[2]).toFixed(1)}`).join(" ")}" fill="none" stroke="${col}" stroke-width="1.6" opacity=".8"/>
-      ${r.cola.slice(0, -1).map((p) => `<circle cx="${X(p[1])}" cy="${Y(p[2])}" r="2" fill="${col}" opacity=".6"/>`).join("")}
-      <circle cx="${X(l[1])}" cy="${Y(l[2])}" r="5" fill="${col}"><title>${esc(sn(s))}: ${r.cuadrante}</title></circle>
-      <text x="${X(l[1]) + 7}" y="${Y(l[2]) + 4}" font-size="11" fill="var(--text)">${esc(sn(s))}</text></g>`;
+  const col = Object.fromEntries(Object.keys(E.sec.rrg?.corto || R).map((k, i) => [k, RRG_PAL[i % RRG_PAL.length]]));
+  const sel = E.rrgSel && R[E.rrgSel] ? E.rrgSel : null;
+  const tails = entries.map(([s, r]) => {
+    const c = col[s] || "#94a3b8", on = !sel || sel === s, l = r.cola[r.cola.length - 1];
+    return `<g opacity="${on ? 1 : 0.15}"><polyline points="${r.cola.map((p) => `${X(p[1]).toFixed(1)},${Y(p[2]).toFixed(1)}`).join(" ")}" fill="none" stroke="${c}" stroke-width="${sel === s ? 2.2 : 1.4}" opacity=".75"/>
+      ${r.cola.slice(0, -1).map((p) => `<circle cx="${X(p[1]).toFixed(1)}" cy="${Y(p[2]).toFixed(1)}" r="${sel === s ? 2.6 : 1.8}" fill="${c}" opacity=".7"><title>${esc(sn(s))} · ${fmtDate(p[0])}</title></circle>`).join("")}
+      <circle cx="${X(l[1])}" cy="${Y(l[2])}" r="${sel === s ? 9 : 6.5}" fill="${c}" stroke="var(--surface)" stroke-width="2" data-rrgsel="${esc(s)}" style="cursor:pointer"><title>${esc(sn(s))}: ${r.cuadrante} (pulsa para ver el nombre)</title></circle></g>`;
   }).join("");
-  return `<h2 class="sec">Rotación sectorial <span class="hint">Fuerza relativa frente al universo (X) e impulso (Y). Cola = últimas 6 semanas. Aproximación propia al gráfico RRG.</span></h2>
-    <div class="panel" style="overflow-x:auto"><svg viewBox="0 0 ${W} ${Hh}" style="width:100%;max-width:760px;min-width:520px;height:auto;display:block;margin:0 auto" role="img" aria-label="Rotación sectorial">
-    ${q.map(([t, c, x, y]) => `<rect x="${x}" y="${y}" width="${X(100) - P}" height="${Y(100) - P}" fill="${c}" opacity=".06"/><text x="${x + 8}" y="${y + 16}" font-size="11" fill="${c}" font-weight="600">${t}</text>`).join("")}
+  let label = "";
+  if (sel) {
+    const l = R[sel].cola[R[sel].cola.length - 1], tx = X(l[1]), ty = Y(l[2]), txt = `${sn(sel)} · ${R[sel].cuadrante}`, w = txt.length * 7.2 + 18;
+    const lx = Math.min(Math.max(tx + 14, P), W - P - w), ly = Math.max(ty - 34, P + 4);
+    label = `<g data-sector="${esc(sel)}" style="cursor:pointer"><rect x="${lx}" y="${ly}" width="${w}" height="26" rx="7" fill="var(--surface)" stroke="${col[sel]}" stroke-width="1.5"/>
+      <text x="${lx + 9}" y="${ly + 17}" font-size="13" font-weight="600" fill="var(--text)">${esc(txt)}</text><title>Pulsa para ver las industrias del sector</title></g>`;
+  }
+  return `<h2 class="sec">Rotación sectorial <span class="hint">Fuerza relativa frente al universo (X) e impulso (Y). Cada punto es una semana. Pulsa el círculo grande de un sector para ver su nombre.</span></h2>
+    <div class="bar">${RRG_HZ.map(([k, t]) => `<button class="chip ${E.rrgH === k ? "on" : ""}" data-rrgh="${k}">${t}</button>`).join("")}${sel ? `<button class="link-btn" data-rrgsel="">Mostrar todos</button>` : ""}</div>
+    <div class="panel" style="overflow-x:auto"><svg viewBox="0 0 ${W} ${Hh}" style="width:100%;max-width:820px;min-width:520px;height:auto;display:block;margin:0 auto" role="img" aria-label="Rotación sectorial">
+    ${q.map(([t, c, x, y]) => `<rect x="${x}" y="${y}" width="${X(100) - P}" height="${Y(100) - P}" fill="${c}" opacity=".06"/><text x="${x + 10}" y="${y + 20}" font-size="14" fill="${c}" font-weight="600">${t}</text>`).join("")}
     <line x1="${X(100)}" x2="${X(100)}" y1="${P}" y2="${Hh - P}" stroke="var(--border)"/><line x1="${P}" x2="${W - P}" y1="${Y(100)}" y2="${Y(100)}" stroke="var(--border)"/>
-    <text x="${W - P}" y="${Hh - 10}" font-size="10" fill="var(--muted)" text-anchor="end">Fuerza relativa →</text><text x="${P}" y="${P - 10}" font-size="10" fill="var(--muted)">↑ Impulso</text>${series}</svg>
-    <div class="method">Lectura habitual: los sectores giran en el sentido de las agujas del reloj (Mejorando → Liderando → Debilitándose → Rezagado). Es una tendencia, no una regla.</div></div>`;
+    <text x="${W - P}" y="${Hh - 10}" font-size="12" fill="var(--muted)" text-anchor="end">Fuerza relativa →</text><text x="${P}" y="${P - 12}" font-size="12" fill="var(--muted)">↑ Impulso</text>${tails}${label}</svg>
+    <div class="rrg-leg">${entries.map(([s, r]) => `<button class="rrg-it ${sel === s ? "on" : ""}" data-rrgsel="${esc(s)}"><i style="background:${col[s]}"></i>${esc(sn(s))} <span class="hint">${r.cuadrante}</span></button>`).join("")}</div>
+    <div class="method">Lectura habitual: los sectores giran en el sentido de las agujas del reloj (Mejorando → Liderando → Debilitándose → Rezagado). Corto: fuerza relativa sobre 10 semanas; medio: 26; largo: 52. Aproximación propia al gráfico RRG, es una tendencia, no una regla.</div></div>`;
 }
 function sectorDrawer(s) {
-  const st = E.sec.stats[E.region], d = st.sector[s] || {}, rr = E.sec.rrg?.[s];
+  const st = E.sec.stats[E.region], d = st.sector[s] || {}, rr = rrgMap()[s];
   const inds = Object.entries(st.industria).filter(([, x]) => x.sector === s).sort((a, b) => (b[1].r3m ?? -1e9) - (a[1].r3m ?? -1e9));
   const tops = rowsRegion().filter((r) => r.sector === s && r.r3m != null).sort((a, b) => b.r3m - a.r3m);
   H.openDrawer(`<h3>${esc(sn(s))}</h3><div class="reg">${esc(E.region)} · ${d.n} valores${rr ? ` · Rotación: <b>${rr.cuadrante}</b>` : ""}</div>
@@ -701,6 +715,8 @@ function onClick(t, dd) {
   if ((b = t.closest("[data-ftab]"))) { if (E.ficha) { E.ficha.tab = b.dataset.ftab; store.set("ficha_tab", E.ficha.tab === "grafico" || E.ficha.tab === "resumen" ? E.ficha.tab : "resumen"); paintFicha(); } return true; }
   if ((b = t.closest("[data-eqr]"))) { E.region = b.dataset.eqr; store.set("eq_region", E.region); H.render(); return true; }
   if ((b = t.closest("[data-secsort]"))) { const k = b.dataset.secsort; if (SEC_COLS.find((c) => c[0] === k)[2] != null) { E.secMetric = k; store.set("sec_metric", k); H.render(); } return true; }
+  if ((b = t.closest("[data-rrgh]"))) { E.rrgH = b.dataset.rrgh; store.set("rrg_h", E.rrgH); H.render(); return true; }
+  if ((b = t.closest("[data-rrgsel]"))) { const v = b.dataset.rrgsel; E.rrgSel = v && E.rrgSel !== v ? v : null; H.render(); return true; }
   if ((b = t.closest("[data-sector]"))) { sectorDrawer(b.dataset.sector); return true; }
   if ((b = t.closest("[data-gosector]"))) { E.f = { sector: b.dataset.gosector }; E.rng = {}; E.tmpl = null; persist(); H.closeDrawer(); H.go("screener"); return true; }
   if ((b = t.closest("[data-prof]"))) { E.w = { ...PROFILES[b.dataset.prof] }; store.set("pesos", E.w); computeScores(); H.render(); return true; }

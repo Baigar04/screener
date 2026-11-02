@@ -369,30 +369,41 @@ def group_stats(rows, key):
     return out
 
 
+RRG_H = {  # horizonte: (semanas de cola, ventana de la fuerza relativa en sesiones, retardo del impulso en sesiones)
+    "corto": (10, 50, 10),
+    "medio": (40, 130, 20),
+    "largo": (100, 260, 40),
+}
+
+
 def rrg(frames, rows):
-    """Rotación sectorial: índice equiponderado por sector frente al universo. Aproximación propia al gráfico RRG."""
+    """Rotación sectorial: índice equiponderado por sector frente al universo, en tres horizontes. Aproximación propia al gráfico RRG."""
     rets = {s: f["Close"].pct_change() for s, f in frames.items()}
-    allr = pd.DataFrame(rets).iloc[-260:]
+    allr = pd.DataFrame(rets).sort_index()
+    allr = allr[allr.notna().sum(axis=1) > len(rets) * 0.5]  # sesiones con datos de la mayoría
     bench = (1 + allr.mean(axis=1).fillna(0)).cumprod()
     sec = {}
     for r in rows:
         if r.get("sector") and r["sym"] in allr.columns:
             sec.setdefault(r["sector"], []).append(r["sym"])
-    out = {}
+    out = {h: {} for h in RRG_H}
     for s, syms in sec.items():
+        if len(syms) < 2:
+            continue
         idx = (1 + allr[syms].mean(axis=1).fillna(0)).cumprod()
         rs = idx / bench
-        ratio = 100 * rs / rs.rolling(50).mean()
-        mom = 100 * ratio / ratio.shift(10)
-        pts = []
-        for i in range(-26, 1, 5):
-            j = len(ratio) - 1 + i
-            if j >= 0 and not math.isnan(ratio.iloc[j]) and not math.isnan(mom.iloc[j]):
-                pts.append([ratio.index[j].strftime("%Y-%m-%d"), round(ratio.iloc[j], 2), round(mom.iloc[j], 2)])
-        if pts:
-            x, y = pts[-1][1], pts[-1][2]
-            quad = "Liderando" if x >= 100 and y >= 100 else "Debilitándose" if x >= 100 else "Rezagado" if y < 100 else "Mejorando"
-            out[s] = {"cola": pts, "cuadrante": quad, "n": len(syms)}
+        for h, (weeks, win, lag) in RRG_H.items():
+            ratio = 100 * rs / rs.rolling(win).mean()
+            mom = 100 * ratio / ratio.shift(lag)
+            pts = []
+            for k in range(weeks - 1, -1, -1):
+                j = len(ratio) - 1 - 5 * k
+                if j >= 0 and not math.isnan(ratio.iloc[j]) and not math.isnan(mom.iloc[j]):
+                    pts.append([ratio.index[j].strftime("%Y-%m-%d"), round(ratio.iloc[j], 2), round(mom.iloc[j], 2)])
+            if pts:
+                x, y = pts[-1][1], pts[-1][2]
+                quad = "Liderando" if x >= 100 and y >= 100 else "Debilitándose" if x >= 100 else "Rezagado" if y < 100 else "Mejorando"
+                out[h][s] = {"cola": pts, "cuadrante": quad, "n": len(syms)}
     return out
 
 

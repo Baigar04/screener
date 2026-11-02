@@ -515,3 +515,9 @@ html[data-size="l"] .drawer table{font-size:15px}
 .nw a{color:var(--text)}.nw a:hover{color:var(--accent)}
 .tg-n-legal{color:#f23645;border-color:#f2364588}.tg-n-producto{color:#5b8cff;border-color:#5b8cff88}.tg-n-expansion{color:#089981;border-color:#08998188}
 .tg-n-resultados{color:#ff9800;border-color:#ff980088}.tg-n-analistas{color:#b48cff;border-color:#b48cff88}.tg-n-directivos,.tg-n-otras{color:var(--muted);border-color:var(--border-strong)}
+
+/* leyenda de rotación */
+.rrg-leg{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+.rrg-it{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:4px 11px;font-size:13px;cursor:pointer}
+.rrg-it i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.rrg-it.on{border-color:var(--accent);background:var(--accent-soft)}
