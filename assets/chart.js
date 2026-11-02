@@ -10,7 +10,7 @@ const DEF_CFG = {
   ind: {
     sma1: { on: true, n: 50 }, sma2: { on: true, n: 200 }, ema: { on: false, n: 21 }, dema: { on: false, n: 21 },
     bb: { on: false, n: 20, k: 2 }, vol: { on: true }, rsi: { on: false, n: 14 }, macd: { on: false, f: 12, s: 26, g: 9 },
-    konkorde: { on: false },
+    konkorde: { on: false }, eventos: { on: true },
   },
 };
 const IND_META = {
@@ -22,6 +22,7 @@ const IND_META = {
   vol: ["Volumen", "Acciones negociadas por sesión", []],
   rsi: ["RSI", "Fuerza relativa 0-100: > 70 sobrecompra, < 30 sobreventa", [["n", "Periodo", 2, 100]]],
   macd: ["MACD", "Diferencia de dos EMA y su señal: impulso de la tendencia", [["f", "Rápida", 2, 100], ["s", "Lenta", 3, 200], ["g", "Señal", 2, 50]]],
+  eventos: ["Eventos", "Flechas en las fechas de operaciones del Congreso y de entrada en tus carteras; el detalle aparece en la leyenda", []],
   konkorde: ["Konkorde", "Manos fuertes (azul), débiles (verde), tendencia (marrón) y su media (roja), a partir de precio y volumen", []],
 };
 
@@ -296,10 +297,13 @@ async function mount(el, sym, opts = {}) {
   function addEvents() {
     collectEvents();
     const mk = [];
-    EV.forEach((list, d) => list.forEach((o) => {
-      if (o.kind === "pf") mk.push({ time: d, position: "belowBar", color: "#2962ff", shape: "circle", text: "Cartera" });
-      else mk.push({ time: d, position: o.buy ? "belowBar" : "aboveBar", color: o.buy ? css("--pos") : css("--neg"), shape: o.buy ? "arrowUp" : "arrowDown", text: o.txt.split(" ")[0] });
-    }));
+    if (cfg.ind.eventos?.on !== false) EV.forEach((list, d) => {
+      /* un marcador por día y tipo, pequeño y sin texto: el detalle va en la leyenda */
+      const b = list.filter((o) => o.kind === "cb").length, sl = list.filter((o) => o.kind === "cs").length, pf = list.some((o) => o.kind === "pf");
+      if (pf) mk.push({ time: d, position: "belowBar", color: "#2962ff", shape: "circle", size: 0.8 });
+      if (b) mk.push({ time: d, position: "belowBar", color: css("--pos"), shape: "arrowUp", size: b > 1 ? 1 : 0.7 });
+      if (sl) mk.push({ time: d, position: "aboveBar", color: css("--neg"), shape: "arrowDown", size: sl > 1 ? 1 : 0.7 });
+    });
     mk.sort((a, b) => (a.time < b.time ? -1 : 1));
     try { if (LW.createSeriesMarkers) LW.createSeriesMarkers(main, mk); else if (main.setMarkers) main.setMarkers(mk); } catch (e) { /* sin marcadores */ }
     const pf = [...EV.values()].flat().filter((o) => o.kind === "pf");
