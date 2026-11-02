@@ -67,8 +67,8 @@ const sn = (s) => SEC_NAMES[s] || s || "—";
 function heatColor(rank, n, good) {
   if (good == null || n < 3) return "";
   let t = rank / (n - 1); if (!good) t = 1 - t; // 0 = peor, 1 = mejor
-  const c = t >= 0.5 ? "var(--pos)" : "var(--neg)";
-  const a = Math.round(Math.abs(t - 0.5) * 2 * 32);
+  const c = t >= 0.5 ? "var(--good)" : "var(--bad)";
+  const a = Math.round(Math.abs(t - 0.5) * 2 * 38);
   return a < 4 ? "" : `background:color-mix(in srgb,${c} ${a}%,transparent)`;
 }
 
@@ -83,7 +83,7 @@ function renderSectores() {
   rows.sort((a, b) => { const va = a[1][m], vb = b[1][m]; if (va == null) return 1; if (vb == null) return -1; return asc ? va - vb : vb - va; });
   const ranks = {};
   cols.forEach(([k]) => { const v = rows.map((r) => r[1][k]).filter((x) => x != null).sort((a, b) => a - b); ranks[k] = v; });
-  let h = `<h2 class="sec">Radar de sectores <span class="hint">Medianas del universo (${E.uni.n} valores). Verde = mejor dentro de cada columna. Pulsa un sector para ver sus industrias.</span></h2>
+  let h = `<h2 class="sec">Radar de sectores <span class="hint">Medianas del universo (${E.uni.n} valores). Azul = mejor y naranja = peor dentro de cada columna. Pulsa un sector para ver sus industrias.</span></h2>
     <div class="bar">${["Todos", "EE. UU.", "Europa"].map((r) => `<button class="chip ${E.region === r ? "on" : ""}" data-eqr="${r}">${r}</button>`).join("")}
     ${H.dropdown("secmetric", "Ordenar por:", SEC_COLS.filter((c) => c[2] != null && c[3] <= lv).map((c) => [c[0], c[1]]), m)}</div>`;
   if (lv === 0) {

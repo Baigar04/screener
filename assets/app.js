@@ -114,18 +114,29 @@ function freshness(s) {
 }
 
 /* ---------- render ---------- */
+const ICONS = {
+  pulso: "M3 12h4l3-8 4 16 3-8h4",
+  sectores: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  screener: "M3 5h18l-7 8v6l-4 2v-8z",
+  smart: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5",
+  carteras: "M3 7h18v13H3zM8 7V4h8v3M3 12h18",
+  adelantarse: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z",
+};
+const SHORT = { pulso: "Pulso", sectores: "Sectores", screener: "Screener", smart: "Smart money", carteras: "Carteras", adelantarse: "Adelantarse" };
 function renderTop() {
-  $("#nav").innerHTML = NAV.map(([k, n, ready]) => `<button data-k="${k}" class="${S.view === k ? "on" : ""}">${n}${ready ? "" : '<span class="soon">pronto</span>'}</button>`).join("");
+  $("#nav").innerHTML = NAV.map(([k, n, ready]) => `<button data-k="${k}" class="${S.view === k ? "on" : ""}${ready ? "" : " is-soon"}" title="${n}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span><span class="lbl-s">${SHORT[k]}</span>${ready ? "" : '<span class="soon">pronto</span>'}</button>`).join("");
+  const pt = $("#pageTitle"); if (pt) pt.textContent = NAV.find((x) => x[0] === S.view)[1];
   $("#level").innerHTML = LEVELS.map((l, i) => `<button role="radio" aria-checked="${S.level === i}" data-i="${i}" class="${S.level === i ? "on" : ""}" title="${l}">${LEVELS_SHORT[i]}</button>`).join("");
   const st = $("#status");
   if (!S.data) { st.innerHTML = `<span><span class="dot err"></span> ${esc(S.error || "Cargando…")}</span>`; return; }
   const ser = Object.values(S.data.series);
   const ok = ser.filter((s) => s.estado === "ok").length;
   const h = Math.round((Date.now() - new Date(S.data.generado)) / 36e5);
-  st.innerHTML = `<span><span class="dot ${h > 80 ? "stale" : "ok"}"></span> Datos generados ${fmtDateTime(S.data.generado)} (hace ${h} h)</span>
-    <span>${ok}/${ser.length} series al día</span>
+  st.innerHTML = `<span><span class="dot ${h > 80 ? "stale" : "ok"}"></span> Datos: ${fmtDateTime(S.data.generado)} · hace ${h} h</span>
+    <span class="sep">·</span><span>${ok}/${ser.length} series macro al día</span><span class="sep">·</span>
     ${S.data.errores?.length ? `<button id="showErr">${S.data.errores.length} fuente(s) con error</button>` : "<span>Sin errores de fuente</span>"}
-    <span>Actualización automática: lunes a viernes tras el cierre de EE. UU.</span>`;
+    <span class="sep hide-s">·</span><span class="hide-s">Actualización: L-V tras el cierre de EE. UU.</span>`;
 }
 
 function renderPulso() {
@@ -134,9 +145,16 @@ function renderPulso() {
   const lv = S.level;
   let h = "";
 
+  /* resumen */
+  const KPI = ["us10y", "t10y3m", "vix", "hy_oas", "brent", "eurusd"];
+  const R0 = D.regimen;
+  h += `<div class="kpis">${R0?.estado === "ok" ? `<button class="kpi kpi-reg" data-goreg="1"><span class="k-l">Régimen EE. UU.</span><span class="k-v">${esc(R0.dominante)}</span><span class="k-c">${R0.probabilidades[R0.dominante]} % de probabilidad</span></button>` : ""}
+    ${KPI.map((id) => { const s = D.series[id]; if (!s || s.estado !== "ok") return `<div class="kpi"><span class="k-l">${esc(s?.nombre || id)}</span><span class="k-v">—</span></div>`;
+      return `<button class="kpi card-lite" data-id="${id}"><span class="k-l">${esc(s.nombre)}</span><span class="k-v num">${nf(s.valor)}<small>${esc(s.unidad)}</small></span><span class="k-c num chg ${chgClass(id, s.cambio_1m)}">${sgn(s.cambio_1m)} en 1 mes</span></button>`; }).join("")}</div>`;
+
   /* régimen */
   const R = D.regimen;
-  h += `<h2 class="sec">Régimen macro · EE. UU. <span class="hint">${lv === 0 ? "En qué fase del ciclo está la economía" : "Probabilidad por fase del ciclo"}</span></h2>`;
+  h += `<h2 class="sec" id="regimen">Régimen macro · EE. UU. <span class="hint">${lv === 0 ? "En qué fase del ciclo está la economía" : "Probabilidad por fase del ciclo"}</span></h2>`;
   if (R?.estado === "ok") {
     const order = ["Expansión", "Desaceleración", "Recesión", "Recuperación"];
     h += `<div class="panel regime"><div><div class="sub">Fase dominante</div><div class="big">${R.dominante}</div>
@@ -217,7 +235,7 @@ function renderSoon(k) {
 function render() {
   renderTop();
   $("#view").innerHTML = S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view);
-  document.title = "Screener · " + NAV.find((x) => x[0] === S.view)[1];
+  document.title = NAV.find((x) => x[0] === S.view)[1] + " · Screener";
 }
 
 /* ---------- panel lateral ---------- */
@@ -299,7 +317,8 @@ document.addEventListener("click", (e) => {
     store.set("orden_paises", S.sort); render(); return;
   }
   if ((b = t.closest("[data-range]"))) { drawerRange = +b.dataset.range; seriesDrawer(b.dataset.sid); return; }
-  if ((b = t.closest(".card"))) { seriesDrawer(b.dataset.id); return; }
+  if ((b = t.closest(".card, .card-lite"))) { seriesDrawer(b.dataset.id); return; }
+  if (t.closest("[data-goreg]")) { document.getElementById("regimen")?.scrollIntoView({ behavior: "smooth" }); return; }
   if ((b = t.closest("tr[data-pais]"))) { countryDrawer(b.dataset.pais); return; }
   if (t.closest("#showErr")) { errorsDrawer(); return; }
   if (t.closest("#drawerClose") || t.id === "overlay") { closeDrawer(); return; }
