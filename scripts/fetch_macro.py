@@ -273,7 +273,7 @@ def regime(S):
     dirn = g_now - g_past
     centers = {"Expansión": (0.6, 0.15), "Desaceleración": (0.25, -0.3),
                "Recesión": (-0.6, -0.15), "Recuperación": (-0.25, 0.3)}
-    w = {k: math.exp(-((g_now - c[0]) ** 2 + (dirn - c[1]) ** 2) / 0.12) for k, c in centers.items()}
+    w = {k: math.exp(-((g_now - c[0]) ** 2 + (dirn - c[1]) ** 2) / 0.35) for k, c in centers.items()}
     tot = sum(w.values())
     probs = {k: round(v / tot * 100) for k, v in w.items()}
     pce = S.get("pce_core", {})
