@@ -1,0 +1,13 @@
+name: Sondeo smart money
+on:
+  push:
+    branches: [main]
+    paths: ["scripts/probe_smart.py", ".github/workflows/probe.yml"]
+  workflow_dispatch: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/probe_smart.py
+      - run: if [ -f /tmp/p.pdf ]; then sudo apt-get install -y -qq poppler-utils >/dev/null && pdftotext -layout /tmp/p.pdf - | head -80; fi
