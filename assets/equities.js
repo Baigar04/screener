@@ -67,6 +67,8 @@ async function ensure(force) {
       return r.json();
     })));
     E.uni = u; E.sec = s;
+    try { const r = await fetch(`data/score.json?t=${Date.now()}`, { cache: "no-store" }); E.sc = r.ok ? await r.json() : null; } catch (e) { E.sc = null; }
+    computeScores();
   } catch (e) { E.err = e.message || String(e); }
   E.loading = false;
   H.render();
@@ -216,11 +218,73 @@ const FILTERS = [
 ];
 const FILTER_KEY = { per: "per", per_vs_sector: "per_vs_sector", ev_ebitda: "ev_ebitda", div: "div", roe: "roe", margen_op: "margen_op", crec_ventas: "crec_ventas", crec_bpa: "crec_bpa", deuda: "deuda_neta_ebitda", r3m: "r3m", vol3m: "vol3m", rsi: "rsi" };
 /* rangos con controles deslizantes: [clave, etiqueta, mínimo, máximo, paso, sufijo] */
+/* ---------- puntuación de oportunidad ---------- */
+const FACT = [["calidad", "Calidad"], ["valor", "Valor"], ["crecimiento", "Crecimiento"], ["momentum", "Momentum"], ["smart", "Smart money"], ["macro", "Encaje macro"]];
+const FACT_TIP = {
+  calidad: "ROE, margen operativo y deuda neta/EBITDA, en percentil dentro de su sector.",
+  valor: "PER, EV/EBITDA y P/VC frente a la mediana de su sector, en percentil (más barato = más alto).",
+  crecimiento: "Crecimiento de ventas y de BPA, en percentil dentro de su sector.",
+  momentum: "Rentabilidad a 3 y 6 meses y distancia a la MM200, en percentil del universo.",
+  smart: "Superinversores que lo tienen, compras y ventas del trimestre y operaciones del Congreso, en percentil.",
+  macro: "Comportamiento típico de su sector en la fase actual del ciclo (heurística de rotación sectorial).",
+};
+const PROFILES = {
+  "Equilibrado": { calidad: 20, valor: 20, crecimiento: 15, momentum: 20, smart: 15, macro: 10 },
+  "Value": { calidad: 30, valor: 35, crecimiento: 10, momentum: 5, smart: 15, macro: 5 },
+  "Growth": { calidad: 20, valor: 5, crecimiento: 35, momentum: 25, smart: 10, macro: 5 },
+  "Momentum": { calidad: 10, valor: 5, crecimiento: 15, momentum: 45, smart: 15, macro: 10 },
+};
+E.w = store.get("pesos", PROFILES["Equilibrado"]);
+function scoreOf(r) {
+  const f = E.sc?.factores?.[r.sym]; if (!f) return null;
+  let num = 0, den = 0;
+  for (const [k] of FACT) if (f[k] != null && E.w[k] > 0) { num += E.w[k] * f[k]; den += E.w[k]; }
+  if (!den) return null;
+  let t = num / den; if (r.veredicto === "Bajista") t = Math.min(t, 60);
+  return Math.round(t);
+}
+function computeScores() { if (!E.uni) return; E.uni.filas.forEach((r) => { r.score = scoreOf(r); }); }
+const scoreBadge = (v) => (v == null ? "—" : `<span class="sc sc-${v >= 70 ? "hi" : v >= 50 ? "mid" : "lo"}">${v}</span>`);
+const profileName = () => Object.keys(PROFILES).find((k) => FACT.every(([f]) => PROFILES[k][f] === E.w[f])) || "Personalizado";
+function explain(r) {
+  const f = E.sc?.factores?.[r.sym]; if (!f) return null;
+  const phrase = {
+    calidad: () => `calidad ${Math.round(f.calidad)} (ROE ${pct(r.roe)}, margen operativo ${pct(r.margen_op)})`,
+    valor: () => `valor ${Math.round(f.valor)} (frente a su sector: PER ${r.per_vs_sector == null ? "sin dato" : spct(r.per_vs_sector, 0)}, EV/EBITDA ${r.ev_ebitda_vs_sector == null ? "sin dato" : spct(r.ev_ebitda_vs_sector, 0)}, P/VC ${r.pb_vs_sector == null ? "sin dato" : spct(r.pb_vs_sector, 0)})`,
+    crecimiento: () => `crecimiento ${Math.round(f.crecimiento)} (ventas ${spct(r.crec_ventas)}, BPA ${spct(r.crec_bpa)})`,
+    momentum: () => `momentum ${Math.round(f.momentum)} (${spct(r.r3m)} en 3 meses)`,
+    smart: () => `smart money ${Math.round(f.smart)} (${r.n_smart ?? 0} superinversores${r.n_cong ? `, ${r.n_cong} operaciones en el Congreso` : ""})`,
+    macro: () => `encaje macro ${Math.round(f.macro)} (sector ${sn(r.sector)} en fase de ${E.sc.regimen || "—"})`,
+  };
+  const av = FACT.filter(([k]) => f[k] != null && E.w[k] > 0).sort((a, b) => f[b[0]] - f[a[0]]);
+  if (!av.length) return null;
+  const por = `Destaca por ${av.slice(0, 2).map(([k]) => phrase[k]()).join(" y ")}. Punto débil: ${phrase[av[av.length - 1][0]]()}.`;
+  const inv = [];
+  if (r.invalidacion) inv.push(`cierre ${r.veredicto === "Alcista" ? "por debajo" : "por encima"} de ${nf(r.invalidacion, 2)}`);
+  else if (r.sma200) inv.push(`pérdida de la media de 200 sesiones (${nf(r.sma200, 2)})`);
+  if (r.resultados) { const d = (new Date(r.resultados) - Date.now()) / 864e5; if (d > -1 && d < 75) inv.push(`unos resultados del ${fmtDate(r.resultados)} que empeoren márgenes o crecimiento`); }
+  if (r.veredicto === "Bajista") inv.unshift("el técnico es bajista: la nota está limitada a 60 hasta que cambie");
+  const fast = (E.w.momentum + E.w.smart) > (E.w.calidad + E.w.valor);
+  return { por, inv: inv.length ? "Qué la invalidaría: " + inv.join("; ") + "." : "", hz: fast ? "Horizonte: 1-3 meses (pesa más el momentum)." : "Horizonte: 6-12 meses (pesan más calidad y valor)." };
+}
+function weightsPanel() {
+  const hist = E.sc?.historial || [];
+  return `<div class="wpanel"><div class="bar"><span class="hint">Perfil:</span>${Object.keys(PROFILES).map((p) => `<button class="chip ${profileName() === p ? "on" : ""}" data-prof="${p}">${p}</button>`).join("")}
+    ${profileName() === "Personalizado" ? '<span class="chip on">Personalizado</span>' : ""}</div>
+    <div class="rng-grid">${FACT.map(([k, t]) => `<div class="rng"><div class="rng-h"><span data-tip="${esc(FACT_TIP[k])}">${t}</span><span class="num rng-v" id="wv_${k}">${E.w[k]}</span></div>
+      <input class="wslider" type="range" min="0" max="50" step="5" value="${E.w[k]}" data-w="${k}" aria-label="Peso ${t}"></div>`).join("")}</div>
+    <div class="method">${esc(E.sc?.metodo || "")} Los pesos se normalizan: solo importa su proporción.</div>
+    ${hist.length ? `<div class="box"><b>Historial del top 20 (perfil Equilibrado), registrado cada semana</b><table><thead><tr><th>Semana</th><th>Días</th><th>Top 20</th><th>Universo</th><th>Diferencia</th></tr></thead><tbody>
+      ${hist.slice().reverse().slice(0, 12).map((h) => `<tr><td>${fmtDate(h.fecha.slice(0, 10))}</td><td class="num">${h.dias}</td><td class="num chg ${cls(h.top)}">${spct(h.top, 2)}</td><td class="num chg ${cls(h.universo)}">${spct(h.universo, 2)}</td>
+        <td class="num chg ${cls(h.top - h.universo)}">${h.top == null || h.universo == null ? "—" : sgn(h.top - h.universo, 2) + " pp"}</td></tr>`).join("")}</tbody></table>
+      <div class="method">Rentabilidad media desde la fecha de registro hasta el último cierre. Hacen falta varios meses de registros para sacar conclusiones.</div></div>` : ""}</div>`;
+}
+
 const RANGES = [
   ["per", "PER", 0, 80, 1, ""], ["ev_ebitda", "EV/EBITDA", 0, 40, 0.5, "×"], ["div", "Dividendo", 0, 10, 0.25, " %"],
   ["roe", "ROE", -20, 60, 1, " %"], ["margen_op", "Margen operativo", -10, 60, 1, " %"], ["crec_ventas", "Crecimiento ventas", -30, 60, 1, " %"],
   ["r3m", "Rentabilidad 3 meses", -40, 60, 1, " %"], ["r1a", "Rentabilidad 1 año", -60, 150, 5, " %"], ["vol3m", "Volatilidad", 0, 80, 1, " %"],
-  ["rsi", "RSI", 0, 100, 1, ""], ["deuda_neta_ebitda", "Deuda neta/EBITDA", -3, 8, 0.25, "×"],
+  ["rsi", "RSI", 0, 100, 1, ""], ["deuda_neta_ebitda", "Deuda neta/EBITDA", -3, 8, 0.25, "×"], ["score", "Puntuación", 0, 100, 5, ""],
 ];
 const TEMPLATES = {
   "Valor": { per: "<15", per_vs_sector: "-15", deuda: "<3" }, "Calidad": { roe: ">15", margen_op: ">20", deuda: "<2" },
@@ -246,6 +310,7 @@ const COLS = [
   ["veredicto", "Técnico", 0, (v) => (v ? `<span class="badge ${v === "Alcista" ? "Favorable" : v === "Bajista" ? "Defensivo" : "Neutral"}">${v}</span>` : "—")],
   ["resultados", "Resultados", 1, (v) => (v ? fmtDate(v) : "—")],
   ["n_smart", "Superinv.", 1, (v) => (v == null ? "—" : v || "·")],
+  ["score", "Puntuación", 0, scoreBadge],
 ];
 const colsFor = (lv) => (E.cols && E.cols.length ? E.cols : COLS.filter((c) => c[2] <= lv).map((c) => c[0]));
 
@@ -324,7 +389,9 @@ function renderScreener() {
     ${["EE. UU.", "Europa"].map((r) => `<button class="chip ${E.regions.has(r) ? "on" : ""}" data-scr="${r}">${r}</button>`).join("")}
     <button class="chip ${E.onlyWatch ? "on" : ""}" data-act="watchonly">★ Seguimiento (${E.watch.length})</button>
     <button class="chip mf-btn ${E.mf ? "on" : ""}" data-act="mf">Filtros${chips.length ? ` (${chips.length})` : ""} ▾</button></div>
-    <div class="fwrap ${E.mf ? "open" : ""}"><div class="bar"><span class="hint">Plantillas:</span>${Object.keys(TEMPLATES).map((t) => `<button class="chip ${E.tmpl === t ? "on" : ""}" data-tmpl="${t}" data-tip="${esc(TEMPLATE_TXT[t])}">${t}</button>`).join("")}</div>
+    <div class="fwrap ${E.mf ? "open" : ""}"><div class="bar"><span class="hint">Plantillas:</span>${E.sc ? `<button class="chip ${E.tmpl === "Top" ? "on" : ""}" data-tmpl="Top" data-tip="Los valores con mejor puntuación según tus pesos">★ Top puntuación</button>` : ""}${Object.keys(TEMPLATES).map((t) => `<button class="chip ${E.tmpl === t ? "on" : ""}" data-tmpl="${t}" data-tip="${esc(TEMPLATE_TXT[t])}">${t}</button>`).join("")}
+    ${E.sc ? `<button class="chip ${E.showW ? "on" : ""}" data-act="weights">Pesos de la puntuación · ${profileName()}</button>` : ""}</div>
+    ${E.showW && E.sc ? weightsPanel() : ""}
     <div class="bar">${fdefs.filter((f) => f[2] <= 1 || E.more || E.f[f[0]]).map(([id, lab]) => H.dropdown("f_" + id, lab + ":", [["", "Cualquiera"], ...filterOptions(id, base)], E.f[id] || "")).join("")}
     ${fdefs.some((f) => f[2] > 1) ? `<button class="chip" data-act="morefilters">${E.more ? "Menos filtros" : `Más filtros (${fdefs.filter((f) => f[2] > 1).length})`}</button>` : ""}
     ${lv >= 1 ? `<button class="chip ${E.showRng ? "on" : ""}" data-act="ranges">Rangos ⇆</button>` : ""}</div>
@@ -437,7 +504,7 @@ function fichaTab(tab, r, d) {
           ["Soporte / resistencia", `${nf(r.soporte, 2)} / ${nf(r.resistencia, 2)}`], ["ATR (14)", pct(r.atr_pct, 2), "atr_pct"], ["Volumen relativo", nf(r.vol_rel, 2) + "×", "vol_rel"]]
           .map(([t, v, k]) => `<div class="kvc"><span${k ? tip(k) : ""}>${t}</span><b class="num">${v}</b></div>`).join("")}</div>` : ""}
         <button class="link-btn" data-ftab="grafico">Abrir gráfico interactivo →</button></div></div>
-    <div><div class="box"><b>Valoración frente a su sector e industria</b><table><thead><tr><th></th><th>Empresa</th><th>Sector</th><th>Industria</th><th>Dif. sector</th></tr></thead><tbody>
+    <div>${scoreBox(r)}<div class="box"><b>Valoración frente a su sector e industria</b><table><thead><tr><th></th><th>Empresa</th><th>Sector</th><th>Industria</th><th>Dif. sector</th></tr></thead><tbody>
       ${vs("per", "PER", r.per, sS.per, sI.per, r.per_vs_sector)}${vs("ev_ebitda", "EV/EBITDA", r.ev_ebitda, sS.ev_ebitda, sI.ev_ebitda, r.ev_ebitda_vs_sector)}${vs("pb", "P/VC", r.pb, sS.pb, sI.pb, r.pb_vs_sector)}
       </tbody></table><div class="method">Medianas de su sector (${sS.n || "—"} valores) y de su industria (${sI.n || "—"}). Verde = cotiza con descuento.</div></div>
       <div class="kv-grid">${[["mcap", "Capitalización", big(r.mcap, r.moneda)], ["div", "Dividendo", pct(r.div)], ["roe", "ROE", pct(r.roe)], ["margen_op", "Margen op.", pct(r.margen_op)],
@@ -446,6 +513,15 @@ function fichaTab(tab, r, d) {
         .map(([k, t, v]) => `<div class="kvc"><span${tip(k)}>${t}</span><b class="num">${v}</b></div>`).join("")}</div>
       ${lv >= 2 && r.precio_objetivo ? `<div class="method">Precio objetivo medio: ${nf(r.precio_objetivo, 2)} (${spct(up)}; ${r.n_analistas || "?"} analistas).</div>` : ""}
       <div class="method">Fuente: <a href="https://finance.yahoo.com/quote/${encodeURIComponent(r.sym)}" target="_blank" rel="noopener">Yahoo Finance</a> · fundamentales a ${fmtDate(r.fecha_fund)}</div></div></div>`;
+}
+function scoreBox(r) {
+  const f = E.sc?.factores?.[r.sym]; if (!f) return "";
+  const ex = explain(r), lv = H.S.level;
+  return `<div class="box scbox"><b>Puntuación de oportunidad · perfil ${esc(profileName())}</b>
+    <div class="sc-top">${scoreBadge(r.score)}<span class="hint">de 100 · percentil frente a su sector</span></div>
+    ${FACT.map(([k, t]) => `<div class="prob" data-tip="${esc(FACT_TIP[k])}"><span>${t}${E.w[k] ? "" : ' <span class="hint">(peso 0)</span>'}</span><div class="track"><div class="fill" style="width:${f[k] ?? 0}%;background:${f[k] == null ? "var(--surface-3)" : f[k] >= 70 ? "var(--good)" : f[k] >= 40 ? "var(--faint)" : "var(--bad)"}"></div></div><span class="num">${f[k] == null ? "—" : Math.round(f[k])}</span></div>`).join("")}
+    ${ex ? `<div class="sc-ex"><div>${esc(ex.por)}</div>${ex.inv ? `<div>${esc(ex.inv)}</div>` : ""}<div>${esc(ex.hz)}</div></div>` : ""}
+    ${lv === 0 ? `<div class="method">Nota para ordenar ideas, no una recomendación de compra.</div>` : ""}</div>`;
 }
 function miniChart(rows) {
   if (!rows || rows.length < 10) return `<div class="err-box">Sin histórico de precios para el gráfico simplificado.</div>`;
@@ -581,6 +657,11 @@ function onClick(t, dd) {
   if ((b = t.closest("[data-secsort]"))) { const k = b.dataset.secsort; if (SEC_COLS.find((c) => c[0] === k)[2] != null) { E.secMetric = k; store.set("sec_metric", k); H.render(); } return true; }
   if ((b = t.closest("[data-sector]"))) { sectorDrawer(b.dataset.sector); return true; }
   if ((b = t.closest("[data-gosector]"))) { E.f = { sector: b.dataset.gosector }; E.rng = {}; E.tmpl = null; persist(); H.closeDrawer(); H.go("screener"); return true; }
+  if ((b = t.closest("[data-prof]"))) { E.w = { ...PROFILES[b.dataset.prof] }; store.set("pesos", E.w); computeScores(); H.render(); return true; }
+  if ((b = t.closest("[data-tmpl]")) && b.dataset.tmpl === "Top") {
+    if (E.tmpl === "Top") { E.tmpl = null; E.rng = {}; } else { E.tmpl = "Top"; E.f = {}; E.rng = { score: [70, 100] }; E.sort = { k: "score", d: -1 }; store.set("scr_orden", E.sort); }
+    E.limit = 50; persist(); H.render(); return true;
+  }
   if ((b = t.closest("[data-tmpl]"))) {
     const n = b.dataset.tmpl;
     if (E.tmpl === n) { E.tmpl = null; E.f = {}; } else { E.tmpl = n; E.f = { ...TEMPLATES[n] }; }
@@ -599,6 +680,7 @@ function onClick(t, dd) {
     if (a === "clear") { E.f = {}; E.rng = {}; E.q = ""; E.onlyWatch = false; E.tmpl = null; persist(); }
     if (a === "more") E.limit += 50;
     if (a === "morefilters") { E.more = !E.more; store.set("mas_filtros", E.more); }
+    if (a === "weights") { E.showW = !E.showW; }
     if (a === "ranges") { E.showRng = !E.showRng; store.set("ver_rangos", E.showRng); }
     if (a === "watchonly") E.onlyWatch = !E.onlyWatch;
     if (a === "mf") E.mf = !E.mf;
@@ -632,8 +714,10 @@ document.addEventListener("input", (e) => {
     const lab = document.getElementById("rv_" + k); if (lab) lab.textContent = `${show(a, R[2])} – ${show(b2, R[3])}`;
   }
 });
+document.addEventListener("input", (e) => { const t = e.target; if (t.dataset.w) { const l = document.getElementById("wv_" + t.dataset.w); if (l) l.textContent = t.value; } });
 document.addEventListener("change", (e) => {
   const t = e.target;
+  if (t.dataset.w) { E.w = { ...E.w, [t.dataset.w]: +t.value }; store.set("pesos", E.w); computeScores(); H.render(); return; }
   if (t.dataset.rng) {
     const k = t.dataset.rng, R = RANGES.find((x) => x[0] === k), ins = t.parentElement.querySelectorAll("input");
     const a = +ins[0].value, b = +ins[1].value;

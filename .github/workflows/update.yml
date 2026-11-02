@@ -39,9 +39,12 @@ jobs:
         run: |
           sudo apt-get install -y -qq poppler-utils >/dev/null
           python scripts/fetch_smart.py
+      - name: Puntuación de oportunidad
+        continue-on-error: true
+        run: python scripts/score.py
       - name: Si falla alguna fuente, conservar los datos publicados
         run: |
-          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json; do
+          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json; do
             if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; fi
           done
       - name: Preparar sitio
