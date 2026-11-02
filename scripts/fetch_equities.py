@@ -101,7 +101,7 @@ def prices(symbols):
         chunk = symbols[i:i + 150]
         for attempt in range(3):
             try:
-                df = yf.download(chunk, period="2y", interval="1d", group_by="ticker", auto_adjust=True,
+                df = yf.download(chunk, period="5y", interval="1d", group_by="ticker", auto_adjust=True,
                                  threads=True, progress=False)
                 for s in chunk:
                     try:
@@ -305,6 +305,7 @@ def rrg(frames, rows):
 # ------------------------------------------------------------------ main
 def main():
     os.makedirs(os.path.join(DATA, "t"), exist_ok=True)
+    os.makedirs(os.path.join(DATA, "p"), exist_ok=True)
     U = universe()
     syms = sorted(U)
     log("Universo:", len(syms))
@@ -346,6 +347,13 @@ def main():
             tail = c.iloc[-252:]
             detail["diario"] = [[d.strftime("%Y-%m-%d"), jnum(v, 2), jnum(a, 2), jnum(b, 2)]
                                 for d, v, a, b in zip(tail.index, tail, s50.iloc[-252:], s200.iloc[-252:])]
+            fr = frames[s]
+            ohlcv = {"t": [d.strftime("%Y-%m-%d") for d in fr.index],
+                     "o": [jnum(x, 3) for x in fr["Open"]], "h": [jnum(x, 3) for x in fr["High"]],
+                     "l": [jnum(x, 3) for x in fr["Low"]], "c": [jnum(x, 3) for x in fr["Close"]],
+                     "v": [int(x) if x == x else None for x in fr["Volume"]]}
+            with open(os.path.join(DATA, "p", s.replace("/", "_") + ".json"), "w") as fh:
+                json.dump({"sym": s, "fuente": "Yahoo Finance (precios ajustados)", **ohlcv}, fh, separators=(",", ":"))
         with open(os.path.join(DATA, "t", s.replace("/", "_") + ".json"), "w") as fh:
             json.dump(detail, fh, separators=(",", ":"))
         rows.append(r)

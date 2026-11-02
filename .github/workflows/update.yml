@@ -43,6 +43,9 @@ jobs:
         run: |
           mkdir -p _site
           cp -r index.html assets data .nojekyll _site/
+          mkdir -p _site/assets/vendor
+          curl -fsSL "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js" -o _site/assets/vendor/lightweight-charts.js \
+            || echo "Aviso: no se pudo descargar Lightweight Charts; la web usará la copia de unpkg"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
