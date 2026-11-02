@@ -149,7 +149,7 @@ async function mount(el, sym, opts = {}) {
     return null;
   }
   host.innerHTML = "";
-  let chart = null, main = null, series = {};
+  let chart = null, main = null, series = {}, draw = null, drTool = "cursor";
   const T = D.t, C = D.c;
 
   function toolbar() {
@@ -160,6 +160,7 @@ async function mount(el, sym, opts = {}) {
           <label data-tip="${esc(d)}"><input type="checkbox" data-cx-on="${k}" ${cfg.ind[k].on ? "checked" : ""}> ${t}</label>
           <span>${ps.map(([p, pl, mn, mx]) => `<input type="number" class="cx-num" data-cx-p="${k}.${p}" value="${cfg.ind[k][p]}" min="${mn}" max="${mx}" step="${p === "k" ? 0.5 : 1}" title="${pl}" aria-label="${t} ${pl}">`).join("")}</span></div>`).join("")}
           <div class="cx-row"><button class="chip" data-cx-reset="1">Restablecer</button></div></div></div>
+      ${window.SCRDraw ? window.SCRDraw.toolbarHtml(drTool) : ""}
       <span style="flex:1"></span>
       <button class="icon-btn" data-cx-fs="1" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>`;
   }
@@ -248,6 +249,9 @@ async function mount(el, sym, opts = {}) {
     if ((b = t.closest("[data-cx-per]"))) { cfg.period = b.dataset.cxPer; saveCfg(cfg); toolbar(); setPeriod(); return; }
     if (t.closest("[data-cx-reset]")) { Object.assign(cfg, structuredClone(DEF_CFG)); saveCfg(cfg); toolbar(); build(); return; }
     if (t.closest("[data-cx-fs]")) { toggleFs(); return; }
+    if ((b = t.closest("[data-dr-tool]")) && draw) { draw.setTool(b.dataset.drTool); return; }
+    if (t.closest("[data-dr-undo]") && draw) { draw.undo(); return; }
+    if (t.closest("[data-dr-clear]") && draw) { draw.clear(); return; }
     if (t.closest(".cx-ind .dd-btn")) { e.stopPropagation(); t.closest(".dd").classList.toggle("open"); return; }
     if (t.closest(".cx-menu")) e.stopPropagation();
   }
@@ -272,7 +276,11 @@ async function mount(el, sym, opts = {}) {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && root.classList.contains("fs")) root.classList.remove("fs"); });
   note.innerHTML = `${esc(D.fuente || "Yahoo Finance")} · ${T.length} sesiones (${T[0]} a ${T[T.length - 1]}) · rueda o pellizco para zoom, arrastrar para desplazar`;
   toolbar(); build();
-  return { rebuild: build, destroy: () => { try { chart.remove(); } catch (e) { /* */ } } };
+  if (window.SCRDraw) {
+    draw = window.SCRDraw.attach(host.parentElement, { chart: () => chart, main: () => main, T, sym,
+      onTool: (tl) => { drTool = tl; bar.querySelectorAll("[data-dr-tool]").forEach((x) => x.classList.toggle("on", x.dataset.drTool === tl)); } });
+  }
+  return { rebuild: build, destroy: () => { if (draw) draw.destroy(); try { chart.remove(); } catch (e) { /* */ } } };
 }
 
 /* ---------- comparador: rentabilidad base 100 ---------- */
