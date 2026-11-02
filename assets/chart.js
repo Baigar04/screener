@@ -199,11 +199,19 @@ async function mount(el, sym, opts = {}) {
     }
     let pane = 0;
     const heights = [];
+    evLane = null;
     if (I.vol.on && D.v) {
       pane++;
       const s = chart.addSeries(LW.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, pane);
       s.setData(T.map((t, i) => (D.v[i] == null ? null : { time: t, value: D.v[i], color: (C[i] >= (C[i - 1] ?? C[i]) ? up : dn) + "88" })).filter(Boolean));
-      series["Volumen"] = { s, arr: D.v, color: css("--muted"), vol: true }; heights.push(70);
+      series["Volumen"] = { s, arr: D.v, color: css("--muted"), vol: true };
+      /* franja inferior del panel de volumen para los marcadores E, D y N */
+      if (I.eventos?.on !== false) {
+        try { s.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.4 } }); } catch (e) { /* */ }
+        evLane = chart.addSeries(LW.LineSeries, { color: "rgba(0,0,0,0)", lineVisible: false, pointMarkersVisible: false, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, pane);
+        evLane.setData(T.map((t) => ({ time: t, value: 0 })));
+        heights.push(96);
+      } else heights.push(70);
     }
     if (I.rsi.on) {
       pane++;
@@ -288,6 +296,7 @@ async function mount(el, sym, opts = {}) {
   const NEWS_COL = { legal: "#f23645", producto: "#2962ff", expansion: "#089981", resultados: "#ff9800", analistas: "#9c27b0", directivos: "#787b86" };
   /* eventos: resultados, dividendos, noticias, Congreso y entradas de mis carteras */
   const EV = new Map();
+  let evLane = null;
   function collectEvents() {
     EV.clear();
     const add = (d, o) => { let k = d; if (!T.includes(k)) { k = T.find((t) => t >= d); if (!k) return; } (EV.get(k) || EV.set(k, []).get(k)).push(o); };
@@ -303,19 +312,20 @@ async function mount(el, sym, opts = {}) {
   }
   function addEvents() {
     collectEvents();
-    const mk = [];
+    const mk = [], lk = [];
     if (cfg.ind.eventos?.on !== false) EV.forEach((list, d) => {
       /* un marcador por día y tipo, pequeño y sin texto: el detalle va en la leyenda */
       const b = list.filter((o) => o.kind === "cb").length, sl = list.filter((o) => o.kind === "cs").length, pf = list.some((o) => o.kind === "pf");
       if (pf) mk.push({ time: d, position: "belowBar", color: "#2962ff", shape: "circle", size: 0.8 });
-      const er = list.find((o) => o.kind === "ern"); if (er) mk.push({ time: d, position: "belowBar", color: er.beat === false ? css("--neg") : er.beat ? css("--pos") : css("--warn"), shape: "square", size: 1, text: "E" });
-      if (list.some((o) => o.kind === "div")) mk.push({ time: d, position: "belowBar", color: "#00bcd4", shape: "circle", size: 1, text: "D" });
-      const nw = list.filter((o) => o.kind === "news"); if (nw.length) mk.push({ time: d, position: "aboveBar", color: NEWS_COL[nw[0].cat] || "#9c27b0", shape: "circle", size: 1, text: "N" });
+      /* E, D y N van en la franja del volumen; sin volumen, bajo las velas */
+      const er = list.find((o) => o.kind === "ern"); if (er) lk.push({ time: d, position: "belowBar", color: er.beat === false ? css("--neg") : er.beat ? css("--pos") : css("--warn"), shape: "square", size: 1, text: "E" });
+      if (list.some((o) => o.kind === "div")) lk.push({ time: d, position: "belowBar", color: "#00bcd4", shape: "circle", size: 1, text: "D" });
+      const nw = list.filter((o) => o.kind === "news"); if (nw.length) lk.push({ time: d, position: "belowBar", color: NEWS_COL[nw[0].cat] || "#9c27b0", shape: "circle", size: 1, text: "N" });
       if (b) mk.push({ time: d, position: "belowBar", color: css("--pos"), shape: "arrowUp", size: b > 1 ? 1 : 0.7 });
       if (sl) mk.push({ time: d, position: "aboveBar", color: css("--neg"), shape: "arrowDown", size: sl > 1 ? 1 : 0.7 });
     });
-    mk.sort((a, b) => (a.time < b.time ? -1 : 1));
-    try { if (LW.createSeriesMarkers) LW.createSeriesMarkers(main, mk); else if (main.setMarkers) main.setMarkers(mk); } catch (e) { /* sin marcadores */ }
+    const setMk = (ser, arr) => { arr.sort((a, b) => (a.time < b.time ? -1 : 1)); try { if (LW.createSeriesMarkers) LW.createSeriesMarkers(ser, arr); else if (ser.setMarkers) ser.setMarkers(arr); } catch (e) { /* sin marcadores */ } };
+    if (evLane) { setMk(main, mk); setMk(evLane, lk); } else setMk(main, mk.concat(lk));
     const pf = [...EV.values()].flat().filter((o) => o.kind === "pf");
     if (pf.length) { const avg = pf.reduce((a, o) => a + o.p0, 0) / pf.length; try { main.createPriceLine({ price: avg, color: "#2962ff", lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: true, title: "Media" }); } catch (e) { /* */ } }
   }
