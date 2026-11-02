@@ -131,7 +131,8 @@ def main():
             "valor": mean([g("per"), g("ev"), g("pb")]),
             "crecimiento": mean([g("cv"), g("cb")]),
             "momentum": mean([g("r3"), g("r6"), g("tr")]),
-            "smart": g("sm") if r["_smart"] else 0.0,
+            # Los 13F y el Congreso solo cubren valores de EE. UU.: en Europa el factor queda sin dato (no puntúa 0)
+            "smart": g("sm") if r["_smart"] else (None if "." in s else 0.0),
             "macro": round(sum(probs[k] / 100 * CYCLE[k].get(r.get("sector"), 50) for k in probs), 1) if probs and r.get("sector") else None,
         }
         out[s] = f
