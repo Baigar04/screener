@@ -244,7 +244,11 @@ async function mount(el, sym, opts = {}) {
 
   /* escala de precios del panel principal: normal o logarítmica (menú del botón derecho) */
   function applyScale() {
-    try { chart.priceScale("right", 0).applyOptions({ mode: cfg.escala === "log" ? LW.PriceScaleMode.Logarithmic : LW.PriceScaleMode.Normal }); } catch (e) { /* */ }
+    /* solo la escala de la serie de precio; volumen, RSI, MACD y Konkorde quedan en escala normal */
+    const N = LW.PriceScaleMode.Normal, L = LW.PriceScaleMode.Logarithmic;
+    try { main.priceScale().applyOptions({ mode: cfg.escala === "log" ? L : N }); } catch (e) { /* */ }
+    Object.values(series).forEach((v) => { try { if (v.s && v.s !== main && v.s.priceScale() !== main.priceScale()) v.s.priceScale().applyOptions({ mode: N }); } catch (e) { /* */ } });
+    try { chart.panes().slice(1).forEach((pn) => pn.getSeries().forEach((x) => x.priceScale().applyOptions({ mode: N }))); } catch (e) { /* */ }
   }
   const ctx = document.createElement("div"); ctx.className = "cx-ctx"; ctx.hidden = true;
   host.parentElement.appendChild(ctx);
@@ -264,7 +268,7 @@ async function mount(el, sym, opts = {}) {
   ctx.addEventListener("click", (e) => {
     e.stopPropagation(); let b;
     if ((b = e.target.closest("[data-cx-esc]"))) { cfg.escala = b.dataset.cxEsc; saveCfg(cfg); applyScale(); draw?.redraw?.(); }
-    else if (e.target.closest("[data-cx-fit]")) { try { chart.priceScale("right", 0).applyOptions({ autoScale: true }); } catch (x) { /* */ } setPeriod(); }
+    else if (e.target.closest("[data-cx-fit]")) { try { main.priceScale().applyOptions({ autoScale: true }); } catch (x) { /* */ } setPeriod(); }
     closeCtx();
   });
   document.addEventListener("pointerdown", (e) => { if (!ctx.hidden && !ctx.contains(e.target)) closeCtx(); }, true);
