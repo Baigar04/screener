@@ -91,6 +91,13 @@ def universe():
         rows.setdefault(s, {"indices": []})["indices"].append("Euro Stoxx 50")
     for s in IBEX:
         rows.setdefault(s + ".MC", {"indices": []})["indices"].append("IBEX 35")
+    # Valores añadidos a mano: un ticker de Yahoo Finance por línea en universo_extra.txt (# para comentarios)
+    extra = os.path.join(ROOT, "universo_extra.txt")
+    if os.path.exists(extra):
+        for line in open(extra, encoding="utf-8"):
+            t = line.split("#")[0].strip().upper()
+            if t:
+                rows.setdefault(t, {"indices": []})["indices"].append("Mi lista")
     return rows
 
 

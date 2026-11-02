@@ -1,0 +1,5 @@
+# Valores que no están en los índices del screener y quiero seguir.
+# Un ticker por línea, con el formato de Yahoo Finance:
+#   EE. UU.: el ticker tal cual (FN)  ·  Madrid: .MC (ELE.MC)  ·  Fráncfort: .DE  ·  París: .PA  ·  Ámsterdam: .AS  ·  Milán: .MI  ·  Londres: .L
+# Se puede editar desde github.com: abrir este archivo, pulsar el lápiz y guardar («Commit changes»). Entra en la siguiente actualización.
+FN   # Fabrinet
