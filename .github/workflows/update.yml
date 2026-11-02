@@ -1,4 +1,4 @@
-name: Actualizar datos
+name: Actualizar datos y publicar
 
 on:
   schedule:
@@ -7,35 +7,52 @@ on:
   workflow_dispatch: {}
   push:
     branches: [main]
-    paths: ["scripts/**", ".github/workflows/update.yml"]
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: actualizar-datos
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  update:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Descargar datos macro
+          cache: pip
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Datos macro
         run: python scripts/fetch_macro.py
-      - name: Guardar datos
+      - name: Acciones, sectores y técnico
+        continue-on-error: true
+        run: python scripts/fetch_equities.py
+      - name: Si fallan las acciones, conservar los datos publicados
         run: |
-          git config user.name "screener-bot"
-          git config user.email "screener-bot@users.noreply.github.com"
-          git add data/
-          if git diff --cached --quiet; then
-            echo "Sin cambios en los datos"
-          else
-            git commit -m "Datos actualizados $(date -u +%Y-%m-%dT%H:%MZ)"
-            git pull --rebase origin main
-            git push
-          fi
+          for f in universe.json sectors.json fund_cache.json; do
+            if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; fi
+          done
+      - name: Preparar sitio
+        run: |
+          mkdir -p _site
+          cp -r index.html assets data .nojekyll _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

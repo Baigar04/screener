@@ -4,8 +4,8 @@
 
 const NAV = [
   ["pulso", "Pulso del mercado", true],
-  ["sectores", "Sectores", false],
-  ["screener", "Screener", false],
+  ["sectores", "Sectores", true],
+  ["screener", "Screener", true],
   ["smart", "Smart money", false],
   ["carteras", "Carteras", false],
   ["adelantarse", "Adelantarse", false],
@@ -216,7 +216,7 @@ function renderSoon(k) {
 
 function render() {
   renderTop();
-  $("#view").innerHTML = S.view === "pulso" ? renderPulso() : renderSoon(S.view);
+  $("#view").innerHTML = S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view);
   document.title = "Screener · " + NAV.find((x) => x[0] === S.view)[1];
 }
 
@@ -275,6 +275,8 @@ document.addEventListener("click", (e) => {
   const dd = t.closest(".dd");
   document.querySelectorAll(".dd.open").forEach((x) => { if (x !== dd) x.classList.remove("open"); });
   if (t.closest(".dd-btn")) { dd.classList.toggle("open"); return; }
+  if (t.closest("a[href='#']")) e.preventDefault();
+  for (const fn of HANDLERS) if (fn(t, dd)) return;
   const opt = t.closest(".dd-menu button");
   if (opt) {
     const id = dd.dataset.dd, v = opt.dataset.v;
@@ -310,6 +312,9 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDrawer(); document.querySelectorAll(".dd.open").forEach((x) => x.classList.remove("open")); } });
 
+const MODULES = {}, HANDLERS = [];
+function go(v) { S.view = v; render(); window.scrollTo(0, 0); }
+window.SCR = { S, esc, nf, sgn, fmtDate, store, dropdown, openDrawer, closeDrawer, render, go, modules: MODULES, handlers: HANDLERS };
 render();
 load();
 })();

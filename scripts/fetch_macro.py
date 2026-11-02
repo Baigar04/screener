@@ -188,6 +188,10 @@ CAT = [
 ]
 
 FRESH_DAYS = {"D": 7, "W": 14, "M": 60, "Q": 120}
+# Fuentes alternativas: se usa la que tenga el dato más reciente.
+ALTS = {
+    "hicp_ez": [("FRED", "CP0000EZCCM086NEST", "yoy")],
+}
 
 
 def build_series():
@@ -198,9 +202,20 @@ def build_series():
                "fecha_actualizacion": NOW.isoformat(timespec="seconds"),
                "umbral_frescura_dias": FRESH_DAYS[freq]}
         try:
-            obs, url = fred(code) if fuente == "FRED" else ecb(code)
-            if transf == "yoy":
-                obs = yoy(obs)
+            cands = []
+            for f_, c_, t_ in [(fuente, code, transf)] + ALTS.get(sid, []):
+                try:
+                    o_, u_ = fred(c_) if f_ == "FRED" else ecb(c_)
+                    cands.append((yoy(o_) if t_ == "yoy" else o_, u_, f_, c_))
+                except Exception as e2:  # noqa: BLE001
+                    if c_ == code and not ALTS.get(sid):
+                        raise
+                    log_alt = f"{f_} {c_}: {e2}"
+                    print("  alternativa fallida", log_alt)
+            if not cands:
+                raise RuntimeError("todas las fuentes fallaron")
+            obs, url, fsrc, csrc = max(cands, key=lambda c: c[0][-1][0] if c[0] else date.min)
+            rec["fuente"], rec["codigo"] = fsrc, csrc
             last_d, last_v = obs[-1]
             rec.update({
                 "estado": "ok", "url": url, "fecha_dato": last_d.isoformat(), "valor": round(last_v, 3),
