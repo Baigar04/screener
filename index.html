@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Screener · Pulso del mercado</title>
+<meta name="description" content="Screener propio de mercados: macro, sectores, empresas y carteras con datos públicos.">
+<link rel="stylesheet" href="assets/style.css">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">◆</span> Screener</div>
+  <nav id="nav" class="nav" aria-label="Secciones"></nav>
+  <div class="top-right">
+    <div class="seg" id="level" role="radiogroup" aria-label="Nivel"></div>
+    <button class="icon-btn" id="theme" aria-label="Cambiar tema" title="Modo claro / oscuro">◐</button>
+  </div>
+</header>
+<div class="status" id="status"></div>
+<main id="view" class="main"></main>
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <button class="icon-btn drawer-close" id="drawerClose" aria-label="Cerrar">✕</button>
+  <div id="drawerBody"></div>
+</aside>
+<footer class="foot">
+  Herramienta de análisis con fines informativos. <strong>No es asesoramiento financiero</strong> ni una recomendación de compra o venta.
+  Las señales no son certezas: cada una indica horizonte, confianza y qué la invalidaría. Solo fuentes públicas y gratuitas; si una falla, se muestra «sin datos» y el motivo.
+</footer>
+<script src="assets/app.js"></script>
+</body>
+</html>
