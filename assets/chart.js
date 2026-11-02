@@ -149,7 +149,7 @@ async function mount(el, sym, opts = {}) {
     return null;
   }
   host.innerHTML = "";
-  let chart = null, main = null, series = {}, draw = null, drTool = "cursor";
+  let chart = null, main = null, series = {}, draw = null, drTool = "cursor", drMag = true;
   const T = D.t, C = D.c;
 
   function toolbar() {
@@ -160,7 +160,7 @@ async function mount(el, sym, opts = {}) {
           <label data-tip="${esc(d)}"><input type="checkbox" data-cx-on="${k}" ${cfg.ind[k].on ? "checked" : ""}> ${t}</label>
           <span>${ps.map(([p, pl, mn, mx]) => `<input type="number" class="cx-num" data-cx-p="${k}.${p}" value="${cfg.ind[k][p]}" min="${mn}" max="${mx}" step="${p === "k" ? 0.5 : 1}" title="${pl}" aria-label="${t} ${pl}">`).join("")}</span></div>`).join("")}
           <div class="cx-row"><button class="chip" data-cx-reset="1">Restablecer</button></div></div></div>
-      ${window.SCRDraw ? window.SCRDraw.toolbarHtml(drTool) : ""}
+      ${window.SCRDraw ? window.SCRDraw.toolbarHtml(drTool, drMag) : ""}
       <span style="flex:1"></span>
       <button class="icon-btn" data-cx-fs="1" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>`;
   }
@@ -222,6 +222,7 @@ async function mount(el, sym, opts = {}) {
     const wrap = host.parentElement, mainH = window.innerWidth < 640 ? 300 : 380;
     if (!root.classList.contains("fs") && !document.fullscreenElement) wrap.style.height = mainH + heights.reduce((a, b) => a + b, 0) + "px";
     requestAnimationFrame(() => { try { const ps = chart.panes(); heights.forEach((h, i) => ps[i + 1]?.setHeight(h)); } catch (e) { /* sin paneles ajustables */ } });
+    addEvents();
     setPeriod();
     chart.subscribeCrosshairMove((p) => showLegend(p));
     showLegend(null);
@@ -240,6 +241,7 @@ async function mount(el, sym, opts = {}) {
     let h = `<span class="cx-d">${T[i]}</span> A <b>${fmt(D.o[i])}</b> Máx <b>${fmt(D.h[i])}</b> Mín <b>${fmt(D.l[i])}</b> C <b>${fmt(C[i])}</b> <span class="chg ${cls}">${ch == null ? "" : (ch >= 0 ? "+" : "") + fmt(ch) + " %"}</span>`;
     const extra = Object.entries(series).filter(([, v]) => v.arr && v.arr[i] != null).map(([k, v]) => `<span style="color:${v.color}">${k} ${v.vol ? fmtVol(v.arr[i]) : fmt(v.arr[i])}</span>`);
     if (extra.length) h += `<br>${extra.join(" · ")}`;
+    const ev = EV.get(T[i]); if (ev) h += `<br><span class="cx-ev">${ev.map((x) => esc(x.txt)).join(" · ")}</span>`;
     legend.innerHTML = h;
   }
 
@@ -250,6 +252,8 @@ async function mount(el, sym, opts = {}) {
     if (t.closest("[data-cx-reset]")) { Object.assign(cfg, structuredClone(DEF_CFG)); saveCfg(cfg); toolbar(); build(); return; }
     if (t.closest("[data-cx-fs]")) { toggleFs(); return; }
     if ((b = t.closest("[data-dr-tool]")) && draw) { draw.setTool(b.dataset.drTool); return; }
+    if (t.closest("[data-dr-magnet]") && draw) { draw.toggleMagnet(); return; }
+    if ((b = t.closest("[data-dr-auto]")) && draw) { draw.auto(b.dataset.drAuto); b.closest(".dd")?.classList.remove("open"); return; }
     if (t.closest("[data-dr-undo]") && draw) { draw.undo(); return; }
     if (t.closest("[data-dr-clear]") && draw) { draw.clear(); return; }
     if (t.closest(".cx-ind .dd-btn")) { e.stopPropagation(); t.closest(".dd").classList.toggle("open"); return; }
@@ -275,12 +279,51 @@ async function mount(el, sym, opts = {}) {
   root.addEventListener("change", onChange);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && root.classList.contains("fs")) root.classList.remove("fs"); });
   note.innerHTML = `${esc(D.fuente || "Yahoo Finance")} · ${T.length} sesiones (${T[0]} a ${T[T.length - 1]}) · rueda o pellizco para zoom, arrastrar para desplazar`;
+  /* eventos: operaciones del Congreso y entradas de mis carteras */
+  const EV = new Map();
+  function collectEvents() {
+    EV.clear();
+    const add = (d, o) => { let k = d; if (!T.includes(k)) { k = T.find((t) => t >= d); if (!k) return; } (EV.get(k) || EV.set(k, []).get(k)).push(o); };
+    const sm = window.SCRSmart?.data?.()?.por_valor?.[sym];
+    (sm?.c || []).forEach(([n, tp, fo, fd, imp]) => { if (fo > fd) return; const buy = tp === "Compra";
+      add(fo, { kind: buy ? "cb" : "cs", txt: `${n.split(" ").slice(-1)[0]} (Congreso): ${tp.toLowerCase()} ${imp || ""}`, buy }); });
+    try { (JSON.parse(localStorage.getItem("carteras") || "[]")).forEach((p) => p.items.forEach((x) => { if (x.sym === sym) add(p.creada.slice(0, 10), { kind: "pf", txt: `Entrada en «${p.nombre}» a ${fmt(x.p0)}`, p0: x.p0 }); })); } catch (e) { /* */ }
+  }
+  function addEvents() {
+    collectEvents();
+    const mk = [];
+    EV.forEach((list, d) => list.forEach((o) => {
+      if (o.kind === "pf") mk.push({ time: d, position: "belowBar", color: "#2962ff", shape: "circle", text: "Cartera" });
+      else mk.push({ time: d, position: o.buy ? "belowBar" : "aboveBar", color: o.buy ? css("--pos") : css("--neg"), shape: o.buy ? "arrowUp" : "arrowDown", text: o.txt.split(" ")[0] });
+    }));
+    mk.sort((a, b) => (a.time < b.time ? -1 : 1));
+    try { if (LW.createSeriesMarkers) LW.createSeriesMarkers(main, mk); else if (main.setMarkers) main.setMarkers(mk); } catch (e) { /* sin marcadores */ }
+    const pf = [...EV.values()].flat().filter((o) => o.kind === "pf");
+    if (pf.length) { const avg = pf.reduce((a, o) => a + o.p0, 0) / pf.length; try { main.createPriceLine({ price: avg, color: "#2962ff", lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: true, title: "Media" }); } catch (e) { /* */ } }
+  }
+  /* sonda: punto pulsante sobre el último cierre */
+  const probe = document.createElement("div"); probe.className = "cx-probe"; probe.innerHTML = "<i></i><b></b>";
+  host.parentElement.appendChild(probe);
+  let probeOn = true;
+  (function loop() {
+    if (!probeOn || !probe.isConnected) return;
+    try {
+      const x = chart.timeScale().logicalToCoordinate(T.length - 1), y = main.priceToCoordinate(C[C.length - 1]);
+      let w = host.clientWidth; try { w -= chart.priceScale("right").width(); } catch (e) { /* */ }
+      if (x == null || y == null || x < 0 || x > w) probe.style.display = "none";
+      else { probe.style.display = ""; probe.style.transform = `translate(${x}px,${y}px)`; }
+    } catch (e) { probe.style.display = "none"; }
+    requestAnimationFrame(loop);
+  })();
+  if (window.SCRSmart && !window.SCRSmart.data()) window.SCRSmart.ensure();
+
   toolbar(); build();
   if (window.SCRDraw) {
-    draw = window.SCRDraw.attach(host.parentElement, { chart: () => chart, main: () => main, T, sym,
-      onTool: (tl) => { drTool = tl; bar.querySelectorAll("[data-dr-tool]").forEach((x) => x.classList.toggle("on", x.dataset.drTool === tl)); } });
+    draw = window.SCRDraw.attach(host.parentElement, { chart: () => chart, main: () => main, D, T, sym,
+      onState: (st) => { drTool = st.tool; drMag = st.magnet; bar.querySelectorAll("[data-dr-tool]").forEach((x) => x.classList.toggle("on", x.dataset.drTool === st.tool));
+        bar.querySelector("[data-dr-magnet]")?.classList.toggle("on", st.magnet); } });
   }
-  return { rebuild: build, destroy: () => { if (draw) draw.destroy(); try { chart.remove(); } catch (e) { /* */ } } };
+  return { rebuild: build, destroy: () => { probeOn = false; probe.remove(); if (draw) draw.destroy(); try { chart.remove(); } catch (e) { /* */ } } };
 }
 
 /* ---------- comparador: rentabilidad base 100 ---------- */

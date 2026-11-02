@@ -47,7 +47,7 @@ function render() {
     h += `</div>${lv === 0 ? `<div class="panel" style="margin-bottom:10px">Carteras declaradas por gestores con historial reconocido (Buffett, Pabrai, Ackman…). Pulsa uno para ver todo lo que tiene.</div>` : ""}
       <div class="tbl-wrap"><table><thead><tr><th>Gestor</th><th>Trimestre</th><th>Actualizado</th><th>Valores</th><th style="text-align:left">Mayores posiciones</th></tr></thead><tbody>
       ${rows.map((g) => `<tr data-mgr="${esc(g.code)}"><td>${esc(g.nombre)}</td><td>${esc(g.trimestre || "—")}</td><td>${esc(g.actualizado || "—")}</td><td class="num">${g.n}</td>
-        <td style="text-align:left">${g.pos.slice(0, 4).map((p) => `<span class="tk">${esc(p[0])}</span> <span class="hint">${nf(p[2], 1)} %</span>`).join(" · ")}</td></tr>`).join("")}</tbody></table></div>`;
+        <td style="text-align:left"><div class="pos-chips">${g.pos.slice(0, 4).map((p) => `<span class="pos-chip"><b>${esc(p[0])}</b><span>${nf(p[2], 1)} %</span><i style="width:${Math.min(100, (p[2] || 0) * 3)}%"></i></span>`).join("")}</div></td></tr>`).join("")}</tbody></table></div>`;
   } else if (S.tab === "consenso") {
     const rows = D.consenso.filter((c) => !q || c[0].toLowerCase().includes(q) || (c[1] || "").toLowerCase().includes(q));
     h += `</div><div class="tbl-wrap"><table><thead><tr><th>Valor</th><th data-tip="Número de superinversores que lo tienen en cartera">Gestores</th><th data-tip="Peso medio en las carteras que lo tienen">Peso medio</th>

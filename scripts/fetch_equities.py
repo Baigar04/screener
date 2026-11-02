@@ -250,7 +250,7 @@ def fundamentals(sym):
     if info.get("totalDebt") is not None and info.get("totalCash") is not None and info.get("ebitda"):
         nd = (info["totalDebt"] - info["totalCash"]) / info["ebitda"]
     return {
-        "nombre": info.get("longName") or info.get("shortName"), "pais": info.get("country"),
+        "nombre": info.get("longName") or info.get("shortName"), "pais": info.get("country"), "web": info.get("website"),
         "sector": info.get("sector"), "industria": info.get("industry"), "moneda": info.get("currency"),
         "mcap": jnum(info.get("marketCap"), 0), "per": jnum(info.get("trailingPE"), 2),
         "per_fwd": jnum(info.get("forwardPE"), 2), "ev_ebitda": jnum(info.get("enterpriseToEbitda"), 2),

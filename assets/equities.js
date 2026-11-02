@@ -93,6 +93,22 @@ const SEC_NAMES = { "Technology": "Tecnología", "Financial Services": "Servicio
   "Basic Materials": "Materiales básicos", "Communication Services": "Comunicaciones", "Financials": "Financiero" };
 const sn = (s) => SEC_NAMES[s] || s || "—";
 const isW = (s) => E.watch.includes(s);
+function logo(r, big) {
+  const hue = [...r.sym].reduce((a, c) => a + c.charCodeAt(0), 0) * 37 % 360;
+  let host = null; try { host = r.web ? new URL(r.web).hostname.replace(/^www\./, "") : null; } catch (e) { host = null; }
+  return `<span class="av ${big ? "av-l" : ""}" style="--h:${hue}" aria-hidden="true">${esc(r.sym[0])}${host ? `<img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64" alt="" loading="lazy" onerror="this.remove()">` : ""}</span>`;
+}
+function tags(r) {
+  const t = [];
+  if (r.score != null && r.score >= 75) t.push(["Top puntuación", "tg-top"]);
+  const p = window.SCRSmart?.data?.()?.por_valor?.[r.sym];
+  if (p && p.f.filter((x) => /^(Add|Buy)/.test(x[2] || "")).length >= 2) t.push(["Superinversores compran", "tg-sm"]);
+  if (p && p.c.some((x) => x[1] === "Compra" && (Date.now() - new Date(x[2])) / 864e5 < 90)) t.push(["Congreso compra", "tg-cg"]);
+  if (r.resultados) { const d = (new Date(r.resultados) - Date.now()) / 864e5; if (d >= -1 && d <= 7) t.push(["Resultados esta semana", "tg-er"]); }
+  if (r.veredicto === "Alcista" && (r.r3m ?? 0) > 15) t.push(["Momentum", "tg-mo"]);
+  return t;
+}
+const tagHtml = (r, max = 2) => tags(r).slice(0, max).map(([l, c]) => `<span class="tg ${c}">${l}</span>`).join("");
 const isC = (s) => E.cmp.includes(s);
 const star = (s) => `<button class="star ${isW(s) ? "on" : ""}" data-watch="${esc(s)}" aria-label="${isW(s) ? "Quitar de" : "Añadir a"} seguimiento" title="${isW(s) ? "Quitar de" : "Añadir a"} seguimiento">${isW(s) ? "★" : "☆"}</button>`;
 const tip = (k) => (TIPS[k] ? ` data-tip="${esc(TIPS[k])}"` : "");
@@ -401,14 +417,18 @@ function renderScreener() {
     ${Object.values(E.f).some(Boolean) || Object.keys(E.rng).length ? `<button class="icon-btn" data-act="save">Guardar filtro</button>` : ""}
     ${E.saved.length ? H.dropdown("saved", "Mis filtros:", [["", "Elegir…"], ...E.saved.map((s, i) => [String(i), s.n])], "") : ""}
     ${colsMenu(lv)}<button class="icon-btn" data-act="csv">Exportar CSV</button></div>
+    ${window.innerWidth <= 640 ? `<div class="mcards">${rows.length ? rows.slice(0, E.limit).map((r) => `<div class="mcard" data-sym="${esc(r.sym)}">${logo(r, true)}
+      <div class="mc-mid"><div><b>${esc(r.sym)}</b> ${star(r.sym)}</div><div class="nm">${esc(r.nombre || "")}</div>${tagHtml(r, 3) ? `<div class="tgs">${tagHtml(r, 3)}</div>` : ""}</div>
+      <div class="mc-right"><div class="mc-px num">${nf(r.precio, 2)} <small>${esc(r.moneda || "")}</small></div><span class="pill ${cls(r.r1d)}">${(r.r1d ?? 0) >= 0 ? "↑" : "↓"} ${nf(Math.abs(r.r1d ?? 0), 2)} %</span>
+      ${r.score != null ? `<div class="mc-sc">${scoreBadge(r.score)}</div>` : ""}</div></div>`).join("") : `<div class="soon-box">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></div>`}</div>` : `
     <div class="tbl-wrap"><table class="scr"><thead><tr><th class="c-x" data-tip="Marca hasta 4 valores para compararlos">⇄</th>
       <th data-scrsort="nombre" class="${E.sort.k === "nombre" ? "sorted" : ""}">Valor${E.sort.k === "nombre" ? (E.sort.d < 0 ? " ↓" : " ↑") : ""}</th>
       ${cols.map(([k, t]) => `<th data-scrsort="${k}"${tip(k)} class="${E.sort.k === k ? "sorted" : ""}">${t}${E.sort.k === k ? (E.sort.d < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead>
     <tbody>${rows.length ? rows.slice(0, E.limit).map((r) => `<tr data-sym="${esc(r.sym)}" class="${isC(r.sym) ? "sel" : ""}">
       <td class="c-x"><input type="checkbox" data-cmp="${esc(r.sym)}" ${isC(r.sym) ? "checked" : ""} aria-label="Comparar ${esc(r.sym)}"></td>
-      <td class="c-name">${star(r.sym)}<b>${esc(r.sym)}</b> <span class="nm">${esc((r.nombre || "").slice(0, 26))}</span></td>
+      <td class="c-name"><div class="nmw">${star(r.sym)}${logo(r)}<div><div><b>${esc(r.sym)}</b> <span class="nm">${esc((r.nombre || "").slice(0, 26))}</span></div>${tagHtml(r) ? `<div class="tgs">${tagHtml(r)}</div>` : ""}</div></div></td>
       ${cols.map(([k, , , fmt]) => `<td class="num ${["r1d", "r1m", "r3m", "r6m", "r1a"].includes(k) ? "chg " + cls(r[k]) : ""}">${fmt(r[k], r)}</td>`).join("")}</tr>`).join("")
-      : `<tr><td colspan="${cols.length + 2}" class="empty">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></td></tr>`}</tbody></table></div>
+      : `<tr><td colspan="${cols.length + 2}" class="empty">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></td></tr>`}</tbody></table></div>`}
     ${rows.length > E.limit ? `<div style="text-align:center;margin-top:10px"><button class="icon-btn" data-act="more">Mostrar 50 más (${rows.length - E.limit} restantes)</button></div>` : ""}
     <div class="method">Precios y fundamentales: Yahoo Finance, con los fundamentales refrescados por rotación semanal. Sin revisiones de beneficios ni ROIC: no hay fuente pública fiable.</div>
     ${cmpBar()}`;
@@ -451,8 +471,8 @@ function paintFicha() {
   const { sym, tab, d } = E.ficha, r = E.uni.filas.find((x) => x.sym === sym);
   if (E.chartApi) { E.chartApi.destroy(); E.chartApi = null; }
   const tv = r.veredicto;
-  H.openDrawer(`<div class="f-head"><div><div class="f-sym">${star(sym)}<b>${esc(sym)}</b> <span class="badge ${tv === "Alcista" ? "Favorable" : tv === "Bajista" ? "Defensivo" : "Neutral"}">${esc(tv || "—")}</span></div>
-      <h3>${esc(r.nombre || sym)}</h3><div class="reg">${esc(sn(r.sector))} · ${esc(r.industria || "—")} · ${esc(r.pais || "—")} · ${esc((r.indices || []).join(", "))}</div></div>
+  H.openDrawer(`<div class="f-head"><div><div class="f-sym">${logo(r, true)}${star(sym)}<b>${esc(sym)}</b> <span class="badge ${tv === "Alcista" ? "Favorable" : tv === "Bajista" ? "Defensivo" : "Neutral"}">${esc(tv || "—")}</span></div>
+      <h3>${esc(r.nombre || sym)}</h3>${tagHtml(r, 5) ? `<div class="tgs" style="margin:2px 0 4px">${tagHtml(r, 5)}</div>` : ""}<div class="reg">${esc(sn(r.sector))} · ${esc(r.industria || "—")} · ${esc(r.pais || "—")} · ${esc((r.indices || []).join(", "))}</div></div>
       <div class="f-px"><div class="bigv num">${nf(r.precio, 2)} <small>${esc(r.moneda || "")}</small></div>
       <div class="num"><span class="chg ${cls(r.r1d)}">${spct(r.r1d, 2)}</span> <span class="hint">cierre ${fmtDate(r.fecha_precio)}</span></div>
       <button class="chip ${isC(sym) ? "on" : ""}" data-cmp-toggle="${esc(sym)}">${isC(sym) ? "En comparador ✓" : "+ Comparar"}</button></div></div>
@@ -574,7 +594,7 @@ function paintSearch() {
   if (!E.uni) { box.innerHTML = `<div class="gr-msg">${E.err ? esc(E.err) : "Cargando valores…"}</div>`; box.classList.add("on"); return; }
   const res = searchResults(inp.value);
   gIdx = Math.min(gIdx, Math.max(0, res.length - 1));
-  box.innerHTML = res.length ? res.map((r, i) => `<button class="gr ${i === gIdx ? "on" : ""}" data-gsym="${esc(r.sym)}"><b>${esc(r.sym)}</b><span class="nm">${esc(r.nombre || "")}</span><span class="num">${nf(r.precio, 2)}</span><span class="num chg ${cls(r.r1d)}">${spct(r.r1d, 2)}</span></button>`).join("")
+  box.innerHTML = res.length ? res.map((r, i) => `<button class="gr ${i === gIdx ? "on" : ""}" data-gsym="${esc(r.sym)}">${logo(r)}<b>${esc(r.sym)}</b><span class="nm">${esc(r.nombre || "")}</span><span class="num">${nf(r.precio, 2)}</span><span class="num chg ${cls(r.r1d)}">${spct(r.r1d, 2)}</span></button>`).join("")
     : `<div class="gr-msg">Sin resultados en el universo (${E.uni.n} valores).</div>`;
   box.classList.add("on");
 }

@@ -122,12 +122,12 @@ const ICONS = {
   carteras: "M3 7h18v13H3zM8 7V4h8v3M3 12h18",
   adelantarse: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z",
 };
-const SHORT = { pulso: "Pulso", sectores: "Sectores", screener: "Screener", smart: "Smart money", carteras: "Carteras", adelantarse: "Adelantarse" };
+const SHORT = { pulso: "Pulso", sectores: "Sectores", screener: "Screener", smart: "Smart", carteras: "Carteras", adelantarse: "Adelantarse" };
 function renderTop() {
   $("#nav").innerHTML = NAV.map(([k, n, ready]) => `<button data-k="${k}" class="${S.view === k ? "on" : ""}${ready ? "" : " is-soon"}" title="${n}">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span><span class="lbl-s">${SHORT[k]}</span>${ready ? "" : '<span class="soon">pronto</span>'}</button>`).join("");
   const pt = $("#pageTitle"); if (pt) pt.textContent = NAV.find((x) => x[0] === S.view)[1];
-  $("#level").innerHTML = LEVELS.map((l, i) => `<button role="radio" aria-checked="${S.level === i}" data-i="${i}" class="${S.level === i ? "on" : ""}" title="${l}">${LEVELS_SHORT[i]}</button>`).join("");
+  $("#level").innerHTML = LEVELS.map((l, i) => `<button role="radio" aria-checked="${S.level === i}" data-i="${i}" class="${S.level === i ? "on" : ""}" title="${l}"><span class="l-f">${LEVELS_SHORT[i]}</span><span class="l-s">${["Inicial", "Medio", "Avanz.", "Experto"][i]}</span></button>`).join("");
   const st = $("#status");
   if (!S.data) { st.innerHTML = `<span><span class="dot err"></span> ${esc(S.error || "Cargando…")}</span>`; return; }
   const ser = Object.values(S.data.series);
@@ -322,6 +322,11 @@ document.addEventListener("click", (e) => {
   if ((b = t.closest("tr[data-pais]"))) { countryDrawer(b.dataset.pais); return; }
   if (t.closest("#showErr")) { errorsDrawer(); return; }
   if (t.closest("#drawerClose") || t.id === "overlay") { closeDrawer(); return; }
+  if (t.closest("#tsize")) {
+    const root = document.documentElement; root.dataset.size = root.dataset.size === "l" ? "" : "l";
+    try { localStorage.setItem("tamano", root.dataset.size); } catch (er) { /* */ }
+    return;
+  }
   if (t.closest("#theme")) {
     const root = document.documentElement;
     const dark = root.dataset.theme ? root.dataset.theme === "dark" : !matchMedia("(prefers-color-scheme: light)").matches;
