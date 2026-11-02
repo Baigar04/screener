@@ -77,18 +77,21 @@ function calc(D) {
 function draw(chart, LW, D, pane, series) {
   const k = calc(D), T = D.t;
   const pts = (arr) => arr.map((v, i) => (v == null || !isFinite(v) ? null : { time: T[i], value: v })).filter(Boolean);
-  const area = (key, arr, col, label) => {
+  /* Colores y capas como en el Koncorde de TradingView: áreas Verde, Marrón y Azul con su línea de contorno
+     (Lineav, Lmarron, Lazul), línea Media roja y nivel 0. */
+  const area = (arr, fill, lineCol, label) => {
     const s = chart.addSeries(LW.BaselineSeries, {
-      baseValue: { type: "price", price: 0 }, topLineColor: col, bottomLineColor: col, topFillColor1: col + "99", topFillColor2: col + "55",
-      bottomFillColor1: col + "55", bottomFillColor2: col + "99", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      baseValue: { type: "price", price: 0 }, topLineColor: lineCol, bottomLineColor: lineCol, topFillColor1: fill + "b3", topFillColor2: fill + "b3",
+      bottomFillColor1: fill + "b3", bottomFillColor2: fill + "b3", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     }, pane);
-    s.setData(pts(arr)); series[label] = { s, arr, color: col }; return s;
+    s.setData(pts(arr)); series[label] = { s, arr, color: lineCol }; return s;
   };
-  area("verde", k.verde, "#3fbf6f", "Manos débiles");
-  area("marron", k.marron, "#c08a5b", "Tendencia");
-  area("azul", k.azul, "#2fa4e7", "Manos fuertes");
-  const m = chart.addSeries(LW.LineSeries, { color: "#e5484d", lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, pane);
-  m.setData(pts(k.media)); series["Media"] = { s: m, arr: k.media, color: "#e5484d" };
+  const v = area(k.verde, "#66ff66", "#2e8b3a", "Manos débiles");
+  area(k.marron, "#ffcc99", "#8b3a3a", "Tendencia");
+  area(k.azul, "#00ffff", "#3c3c9c", "Manos fuertes");
+  const m = chart.addSeries(LW.LineSeries, { color: "#ff4d4d", lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, pane);
+  m.setData(pts(k.media)); series["Media"] = { s: m, arr: k.media, color: "#ff4d4d" };
+  try { v.createPriceLine({ price: 0, color: getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888", lineWidth: 1, lineStyle: 0, axisLabelVisible: false }); } catch (e) { /* */ }
 }
 
 window.SCRKonkorde = { calc, draw };
