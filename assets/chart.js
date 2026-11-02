@@ -31,7 +31,7 @@ function loadCfg() {
     const c = JSON.parse(localStorage.getItem("chart_cfg") || "null");
     if (!c) return structuredClone(DEF_CFG);
     const out = structuredClone(DEF_CFG);
-    Object.assign(out, { type: c.type || out.type, period: c.period || out.period });
+    Object.assign(out, { type: c.type || out.type, period: c.period || out.period, escala: c.escala === "log" ? "log" : "normal" });
     for (const k in out.ind) Object.assign(out.ind[k], c.ind?.[k] || {});
     return out;
   } catch (e) { return structuredClone(DEF_CFG); }
@@ -235,11 +235,40 @@ async function mount(el, sym, opts = {}) {
     const wrap = host.parentElement, mainH = window.innerWidth < 640 ? 300 : 380;
     if (!root.classList.contains("fs") && !document.fullscreenElement) wrap.style.height = mainH + heights.reduce((a, b) => a + b, 0) + "px";
     requestAnimationFrame(() => { try { const ps = chart.panes(); heights.forEach((h, i) => ps[i + 1]?.setHeight(h)); } catch (e) { /* sin paneles ajustables */ } });
+    applyScale();
     addEvents();
     setPeriod();
     chart.subscribeCrosshairMove((p) => showLegend(p));
     showLegend(null);
   }
+
+  /* escala de precios del panel principal: normal o logarítmica (menú del botón derecho) */
+  function applyScale() {
+    try { chart.priceScale("right", 0).applyOptions({ mode: cfg.escala === "log" ? LW.PriceScaleMode.Logarithmic : LW.PriceScaleMode.Normal }); } catch (e) { /* */ }
+  }
+  const ctx = document.createElement("div"); ctx.className = "cx-ctx"; ctx.hidden = true;
+  host.parentElement.appendChild(ctx);
+  const closeCtx = () => { ctx.hidden = true; };
+  host.parentElement.addEventListener("contextmenu", (e) => {
+    if (e.target.closest(".dr-pop,.dr-modal")) return;
+    e.preventDefault();
+    const it = (k, t) => `<button data-cx-esc="${k}" class="${cfg.escala === k ? "on" : ""}"><span class="ck">${cfg.escala === k ? "✓" : ""}</span>${t}</button>`;
+    ctx.innerHTML = `<div class="cx-ctx-h">Escala de precios</div>${it("normal", "Normal")}${it("log", "Logarítmica")}
+      <div class="cx-ctx-sep"></div><button data-cx-fit="1"><span class="ck"></span>Restablecer vista</button>`;
+    const r = host.parentElement.getBoundingClientRect();
+    ctx.hidden = false;
+    const w = ctx.offsetWidth, h = ctx.offsetHeight;
+    ctx.style.left = Math.max(4, Math.min(e.clientX - r.left, r.width - w - 4)) + "px";
+    ctx.style.top = Math.max(4, Math.min(e.clientY - r.top, r.height - h - 4)) + "px";
+  });
+  ctx.addEventListener("click", (e) => {
+    e.stopPropagation(); let b;
+    if ((b = e.target.closest("[data-cx-esc]"))) { cfg.escala = b.dataset.cxEsc; saveCfg(cfg); applyScale(); draw?.redraw?.(); }
+    else if (e.target.closest("[data-cx-fit]")) { try { chart.priceScale("right", 0).applyOptions({ autoScale: true }); } catch (x) { /* */ } setPeriod(); }
+    closeCtx();
+  });
+  document.addEventListener("pointerdown", (e) => { if (!ctx.hidden && !ctx.contains(e.target)) closeCtx(); }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCtx(); });
 
   function setPeriod() {
     const n = T.length, bars = PERIODS.find((p) => p[0] === cfg.period)[1];
