@@ -378,6 +378,14 @@ def main():
     json.dump({**meta, "stats": stats, "rrg": rot}, open(os.path.join(DATA, "sectors.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(cache, open(os.path.join(DATA, "fund_cache.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     log(f"Filas: {len(rows)} · errores: {len(ERRORS)}")
+    for e in ERRORS[:20]:
+        log("  ERROR", e)
+    keys = ["nombre", "precio", "fecha_precio", "per", "mcap", "sector", "per_vs_sector", "veredicto", "resultados", "div"]
+    by = {r["sym"]: r for r in rows}
+    for t in ("AAPL", "MSFT", "NVDA", "SAN.MC", "ITX.MC", "ASML.AS"):
+        log("  MUESTRA", t, {k: by.get(t, {}).get(k) for k in keys})
+    log("  NULOS", {k: sum(1 for r in rows if r.get(k) is None) for k in ("sector", "per", "ev_ebitda", "roe", "crec_ventas", "precio", "resultados")})
+    log("  SECTORES", {k: (v["n"], v["per"], v["r3m"]) for k, v in stats["Todos"]["sector"].items()})
     if len(rows) < 50:
         sys.exit(1)
 

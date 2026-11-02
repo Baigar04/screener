@@ -479,6 +479,8 @@ def main():
     print(f"Series OK: {ok}/{len(S)} · errores: {len(ERRORS)}")
     for e in ERRORS:
         print("  ERROR", e)
+    h = S.get("hicp_ez", {})
+    print("  IPCA", h.get("fuente"), h.get("codigo"), h.get("valor"), h.get("fecha_dato"), "· régimen", R.get("probabilidades"))
     if ok == 0:
         sys.exit(1)
 
