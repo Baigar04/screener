@@ -95,6 +95,19 @@ def universe():
 
 
 # ------------------------------------------------------------------ precios y técnico
+EU_SUFFIX = (".MC", ".DE", ".PA", ".AS", ".MI", ".BR", ".HE", ".LS", ".IR")
+
+
+def drop_open_session(sym, df):
+    """Quita la vela de hoy si su mercado aún no ha cerrado: una sesión a medias falsea volumen, técnico y Konkorde."""
+    if df.empty or df.index[-1].date() != NOW.date():
+        return df
+    close_utc = (16, 45) if sym.endswith(EU_SUFFIX) else (21, 15)
+    if (NOW.hour, NOW.minute) < close_utc:
+        return df.iloc[:-1]
+    return df
+
+
 def prices(symbols):
     frames = {}
     for i in range(0, len(symbols), 150):
@@ -106,6 +119,7 @@ def prices(symbols):
                 for s in chunk:
                     try:
                         sub = df[s].dropna(subset=["Close"]) if isinstance(df.columns, pd.MultiIndex) else df.dropna(subset=["Close"])
+                        sub = drop_open_session(s, sub)
                         if len(sub) > 30:
                             frames[s] = sub
                     except KeyError:
