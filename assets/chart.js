@@ -175,7 +175,11 @@ async function mount(el, sym, opts = {}) {
       main = chart.addSeries(LW.CandlestickSeries, { upColor: up, downColor: dn, borderUpColor: up, borderDownColor: dn, wickUpColor: up, wickDownColor: dn });
       main.setData(T.map((t, i) => (D.o[i] == null || C[i] == null ? null : { time: t, open: D.o[i], high: D.h[i], low: D.l[i], close: C[i] })).filter(Boolean));
     } else {
-      main = chart.addSeries(LW.LineSeries, { color: css("--accent"), lineWidth: 2 });
+      const acc = css("--accent") || "#4c6fff", rgb = (() => { const h = acc.replace("#", ""); const n = parseInt(h.length === 3 ? h.split("").map((x) => x + x).join("") : h, 16); return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`; })();
+      /* sombreado suave bajo la línea: degradado del 14 % de opacidad a transparente */
+      main = LW.AreaSeries
+        ? chart.addSeries(LW.AreaSeries, { lineColor: acc, lineWidth: 2, topColor: `rgba(${rgb},0.14)`, bottomColor: `rgba(${rgb},0)`, crosshairMarkerRadius: 4 })
+        : chart.addSeries(LW.LineSeries, { color: acc, lineWidth: 2 });
       main.setData(line(T, C));
     }
     const I = cfg.ind, addL = (key, arr, color, w = 1.5, pane = 0, extra = {}) => {
