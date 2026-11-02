@@ -95,8 +95,8 @@ const sn = (s) => SEC_NAMES[s] || s || "—";
 const isW = (s) => E.watch.includes(s);
 function logo(r, big) {
   const hue = [...r.sym].reduce((a, c) => a + c.charCodeAt(0), 0) * 37 % 360;
-  let host = null; try { host = r.web ? new URL(r.web).hostname.replace(/^www\./, "") : null; } catch (e) { host = null; }
-  return `<span class="av ${big ? "av-l" : ""}" style="--h:${hue}" aria-hidden="true">${esc(r.sym[0])}${host ? `<img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64" alt="" loading="lazy" onerror="this.remove()">` : ""}</span>`;
+  /* sin logotipos externos: avatar con la inicial (no se envía a terceros qué valores se consultan) */
+  return `<span class="av ${big ? "av-l" : ""}" style="--h:${hue}" aria-hidden="true">${esc(r.sym[0])}</span>`;
 }
 function tags(r) {
   const t = [];
