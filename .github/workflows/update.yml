@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,9 +34,14 @@ jobs:
       - name: Acciones, sectores y técnico
         continue-on-error: true
         run: python scripts/fetch_equities.py
-      - name: Si fallan las acciones, conservar los datos publicados
+      - name: Smart money (Dataroma y Congreso)
+        continue-on-error: true
         run: |
-          for f in universe.json sectors.json fund_cache.json; do
+          sudo apt-get install -y -qq poppler-utils >/dev/null
+          python scripts/fetch_smart.py
+      - name: Si falla alguna fuente, conservar los datos publicados
+        run: |
+          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json; do
             if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; fi
           done
       - name: Preparar sitio
