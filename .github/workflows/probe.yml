@@ -1,0 +1,28 @@
+name: Prueba noticias
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/probe.yml"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q -r requirements.txt
+      - run: |
+          python - <<'PY'
+          import yfinance as yf, json
+          print("version", yf.__version__)
+          t = yf.Ticker("AAPL")
+          try:
+              n = t.news; print("news tipo", type(n), len(n) if n else n); print(json.dumps(n[:1], default=str)[:1500] if n else "")
+          except Exception as e: print("news error", repr(e))
+          try:
+              n2 = t.get_news(count=5, tab="news"); print("get_news", len(n2)); print(json.dumps(n2[:1], default=str)[:800])
+          except Exception as e: print("get_news error", repr(e))
+          try:
+              print(t.get_earnings_dates(limit=6))
+          except Exception as e: print("earnings error", repr(e))
+          PY
