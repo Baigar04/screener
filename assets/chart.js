@@ -22,7 +22,7 @@ const IND_META = {
   vol: ["Volumen", "Acciones negociadas por sesión", []],
   rsi: ["RSI", "Fuerza relativa 0-100: > 70 sobrecompra, < 30 sobreventa", [["n", "Periodo", 2, 100]]],
   macd: ["MACD", "Diferencia de dos EMA y su señal: impulso de la tendencia", [["f", "Rápida", 2, 100], ["s", "Lenta", 3, 200], ["g", "Señal", 2, 50]]],
-  konkorde: ["Konkorde", "Flujo de manos fuertes y débiles a partir de precio y volumen", []],
+  konkorde: ["Konkorde", "Manos fuertes (azul), débiles (verde), tendencia (marrón) y su media (roja), a partir de precio y volumen", []],
 };
 
 function loadCfg() {
