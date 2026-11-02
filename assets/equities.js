@@ -456,7 +456,7 @@ function exportCsv() {
 }
 
 /* ---------- FICHA DE EMPRESA (pantalla completa con pestañas) ---------- */
-const TABS = [["resumen", "Resumen"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["pers", "Personalidades"], ["comparar", "Comparar"]];
+const TABS = [["resumen", "Resumen"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["noticias", "Noticias y eventos"], ["pers", "Personalidades"], ["comparar", "Comparar"]];
 async function companyDrawer(sym, tab) {
   if (!E.uni) await ensure();
   const r = E.uni?.filas.find((x) => x.sym === sym);
@@ -480,11 +480,35 @@ function paintFicha() {
     <div class="f-body" id="fbody">${fichaTab(tab, r, d)}</div>`);
   if (tab === "grafico") mountChart(sym);
   if (tab === "comparar") mountCompare(sym);
+  if (tab === "noticias") mountNews(sym);
 }
 function mountChart(sym) {
   const el = document.getElementById("fchart");
   if (!el || !window.SCRChart) return;
   window.SCRChart.mount(el, sym, { fallback: "Se muestra el gráfico simplificado en la pestaña Resumen." }).then((api) => { if (E.ficha?.sym === sym) E.chartApi = api; });
+}
+const NEWS_LAB = { legal: "Legal", producto: "Producto", expansion: "Expansión", resultados: "Resultados", analistas: "Analistas", directivos: "Directivos", otras: "Otras" };
+let newsCat = "relevantes";
+async function mountNews(sym) {
+  const el = document.getElementById("fnews"); if (!el) return;
+  let d; try { d = await window.SCRChart.loadPrices(sym); } catch (e) { el.innerHTML = `<div class="err-box">No se pudieron cargar los eventos de ${esc(sym)}.</div>`; return; }
+  if (E.ficha?.sym !== sym) return;
+  const ev = d.ev || {}, r = E.uni.filas.find((x) => x.sym === sym);
+  const ern = ev.ern || [], next = ern.find((x) => x[2] == null && x[0] >= new Date().toISOString().slice(0, 10)), past = ern.filter((x) => x[2] != null).reverse();
+  const divs = (ev.div || []).slice().reverse(), y1 = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  const div12 = divs.filter((x) => x[0] >= y1).reduce((a, x) => a + x[1], 0);
+  const news = ev.news || [], shown = news.filter((n) => newsCat === "todas" ? true : newsCat === "relevantes" ? n[1] !== "otras" : n[1] === newsCat);
+  const cats = ["relevantes", "todas", ...Object.keys(NEWS_LAB).filter((k) => news.some((n) => n[1] === k))];
+  el.innerHTML = `<div class="f-grid"><div>
+    <div class="box"><b>Resultados</b>${next || r?.resultados ? `<div style="margin-bottom:6px">Próximos: <strong class="num">${fmtDate((next || [r.resultados])[0])}</strong>${next && next[1] != null ? ` · BPA estimado ${nf(next[1], 2)}` : ""}</div>` : ""}
+      ${past.length ? `<table><thead><tr><th>Fecha</th><th>BPA estimado</th><th>BPA real</th><th>Sorpresa</th></tr></thead><tbody>${past.map(([f, e, rp, su]) => `<tr><td>${fmtDate(f)}</td><td class="num">${nf(e, 2)}</td><td class="num">${nf(rp, 2)}</td><td class="num chg ${cls(su)}">${su == null ? "—" : spct(su)}</td></tr>`).join("")}</tbody></table>` : '<div class="hint">Sin historial de resultados en la fuente (se completa con la actualización semanal de cada valor).</div>'}</div>
+    <div class="box"><b>Dividendos</b>${divs.length ? `<div style="margin-bottom:6px">Últimos 12 meses: <strong class="num">${nf(div12, div12 < 1 ? 4 : 2)} ${esc(r?.moneda || "")}</strong> por acción${r?.div != null ? ` · rentabilidad ${pct(r.div)}` : ""}</div>
+      <table><thead><tr><th>Fecha ex-dividendo</th><th>Importe</th></tr></thead><tbody>${divs.slice(0, 10).map(([f, a]) => `<tr><td>${fmtDate(f)}</td><td class="num">${nf(a, a < 1 ? 4 : 2)}</td></tr>`).join("")}</tbody></table>` : '<div class="hint">No ha repartido dividendos en los últimos 5 años.</div>'}</div></div>
+    <div><div class="box"><b>Noticias (últimos 60 días)</b>
+      <div class="bar" style="margin:4px 0 8px">${cats.map((c) => `<button class="chip ${newsCat === c ? "on" : ""}" data-ncat="${c}">${c === "relevantes" ? "Relevantes" : c === "todas" ? "Todas" : NEWS_LAB[c]}</button>`).join("")}</div>
+      ${shown.length ? shown.map(([f, c, t, l, pv]) => `<div class="nw"><span class="hint num">${fmtDate(f)}</span> <span class="tg tg-n-${c}">${NEWS_LAB[c] || c}</span><div>${l ? `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t)}</div>${pv ? `<span class="hint">${esc(pv)}</span>` : ""}</div>`).join("")
+        : '<div class="hint">Sin noticias en esta categoría. El archivo de noticias empieza a acumularse desde ahora.</div>'}
+      <div class="method">Titulares de Yahoo Finance, en su idioma original. La categoría se asigna por palabras clave del titular, no leyendo la noticia: puede equivocarse.</div></div></div></div>`;
 }
 function mountCompare(sym) {
   const el = document.getElementById("fcmp"); const list = [sym, ...E.cmp.filter((s) => s !== sym)].slice(0, 4);
@@ -494,6 +518,7 @@ function fichaTab(tab, r, d) {
   const lv = H.S.level;
   if (!d) return `<div class="skel" style="height:220px"></div>`;
   if (tab === "grafico") return `<div id="fchart" class="fchart"></div>`;
+  if (tab === "noticias") return `<div id="fnews"><div class="skel" style="height:220px"></div></div>`;
   if (tab === "pers") return window.SCRSmart ? window.SCRSmart.persTab(r.sym) : `<div class="err-box">Módulo de smart money no disponible.</div>`;
   if (tab === "comparar") {
     const list = [r.sym, ...E.cmp.filter((s) => s !== r.sym)].slice(0, 4);
@@ -672,6 +697,7 @@ function onClick(t, dd) {
   if (t.closest("[data-cmp]")) { toggleCmp(t.closest("[data-cmp]").dataset.cmp); H.render(); return true; }
   if (t.closest(".c-x")) return true;
   if ((b = t.closest("[data-cmprm]"))) { toggleCmp(b.dataset.cmprm); if (E.ficha) paintFicha(); else if (E.cmp.length >= 2) openCompare(); else H.closeDrawer(); if (H.S.view === "screener") H.render(); return true; }
+  if ((b = t.closest("[data-ncat]"))) { newsCat = b.dataset.ncat; if (E.ficha) mountNews(E.ficha.sym); return true; }
   if ((b = t.closest("[data-ftab]"))) { if (E.ficha) { E.ficha.tab = b.dataset.ftab; store.set("ficha_tab", E.ficha.tab === "grafico" || E.ficha.tab === "resumen" ? E.ficha.tab : "resumen"); paintFicha(); } return true; }
   if ((b = t.closest("[data-eqr]"))) { E.region = b.dataset.eqr; store.set("eq_region", E.region); H.render(); return true; }
   if ((b = t.closest("[data-secsort]"))) { const k = b.dataset.secsort; if (SEC_COLS.find((c) => c[0] === k)[2] != null) { E.secMetric = k; store.set("sec_metric", k); H.render(); } return true; }

@@ -12,6 +12,7 @@ Nunca se inventan datos: si falta un campo queda null y la web muestra «sin dat
 """
 import io
 import json
+import re
 import math
 import os
 import sys
@@ -122,13 +123,13 @@ def prices(symbols):
         for attempt in range(3):
             try:
                 df = yf.download(chunk, period="5y", interval="1d", group_by="ticker", auto_adjust=False,
-                                 threads=True, progress=False)
+                                 actions=True, threads=True, progress=False)
                 for s in chunk:
                     try:
                         sub = df[s].dropna(subset=["Close"]) if isinstance(df.columns, pd.MultiIndex) else df.dropna(subset=["Close"])
                         sub = drop_open_session(s, sub)
                         if len(sub) > 30:
-                            raw[s] = sub[["Open", "High", "Low", "Close", "Volume"]]
+                            raw[s] = sub[[c for c in ("Open", "High", "Low", "Close", "Volume", "Dividends") if c in sub]]
                             adj = sub.copy()
                             if "Adj Close" in sub:
                                 ratio = (sub["Adj Close"] / sub["Close"]).fillna(1.0)
@@ -264,8 +265,54 @@ def fundamentals(sym):
         "precio_objetivo": jnum(info.get("targetMeanPrice"), 2), "n_analistas": info.get("numberOfAnalystOpinions"),
         "resultados": datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d") if ts else None,
         "anual": dict(sorted(annual.items())[-5:]),
+        "ern": earnings_hist(t),
         "fecha_fund": NOW.strftime("%Y-%m-%d"),
     }
+
+
+def earnings_hist(t):
+    """Fechas de resultados (últimas 8 y la próxima) con BPA estimado, real y sorpresa (%)."""
+    try:
+        ed = t.get_earnings_dates(limit=12)
+        out = []
+        for d, row in ed.iterrows():
+            out.append([pd.Timestamp(d).strftime("%Y-%m-%d"), jnum(row.get("EPS Estimate"), 3), jnum(row.get("Reported EPS"), 3), jnum(row.get("Surprise(%)"), 2)])
+        return sorted(out)[-9:]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+NEWS_CAT = [
+    ("legal", r"lawsuit|\bsues?\b|\bsued\b|litigation|probe|investigat|antitrust|\bfined?\b|settle|court|regulator|class action|subpoena|recall"),
+    ("producto", r"launch|unveil|introduc|new product|\brelease[sd]?\b|fda|approval|approves|patent|breakthrough"),
+    ("expansion", r"acqui|merger|\bmerge|buyout|takeover|expan|new (plant|factory|facility|store)|opens|partnership|joint venture|\bdeal\b|contract|agreement|stake"),
+    ("resultados", r"earnings|results|guidance|outlook|forecast|revenue|profit|quarter|beats|misses"),
+    ("analistas", r"upgrade|downgrade|price target|\brating\b|initiat"),
+    ("directivos", r"\bceo\b|\bcfo\b|chairman|resign|appoint|steps down|succession|layoff|job cuts"),
+]
+
+
+def news_items(sym):
+    """Titulares recientes de Yahoo Finance, clasificados por palabras clave (no por lectura del artículo)."""
+    out = []
+    for n in (yf.Ticker(sym).news or [])[:20]:
+        c = n.get("content") or n
+        title = c.get("title")
+        if not title:
+            continue
+        pub = c.get("pubDate") or c.get("displayTime")
+        if pub:
+            d = pub[:10]
+        elif c.get("providerPublishTime"):
+            d = datetime.fromtimestamp(c["providerPublishTime"], timezone.utc).strftime("%Y-%m-%d")
+        else:
+            continue
+        link = (c.get("canonicalUrl") or {}).get("url") or (c.get("clickThroughUrl") or {}).get("url") or c.get("link")
+        prov = (c.get("provider") or {}).get("displayName") or c.get("publisher")
+        low = title.lower()
+        cat = next((k for k, rx in NEWS_CAT if re.search(rx, low)), "otras")
+        out.append([d, cat, title[:220], link, prov])
+    return out
 
 
 def _pct(v):
@@ -344,6 +391,23 @@ def main():
             ERRORS.append({"fuente": "Yahoo Finance", "serie": s, "motivo": "sin precios"})
 
     cache = load_cache()
+    try:
+        ncache = json.loads(get(SITE + "data/news_cache.json", 30))
+    except Exception:  # noqa: BLE001
+        ncache = {}
+    ncut = (NOW - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
+    for k, sym_ in enumerate(syms):
+        try:
+            got = news_items(sym_)
+            old = {x[2]: x for x in ncache.get(sym_, [])}
+            for x in got:
+                old[x[2]] = x
+            ncache[sym_] = sorted([x for x in old.values() if x[0] >= ncut], key=lambda x: x[0], reverse=True)[:40]
+        except Exception as e:  # noqa: BLE001
+            if k < 3:
+                log("noticias", sym_, e)
+        time.sleep(0.15)
+    log("Noticias: valores con titulares", sum(1 for v in ncache.values() if v))
     day = NOW.toordinal()
     todo = [s for i, s in enumerate(syms) if s not in cache or i % REFRESH_SHARE == day % REFRESH_SHARE]
     log("Fundamentales a refrescar:", len(todo), "· en caché:", len(cache))
@@ -363,7 +427,7 @@ def main():
         if s not in frames and not f:
             continue
         r = {"sym": s, "indices": U[s].get("indices", [])}
-        r.update({k: v for k, v in f.items() if k != "anual"})
+        r.update({k: v for k, v in f.items() if k not in ("anual", "ern", "web")})
         if not r.get("sector") and U[s].get("gics_sector"):
             r["sector"] = U[s]["gics_sector"]
         r["region"] = "EE. UU." if (r.get("pais") == "United States" or "." not in s) else "Europa"
@@ -376,12 +440,14 @@ def main():
             detail["diario"] = [[d.strftime("%Y-%m-%d"), jnum(v, 2), jnum(a, 2), jnum(b, 2)]
                                 for d, v, a, b in zip(tail.index, tail, s50.iloc[-252:], s200.iloc[-252:])]
             fr = raw.get(s, frames[s])
+            divs = [[d.strftime("%Y-%m-%d"), jnum(v, 4)] for d, v in fr["Dividends"].items() if v and v == v and v > 0] if "Dividends" in fr else []
+            ev = {"div": divs[-24:], "ern": f.get("ern", []), "news": ncache.get(s, [])}
             ohlcv = {"t": [d.strftime("%Y-%m-%d") for d in fr.index],
                      "o": [jnum(x, 3) for x in fr["Open"]], "h": [jnum(x, 3) for x in fr["High"]],
                      "l": [jnum(x, 3) for x in fr["Low"]], "c": [jnum(x, 3) for x in fr["Close"]],
                      "v": [int(x) if x == x else None for x in fr["Volume"]]}
             with open(os.path.join(DATA, "p", s.replace("/", "_") + ".json"), "w") as fh:
-                json.dump({"sym": s, "fuente": "Yahoo Finance (precios sin ajustar, como TradingView)", **ohlcv}, fh, separators=(",", ":"))
+                json.dump({"sym": s, "fuente": "Yahoo Finance (precios sin ajustar, como TradingView)", **ohlcv, "ev": ev}, fh, separators=(",", ":"))
         with open(os.path.join(DATA, "t", s.replace("/", "_") + ".json"), "w") as fh:
             json.dump(detail, fh, separators=(",", ":"))
         rows.append(r)
@@ -426,6 +492,7 @@ def main():
     json.dump({**meta, "filas": rows}, open(os.path.join(DATA, "universe.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump({**meta, "stats": stats, "rrg": rot}, open(os.path.join(DATA, "sectors.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(cache, open(os.path.join(DATA, "fund_cache.json"), "w"), ensure_ascii=False, separators=(",", ":"))
+    json.dump(ncache, open(os.path.join(DATA, "news_cache.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     log(f"Filas: {len(rows)} · errores: {len(ERRORS)}")
     for e in ERRORS[:20]:
         log("  ERROR", e)

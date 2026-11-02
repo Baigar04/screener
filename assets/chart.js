@@ -22,7 +22,7 @@ const IND_META = {
   vol: ["Volumen", "Acciones negociadas por sesión", []],
   rsi: ["RSI", "Fuerza relativa 0-100: > 70 sobrecompra, < 30 sobreventa", [["n", "Periodo", 2, 100]]],
   macd: ["MACD", "Diferencia de dos EMA y su señal: impulso de la tendencia", [["f", "Rápida", 2, 100], ["s", "Lenta", 3, 200], ["g", "Señal", 2, 50]]],
-  eventos: ["Eventos", "Flechas en las fechas de operaciones del Congreso y de entrada en tus carteras; el detalle aparece en la leyenda", []],
+  eventos: ["Eventos", "E resultados, D dividendos, N noticias relevantes, flechas del Congreso y entradas de tus carteras; el detalle aparece en la leyenda", []],
   konkorde: ["Konkorde", "Manos fuertes (azul), débiles (verde), tendencia (marrón) y su media (roja), a partir de precio y volumen", []],
 };
 
@@ -284,7 +284,9 @@ async function mount(el, sym, opts = {}) {
   root.addEventListener("change", onChange);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && root.classList.contains("fs")) root.classList.remove("fs"); });
   note.innerHTML = `${esc(D.fuente || "Yahoo Finance")} · ${T.length} sesiones (${T[0]} a ${T[T.length - 1]}) · rueda o pellizco para zoom, arrastrar para desplazar`;
-  /* eventos: operaciones del Congreso y entradas de mis carteras */
+  const NEWS_LAB = { legal: "Legal", producto: "Producto", expansion: "Expansión / operación", resultados: "Resultados", analistas: "Analistas", directivos: "Directivos" };
+  const NEWS_COL = { legal: "#f23645", producto: "#2962ff", expansion: "#089981", resultados: "#ff9800", analistas: "#9c27b0", directivos: "#787b86" };
+  /* eventos: resultados, dividendos, noticias, Congreso y entradas de mis carteras */
   const EV = new Map();
   function collectEvents() {
     EV.clear();
@@ -292,6 +294,11 @@ async function mount(el, sym, opts = {}) {
     const sm = window.SCRSmart?.data?.()?.por_valor?.[sym];
     (sm?.c || []).forEach(([n, tp, fo, fd, imp]) => { if (fo > fd) return; const buy = tp === "Compra";
       add(fo, { kind: buy ? "cb" : "cs", txt: `${n.split(" ").slice(-1)[0]} (Congreso): ${tp.toLowerCase()} ${imp || ""}`, buy }); });
+    const ev = D.ev || {};
+    (ev.div || []).forEach(([d, a]) => add(d, { kind: "div", txt: `Dividendo: ${fmt(a, a < 1 ? 4 : 2)} por acción` }));
+    (ev.ern || []).forEach(([d, est, rep, sur]) => { if (rep == null) return;
+      add(d, { kind: "ern", txt: `Resultados: BPA ${fmt(rep)} frente a ${est == null ? "—" : fmt(est)} estimado${sur == null ? "" : ` (sorpresa ${sur > 0 ? "+" : ""}${fmt(sur, 1)} %)`}`, beat: sur == null ? null : sur >= 0 }); });
+    (ev.news || []).forEach(([d, cat, title]) => { if (cat === "otras") return; add(d, { kind: "news", cat, txt: `${NEWS_LAB[cat] || "Noticia"}: ${title.length > 95 ? title.slice(0, 95) + "…" : title}` }); });
     try { (JSON.parse(localStorage.getItem("carteras") || "[]")).forEach((p) => p.items.forEach((x) => { if (x.sym === sym) add(p.creada.slice(0, 10), { kind: "pf", txt: `Entrada en «${p.nombre}» a ${fmt(x.p0)}`, p0: x.p0 }); })); } catch (e) { /* */ }
   }
   function addEvents() {
@@ -301,6 +308,9 @@ async function mount(el, sym, opts = {}) {
       /* un marcador por día y tipo, pequeño y sin texto: el detalle va en la leyenda */
       const b = list.filter((o) => o.kind === "cb").length, sl = list.filter((o) => o.kind === "cs").length, pf = list.some((o) => o.kind === "pf");
       if (pf) mk.push({ time: d, position: "belowBar", color: "#2962ff", shape: "circle", size: 0.8 });
+      const er = list.find((o) => o.kind === "ern"); if (er) mk.push({ time: d, position: "belowBar", color: er.beat === false ? css("--neg") : er.beat ? css("--pos") : css("--warn"), shape: "square", size: 1, text: "E" });
+      if (list.some((o) => o.kind === "div")) mk.push({ time: d, position: "belowBar", color: "#00bcd4", shape: "circle", size: 1, text: "D" });
+      const nw = list.filter((o) => o.kind === "news"); if (nw.length) mk.push({ time: d, position: "aboveBar", color: NEWS_COL[nw[0].cat] || "#9c27b0", shape: "circle", size: 1, text: "N" });
       if (b) mk.push({ time: d, position: "belowBar", color: css("--pos"), shape: "arrowUp", size: b > 1 ? 1 : 0.7 });
       if (sl) mk.push({ time: d, position: "aboveBar", color: css("--neg"), shape: "arrowDown", size: sl > 1 ? 1 : 0.7 });
     });

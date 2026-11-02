@@ -508,3 +508,10 @@ html[data-size="l"] .drawer table{font-size:15px}
   .top-right{gap:6px}
   .top-right .icon-btn{padding:6px 9px}
 }
+
+/* noticias */
+.nw{padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+.nw:last-of-type{border-bottom:0}
+.nw a{color:var(--text)}.nw a:hover{color:var(--accent)}
+.tg-n-legal{color:#f23645;border-color:#f2364588}.tg-n-producto{color:#5b8cff;border-color:#5b8cff88}.tg-n-expansion{color:#089981;border-color:#08998188}
+.tg-n-resultados{color:#ff9800;border-color:#ff980088}.tg-n-analistas{color:#b48cff;border-color:#b48cff88}.tg-n-directivos,.tg-n-otras{color:var(--muted);border-color:var(--border-strong)}
