@@ -283,32 +283,51 @@ def earnings_hist(t):
 
 
 NEWS_CAT = [
-    ("legal", r"lawsuit|\bsues?\b|\bsued\b|litigation|probe|investigat|antitrust|\bfined?\b|settle|court|regulator|class action|subpoena|recall"),
-    ("producto", r"launch|unveil|introduc|new product|\brelease[sd]?\b|fda|approval|approves|patent|breakthrough"),
-    ("expansion", r"acqui|merger|\bmerge|buyout|takeover|expan|new (plant|factory|facility|store)|opens|partnership|joint venture|\bdeal\b|contract|agreement|stake"),
-    ("resultados", r"earnings|results|guidance|outlook|forecast|revenue|profit|quarter|beats|misses"),
-    ("analistas", r"upgrade|downgrade|price target|\brating\b|initiat"),
-    ("directivos", r"\bceo\b|\bcfo\b|chairman|resign|appoint|steps down|succession|layoff|job cuts"),
+    ("legal", r"lawsuit|\bsues?\b|\bsued\b|litigation|probe|investigat|antitrust|\bfined?\b|settle|court|regulator|class action|subpoena|recall|demanda|juicio|multa|sanci[oó]n|tribunal|investigaci[oó]n|cnmv|competencia abre"),
+    ("expansion", r"acqui|merger|\bmerge|buyout|takeover|expan|new (plant|factory|facility|store)|opens|partnership|joint venture|\bdeal\b|contract|agreement|stake|adquiere|adquisici[oó]n|fusi[oó]n|\bopa\b|expansi[oó]n|alianza|acuerdo|contrato|participaci[oó]n|abre (una|un|su)"),
+    ("producto", r"launch|unveil|introduc|new product|\brelease[sd]?\b|fda|approval|approves|patent|breakthrough|lanza (un|una|su) nuev|presenta (un|una|su) nuev|nuevo producto|aprobaci[oó]n|patente"),
+    ("resultados", r"earnings|results|guidance|outlook|forecast|revenue|profit|quarter|beats|misses|beneficio|resultados|ingresos|facturaci[oó]n|trimestre"),
+    ("analistas", r"upgrade|downgrade|price target|\brating\b|initiat|recomienda|eleva|rebaja|precio objetivo"),
+    ("directivos", r"\bceo\b|\bcfo\b|chairman|resign|appoint|steps down|succession|layoff|job cuts|consejero delegado|presidente|dimite|nombra|despidos|\bere\b"),
 ]
 
 
-def news_items(sym):
-    """Titulares recientes de Yahoo Finance, clasificados por palabras clave (no por lectura del artículo)."""
+def _rss(url):
+    import email.utils
+    b = get(url, 30).decode("utf-8", "replace")
     out = []
-    for n in (yf.Ticker(sym).news or [])[:20]:
-        c = n.get("content") or n
-        title = c.get("title")
-        if not title:
+    for it in re.findall(r"<item>(.*?)</item>", b, re.S):
+        g = lambda tag: (re.search(rf"<{tag}[^>]*>(.*?)</{tag}>", it, re.S) or [None, ""])[1].strip()
+        title = re.sub(r"<!\[CDATA\[|\]\]>", "", g("title"))
+        title = title.replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
+        src = re.sub(r"<!\[CDATA\[|\]\]>", "", g("source"))
+        if src and title.endswith(" - " + src):
+            title = title[: -len(src) - 3]
+        try:
+            d = email.utils.parsedate_to_datetime(g("pubDate")).strftime("%Y-%m-%d")
+        except Exception:  # noqa: BLE001
             continue
-        pub = c.get("pubDate") or c.get("displayTime")
-        if pub:
-            d = pub[:10]
-        elif c.get("providerPublishTime"):
-            d = datetime.fromtimestamp(c["providerPublishTime"], timezone.utc).strftime("%Y-%m-%d")
-        else:
-            continue
-        link = (c.get("canonicalUrl") or {}).get("url") or (c.get("clickThroughUrl") or {}).get("url") or c.get("link")
-        prov = (c.get("provider") or {}).get("displayName") or c.get("publisher")
+        out.append((d, title, g("link"), src or None))
+    return out
+
+
+def news_items(sym, name=None):
+    """Titulares recientes (Yahoo Finance RSS; si hay pocos, Google Noticias por nombre), clasificados por palabras clave."""
+    import urllib.parse
+    items = []
+    try:
+        items = [(d, t, l, p or "Yahoo Finance") for d, t, l, p in _rss(f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={urllib.parse.quote(sym)}&region=US&lang=en-US")]
+    except Exception:  # noqa: BLE001
+        items = []
+    if len(items) < 3 and name:
+        es = sym.endswith(".MC")
+        q = urllib.parse.quote(f'"{re.sub(r",? (Inc|Corp|Corporation|S\.A\.|SA|N\.V\.|AG|SE|plc|Ltd)\.?$", "", name)}" when:30d')
+        try:
+            items += _rss(f"https://news.google.com/rss/search?q={q}&hl={'es' if es else 'en-US'}&gl={'ES' if es else 'US'}&ceid={'ES:es' if es else 'US:en'}")[:20]
+        except Exception:  # noqa: BLE001
+            pass
+    out = []
+    for d, title, link, prov in items[:25]:
         low = title.lower()
         cat = next((k for k, rx in NEWS_CAT if re.search(rx, low)), "otras")
         out.append([d, cat, title[:220], link, prov])
@@ -398,7 +417,7 @@ def main():
     ncut = (NOW - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
     for k, sym_ in enumerate(syms):
         try:
-            got = news_items(sym_)
+            got = news_items(sym_, (cache.get(sym_) or {}).get("nombre"))
             old = {x[2]: x for x in ncache.get(sym_, [])}
             for x in got:
                 old[x[2]] = x
