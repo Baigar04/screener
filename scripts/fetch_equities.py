@@ -109,26 +109,33 @@ def drop_open_session(sym, df):
 
 
 def prices(symbols):
-    frames = {}
+    frames, raw = {}, {}
     for i in range(0, len(symbols), 150):
         chunk = symbols[i:i + 150]
         for attempt in range(3):
             try:
-                df = yf.download(chunk, period="5y", interval="1d", group_by="ticker", auto_adjust=True,
+                df = yf.download(chunk, period="5y", interval="1d", group_by="ticker", auto_adjust=False,
                                  threads=True, progress=False)
                 for s in chunk:
                     try:
                         sub = df[s].dropna(subset=["Close"]) if isinstance(df.columns, pd.MultiIndex) else df.dropna(subset=["Close"])
                         sub = drop_open_session(s, sub)
                         if len(sub) > 30:
-                            frames[s] = sub
+                            raw[s] = sub[["Open", "High", "Low", "Close", "Volume"]]
+                            adj = sub.copy()
+                            if "Adj Close" in sub:
+                                ratio = (sub["Adj Close"] / sub["Close"]).fillna(1.0)
+                                for col in ("Open", "High", "Low"):
+                                    adj[col] = sub[col] * ratio
+                                adj["Close"] = sub["Adj Close"]
+                            frames[s] = adj[["Open", "High", "Low", "Close", "Volume"]]
                     except KeyError:
                         pass
                 break
             except Exception as e:  # noqa: BLE001
                 log("download error", e)
                 time.sleep(10 * (attempt + 1))
-    return frames
+    return frames, raw
 
 
 def rsi(c, n=14):
@@ -323,7 +330,7 @@ def main():
     U = universe()
     syms = sorted(U)
     log("Universo:", len(syms))
-    frames = prices(syms)
+    frames, raw = prices(syms)
     log("Precios:", len(frames))
     for s in syms:
         if s not in frames:
@@ -361,13 +368,13 @@ def main():
             tail = c.iloc[-252:]
             detail["diario"] = [[d.strftime("%Y-%m-%d"), jnum(v, 2), jnum(a, 2), jnum(b, 2)]
                                 for d, v, a, b in zip(tail.index, tail, s50.iloc[-252:], s200.iloc[-252:])]
-            fr = frames[s]
+            fr = raw.get(s, frames[s])
             ohlcv = {"t": [d.strftime("%Y-%m-%d") for d in fr.index],
                      "o": [jnum(x, 3) for x in fr["Open"]], "h": [jnum(x, 3) for x in fr["High"]],
                      "l": [jnum(x, 3) for x in fr["Low"]], "c": [jnum(x, 3) for x in fr["Close"]],
                      "v": [int(x) if x == x else None for x in fr["Volume"]]}
             with open(os.path.join(DATA, "p", s.replace("/", "_") + ".json"), "w") as fh:
-                json.dump({"sym": s, "fuente": "Yahoo Finance (precios ajustados)", **ohlcv}, fh, separators=(",", ":"))
+                json.dump({"sym": s, "fuente": "Yahoo Finance (precios sin ajustar, como TradingView)", **ohlcv}, fh, separators=(",", ":"))
         with open(os.path.join(DATA, "t", s.replace("/", "_") + ".json"), "w") as fh:
             json.dump(detail, fh, separators=(",", ":"))
         rows.append(r)
