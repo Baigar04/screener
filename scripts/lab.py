@@ -113,30 +113,39 @@ def composite(cat_sig, w):
 
 
 def suggest(ic_by_cat, base, t_by_cat=None):
-    """Pesos ∝ IC positivo, descontado por su fiabilidad (t ≤ 1 no cuenta; t ≥ 2 cuenta entero; un factor que resta con t ≤ −2 pierde la mitad de su peso), mezclados al 50 % con los actuales,
-    reescalados al total actual de esas categorías y con un máximo de 40 por categoría. Sin evidencia, se mantienen."""
-    tot = sum(base[k] for k in ic_by_cat)
+    """Pesos según la evidencia, sin perseguir ruido:
+    · Confianza de cada factor = t − 1 acotada a [0, 1] (t ≤ 1 no cuenta; t ≥ 2 cuenta entera).
+    · La parte «por evidencia» reparte el total entre los factores con IC positivo, en proporción a IC × confianza.
+    · Se mezcla con los pesos actuales con un peso de 0,5 × la mayor confianza: con evidencia débil, casi no cambia nada.
+    · Un factor que resta con claridad (t ≤ −2) pierde la mitad de su peso, que se reparte entre los demás.
+    · Máximo de 40 por factor."""
     t_by_cat = t_by_cat or {}
-    pos = {k: max(v or 0, 0) * min(1, max((t_by_cat.get(k) or 0) - 1, 0)) for k, v in ic_by_cat.items()}
+    tot = sum(base[k] for k in ic_by_cat)
+    conf = {k: min(1, max((t_by_cat.get(k) or 0) - 1, 0)) for k in ic_by_cat}
+    pos = {k: max(ic_by_cat[k] or 0, 0) * conf[k] for k in ic_by_cat}
     s = sum(pos.values())
-    neg = {k for k, v in ic_by_cat.items() if (v or 0) < 0 and (t_by_cat.get(k) or 0) <= -2}
+    w = {k: float(base[k]) for k in ic_by_cat}
     if s:
-        ev = {k: pos[k] / s * tot for k in pos}
-    elif neg and len(neg) < len(pos):
-        # nada aporta con fiabilidad, pero algo resta con claridad: su parte se reparte entre los demás
-        ev = {k: (0 if k in neg else tot / (len(pos) - len(neg))) for k in pos}
-    else:
-        return {k: base[k] for k in ic_by_cat}
-    w = {k: 0.5 * ev[k] + 0.5 * base[k] for k in pos}
+        a = 0.5 * max(conf[k] for k in pos if pos[k] > 0)
+        w = {k: (1 - a) * base[k] + a * pos[k] / s * tot for k in w}
+    neg = [k for k in w if (ic_by_cat[k] or 0) < 0 and (t_by_cat.get(k) or 0) <= -2]
+    if neg and len(neg) < len(w):
+        cut = sum(w[k] / 2 for k in neg)
+        for k in neg:
+            w[k] /= 2
+        rest = [k for k in w if k not in neg]
+        rs = sum(w[k] for k in rest)
+        for k in rest:
+            w[k] += cut * w[k] / rs
     for _ in range(5):  # tope de 40 y reparto del exceso
-        over = {k: v - 40 for k, v in w.items() if v > 40}
+        over = sum(v - 40 for v in w.values() if v > 40)
         if not over:
             break
         free = [k for k in w if w[k] < 40]
-        for k in over:
-            w[k] = 40
+        for k in w:
+            w[k] = min(w[k], 40)
         for k in free:
-            w[k] += sum(over.values()) / len(free)
+            w[k] += over / len(free)
     return {k: int(round(v)) for k, v in w.items()}
 
 

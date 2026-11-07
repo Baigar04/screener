@@ -268,6 +268,7 @@ const PROFILES = {
 E.w = store.get("pesos", PROFILES["Equilibrado"]);
 function scoreOf(r) {
   const f = E.sc?.factores?.[r.sym]; if (!f) return null;
+  if (["calidad", "valor", "crecimiento", "momentum"].filter((k) => f[k] != null).length < 3) return null;
   let num = 0, den = 0;
   for (const [k] of FACT) if (f[k] != null && E.w[k] > 0) { num += E.w[k] * f[k]; den += E.w[k]; }
   if (!den) return null;

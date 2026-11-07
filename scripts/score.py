@@ -139,6 +139,9 @@ def main():
     # nota con pesos por defecto (la web la recalcula con los del usuario)
     def total(sym, w=DEFAULT_W):
         f, r = out[sym], next(x for x in rows if x["sym"] == sym)
+        # sin al menos 3 de los 4 factores básicos la nota no es comparable (p. ej., valores recién añadidos sin fundamentales)
+        if sum(f[k] is not None for k in ("calidad", "valor", "crecimiento", "momentum")) < 3:
+            return None
         num = sum(w[k] * f[k] for k in w if f[k] is not None)
         den = sum(w[k] for k in w if f[k] is not None)
         if not den:
@@ -186,7 +189,7 @@ def main():
     json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot,
                "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res, "senales": sig,
                "metodo": "Cada factor es el percentil (0-100) del valor dentro de su sector; momentum y smart money, dentro de todo el universo. "
-                         "Un veredicto técnico bajista limita la nota a 60. El encaje macro es una heurística de rotación sectorial según el régimen de EE. UU."},
+                         "Un veredicto técnico bajista limita la nota a 60. Sin al menos 3 de los 4 factores básicos (calidad, valor, crecimiento, momentum) no hay nota. El encaje macro es una heurística de rotación sectorial según el régimen de EE. UU."},
               open(os.path.join(DATA, "score.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(hist, open(os.path.join(DATA, "score_hist.json"), "w"), separators=(",", ":"))
     print("Puntuación: valores", len(out), "· top 5:", [(s, tot[s]) for s in top[:5]], "· semanas registradas:", len(hist["semanas"]))
