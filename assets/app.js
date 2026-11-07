@@ -9,6 +9,7 @@ const NAV = [
   ["smart", "Smart money", true],
   ["carteras", "Carteras", true],
   ["adelantarse", "Adelantarse", true],
+  ["laboratorio", "Laboratorio", true],
 ];
 const LEVELS = ["Principiante", "Intermedio", "Avanzado", "Experto inversor"];
 const LEVELS_SHORT = ["Principiante", "Intermedio", "Avanzado", "Experto"];
@@ -121,8 +122,9 @@ const ICONS = {
   smart: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5",
   carteras: "M3 7h18v13H3zM8 7V4h8v3M3 12h18",
   adelantarse: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z",
+  laboratorio: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9",
 };
-const SHORT = { pulso: "Pulso", sectores: "Sectores", screener: "Screener", smart: "Smart", carteras: "Carteras", adelantarse: "Adelantarse" };
+const SHORT = { pulso: "Pulso", sectores: "Sectores", screener: "Screener", smart: "Smart", carteras: "Carteras", adelantarse: "Adelantarse", laboratorio: "Lab" };
 function renderTop() {
   $("#nav").innerHTML = NAV.map(([k, n, ready]) => `<button data-k="${k}" class="${S.view === k ? "on" : ""}${ready ? "" : " is-soon"}" title="${n}">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span><span class="lbl-s">${SHORT[k]}</span>${ready ? "" : '<span class="soon">pronto</span>'}</button>`).join("");

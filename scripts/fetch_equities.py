@@ -516,6 +516,17 @@ def main():
         rot = {}
         ERRORS.append({"fuente": "Cálculo", "serie": "RRG", "motivo": str(e)[:200]})
 
+    try:
+        import lab
+        from score import DEFAULT_W
+        L = lab.run(frames, rows, cache, DEFAULT_W)
+        log("Laboratorio:", L["meses"], "meses ·", {c["k"]: (c["ic"], c["ic_t"]) for c in L["categorias"]},
+            "· compuesto", (L["compuesto"]["actual"] or {}).get("ic"), "→", (L["compuesto"]["sugerido"] or {}).get("ic"), "· pesos", L["pesos"]["sugerido"])
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+        ERRORS.append({"fuente": "Cálculo", "serie": "Laboratorio", "motivo": str(e)[:200]})
+
     meta = {"generado": NOW.isoformat(timespec="seconds"), "n": len(rows), "errores": ERRORS[:200], "n_errores": len(ERRORS),
             "fuentes": ["Wikipedia (composición S&P 500 y Nasdaq-100)", "Yahoo Finance vía yfinance (precios y fundamentales)"],
             "notas": "Fundamentales refrescados por rotación (cada valor, una vez por semana). Revisiones de beneficios: sin fuente pública fiable."}
