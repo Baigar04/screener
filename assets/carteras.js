@@ -7,7 +7,7 @@ const C = {
   tab: "construir",
   cfg: Object.assign({ src: "top", n: 10, wmax: 20, metodo: "riesgo", region: "Todas", seccap: 3, capital: 10000 }, store.get("cartera_cfg", {})),
   res: null, busy: false, err: null,
-  saved: store.get("carteras", []), open: null,
+  saved: store.get("carteras", []), open: null, riskSaved: {},
 };
 const METODOS = [["equi", "Equiponderada"], ["riesgo", "Riesgo-paridad"], ["minvar", "Mínima varianza"], ["sharpe", "Máximo Sharpe"]];
 const METODO_TIP = {
@@ -54,13 +54,20 @@ function candidates() {
   }
   return out;
 }
+/* los precios de la web no están ajustados: un salto que coincide con un split típico (2:1, 1:10…) se trata como día sin cambio */
+const SPLITS = [2, 3, 4, 5, 8, 10, 15, 20, 25, 30, 40, 50];
+function splitSafe(q) {
+  if (q > 0.6 && q < 1.6) return q;
+  for (const k of SPLITS) if (Math.abs(q * k - 1) < 0.04 || Math.abs(q / k - 1) < 0.04) return 1;
+  return q;
+}
 /* rentabilidades diarias alineadas del último año (fechas comunes con relleno hacia delante) */
 function alignReturns(series) {
   const dates = [...new Set(series.flatMap((s) => s.t.slice(-260)))].sort().slice(-253);
   const R = series.map((s) => {
     const m = new Map(s.t.map((t, i) => [t, s.c[i]])); let last = null;
     const px = dates.map((d) => { if (m.has(d) && m.get(d) != null) last = m.get(d); return last; });
-    const r = []; for (let i = 1; i < px.length; i++) r.push(px[i] && px[i - 1] ? px[i] / px[i - 1] - 1 : 0);
+    const r = []; for (let i = 1; i < px.length; i++) r.push(px[i] && px[i - 1] ? splitSafe(px[i] / px[i - 1]) - 1 : 0);
     return { px, r };
   });
   return { dates, R };
@@ -93,6 +100,70 @@ function optimise(method, S, mu, cap) {
     w = nw;
   }
   return w;
+}
+
+/* ---------- riesgo: correlaciones, beta, exposición a factores y VaR ---------- */
+const FACT_ES = [["calidad", "Calidad"], ["valor", "Valor"], ["crecimiento", "Crecimiento"], ["momentum", "Momentum"], ["smart", "Smart money"], ["macro", "Encaje macro"]];
+const quant = (a, q) => { const s = a.slice().sort((x, y) => x - y), i = (s.length - 1) * q, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); };
+function riskCalc(rows, series, w, bus, beu, capital) {
+  const { dates, R } = alignReturns(series);
+  const { S } = covMatrix(R.map((x) => x.r));
+  const n = rows.length, T = R[0].r.length, sd = S.map((r, i) => Math.sqrt(S[i][i]));
+  const corr = S.map((r, i) => r.map((v, j) => (sd[i] && sd[j] ? v / (sd[i] * sd[j]) : 0)));
+  const pr = Array.from({ length: T }, (_, t) => R.reduce((a, x, i) => a + w[i] * x.r[t], 0));
+  const us = rows.reduce((a, r, i) => a + (isUS(r) ? w[i] : 0), 0);
+  const pick = (b) => { if (!b) return null; const m = new Map(b.t.map((t, i) => [t, b.c[i]])); let l = null; return dates.map((d) => { if (m.has(d)) l = m.get(d); return l; }); };
+  const a = pick(bus), e = pick(beu);
+  const br = a || e ? Array.from({ length: T }, (_, t) => { const ra = a && a[t] && a[t + 1] ? a[t + 1] / a[t] - 1 : null, re = e && e[t] && e[t + 1] ? e[t + 1] / e[t] - 1 : null;
+    return ra != null && re != null ? us * ra + (1 - us) * re : ra ?? re ?? 0; }) : null;
+  const cv = (x, y) => { const mx = mean(x), my = mean(y); let s = 0; for (let t = 0; t < x.length; t++) s += (x[t] - mx) * (y[t] - my); return s / (x.length - 1); };
+  const vb = br ? cv(br, br) : null;
+  const beta = br && vb ? cv(pr, br) / vb : null, rho = br && vb ? cv(pr, br) / Math.sqrt(cv(pr, pr) * vb) : null;
+  const te = br ? Math.sqrt(cv(pr.map((x, t) => x - br[t]), pr.map((x, t) => x - br[t])) * 252) * 100 : null;
+  const sdp = Math.sqrt(cv(pr, pr));
+  const r10 = []; for (let t = 10; t <= T; t++) { let p = 1; for (let k = t - 10; k < t; k++) p *= 1 + pr[k]; r10.push(p - 1); }
+  const v95 = -quant(pr, 0.05), v99 = -quant(pr, 0.01), tail = pr.filter((x) => x <= -v95), es95 = tail.length ? -mean(tail) : v95;
+  const var_ = { h95: v95, h99: v99, es95, p95: 1.645 * sdp, p99: 2.326 * sdp, h95_10: r10.length > 20 ? -quant(r10, 0.05) : v95 * Math.sqrt(10),
+    peor_dia: -Math.min(...pr), peor_10: r10.length ? -Math.min(...r10) : null, dia_peor: dates[pr.indexOf(Math.min(...pr)) + 1] };
+  const items = rows.map((r, i) => ({ sym: r.sym, w: w[i], beta: br && vb ? cv(R[i].r, br) / vb : null, beta_y: r.beta, vol: sd[i] * 100 }));
+  let pairs = 0, sum = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { sum += corr[i][j] * (w[i] * w[j]); pairs += w[i] * w[j]; }
+  const fx = window.SCRFactors ? FACT_ES.map(([k, t]) => { let num = 0, den = 0; rows.forEach((r, i) => { const v = window.SCRFactors(r.sym)?.[k]; if (v != null) { num += w[i] * v; den += w[i]; } }); return [k, t, den ? num / den : null, den]; }) : [];
+  const cur = {}; rows.forEach((r, i) => { cur[r.moneda || "—"] = (cur[r.moneda || "—"] || 0) + w[i] * 100; });
+  const capS = rows.map((r, i) => [r.mcap, w[i]]).filter((x) => x[0]).sort((x, y) => x[0] - y[0]); let acc = 0, capMed = null; for (const [m, ww] of capS) { acc += ww; if (acc >= 0.5) { capMed = m; break; } }
+  return { syms: rows.map((r) => r.sym), w, corr, beta, rho, te, var_, items, capital, us,
+    avgCorr: pairs ? sum / pairs : null, divRatio: w.reduce((a, x, i) => a + x * sd[i], 0) / Math.sqrt(quad(S, w)), nEff: 1 / w.reduce((a, x) => a + x * x, 0),
+    fx, cur, capMed, dias: T, desde: dates[0], hasta: dates[dates.length - 1] };
+}
+function heat(v) { const a = Math.min(1, Math.abs(v)); return v >= 0 ? `rgba(229,72,77,${(a * 0.75).toFixed(2)})` : `rgba(29,185,128,${(a * 0.75).toFixed(2)})`; }
+function riskHtml(k) {
+  if (!k) return "";
+  const cap = k.capital, V = k.var_, top = k.items.map((x, i) => [x, i]).sort((a, b) => b[0].w - a[0].w).slice(0, 12).map((x) => x[1]);
+  const lvl = H.S.level;
+  return `<h2 class="sec">Riesgo de la cartera <span class="hint">${k.dias} sesiones · ${fmtDate(k.desde)} – ${fmtDate(k.hasta)}</span></h2>
+  <div class="kpis rk-kpis">${[
+    ["Beta frente a su referencia", k.beta == null ? "—" : nf(k.beta, 2), "Si la referencia (S&P 500 y Euro Stoxx 50 según el peso por región) cae un 10 %, la cartera tiende a caer un 10 × beta %."],
+    ["Correlación con la referencia", k.rho == null ? "—" : nf(k.rho, 2), "1 = se mueve igual que el índice; cerca de 0 = va por libre."],
+    ["Tracking error", pct(k.te), "Cuánto se separa cada año de la referencia (volatilidad de la diferencia)."],
+    ["Correlación media entre valores", nf(k.avgCorr, 2), "Por encima de 0,6, los valores se mueven casi juntos y la diversificación es escasa."],
+    ["Ratio de diversificación", nf(k.divRatio, 2) + "×", "Suma de volatilidades individuales entre la volatilidad de la cartera. Cuanto más alto, más riesgo se cancela al combinarlos."],
+    ["Nº efectivo de valores", nf(k.nEff, 1), "Cuántos valores «iguales» equivalen a esta cartera según su concentración de pesos."]]
+    .map(([l, v, d]) => `<div class="kpi" style="cursor:default" data-tip="${esc(d)}"><span class="k-l">${l}</span><span class="k-v num">${v}</span></div>`).join("")}</div>
+  <div class="f-grid" style="margin-top:12px">
+    <div class="box"><b>Valor en riesgo (VaR)</b><div class="lab-tw"><table><thead><tr><th></th><th>Confianza</th><th>Pérdida</th><th>Sobre ${eur(cap)}</th></tr></thead><tbody>
+      ${[["1 día · histórico", "95 %", V.h95], ["1 día · histórico", "99 %", V.h99], ["1 día · pérdida media en el peor 5 % (CVaR)", "95 %", V.es95], ["1 día · normal", "95 %", V.p95], ["10 días · histórico", "95 %", V.h95_10],
+        ["Peor día del último año" + (V.dia_peor ? ` (${fmtDate(V.dia_peor)})` : ""), "—", V.peor_dia], ["Peores 10 sesiones seguidas", "—", V.peor_10]]
+        .map(([t, c, v]) => `<tr><td>${t}</td><td class="num">${c}</td><td class="num chg n">${v == null ? "—" : "−" + nf(v * 100, 2) + " %"}</td><td class="num">${v == null ? "—" : "−" + eur(cap * v)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="method">${lvl <= 1 ? "Lectura: con un 95 % de confianza, en un día normal no deberías perder más que la primera cifra; 1 de cada 20 días se superará. " : ""}Histórico: con las rentabilidades diarias del último año de estos pesos. En moneda local de cada valor: no incluye el efecto del tipo de cambio.</div></div>
+    <div class="box"><b>Exposición a factores</b><div class="hint">Media ponderada de la puntuación de cada factor (0-100). 50 = como el universo.</div>
+      ${k.fx.length ? `<div class="rk-fx">${k.fx.map(([key, t, v]) => `<div class="rk-fr"><span>${t}</span><div class="rk-bar"><i style="left:50%"></i>${v == null ? "" : `<b style="left:${Math.min(50, v)}%;width:${Math.abs(v - 50)}%" class="${v >= 50 ? "p" : "n"}"></b>`}</div><span class="num">${v == null ? "—" : nf(v, 0)}</span></div>`).join("")}</div>` : '<div class="hint">Puntuación no cargada todavía.</div>'}
+      <div class="kv-grid sm" style="margin-top:10px">${Object.entries(k.cur).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="kvc"><span>En ${esc(c)}</span><b class="num">${pct(v, 0)}</b></div>`).join("")}
+        <div class="kvc"><span data-tip="Capitalización del valor en el que se alcanza la mitad del peso">Tamaño mediano</span><b class="num">${k.capMed ? (k.capMed >= 1e12 ? nf(k.capMed / 1e12, 2) + " bill." : nf(k.capMed / 1e9, 0) + " mil M") : "—"}</b></div></div></div></div>
+  <div class="f-grid" style="margin-top:12px">
+    <div class="box"><b>Matriz de correlaciones${k.syms.length > 12 ? " (12 mayores pesos)" : ""}</b><div class="lab-tw"><table class="rk-corr"><thead><tr><th></th>${top.map((i) => `<th>${esc(k.syms[i])}</th>`).join("")}</tr></thead><tbody>
+      ${top.map((i) => `<tr><th>${esc(k.syms[i])}</th>${top.map((j) => `<td class="num" style="background:${i === j ? "transparent" : heat(k.corr[i][j])}">${i === j ? "" : nf(k.corr[i][j], 2)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <div class="method">Rojo: se mueven juntos (diversifican poco). Verde: se mueven al revés (cubren). Rentabilidades diarias del último año.</div></div>
+    <div class="box"><b>Beta por valor</b><div class="lab-tw"><table><thead><tr><th>Valor</th><th>Peso</th><th data-tip="Calculada con el último año frente a la misma referencia de la cartera">Beta 1 año</th><th data-tip="La que publica Yahoo Finance (5 años, mensual)">Beta Yahoo</th><th>Volatilidad</th></tr></thead><tbody>
+      ${k.items.slice().sort((a, b) => b.w - a.w).map((x) => `<tr><td>${esc(x.sym)}</td><td class="num">${pct(x.w * 100)}</td><td class="num">${nf(x.beta, 2)}</td><td class="num">${nf(x.beta_y, 2)}</td><td class="num">${pct(x.vol, 0)}</td></tr>`).join("")}</tbody></table></div></div></div>`;
 }
 
 async function build() {
@@ -134,7 +205,8 @@ async function build() {
     };
     const sect = {}; items.forEach((x) => { sect[x.r.sector || "—"] = (sect[x.r.sector || "—"] || 0) + x.w * 100; });
     C.res = { items, vol, ret: port[port.length - 1] - 100, mdd: mdd * 100, sharpe: vol ? ((port[port.length - 1] - 100) - 3) / vol : null, port, bench, dates, stress, sect, fx,
-      excl: cand.length - ok.length, metodo: C.cfg.metodo };
+      excl: cand.length - ok.length, metodo: C.cfg.metodo,
+      risk: (() => { try { return riskCalc(ok, oks, w, bus, beu, C.cfg.capital); } catch (er) { console.warn(er); return null; } })() };
   } catch (e) { C.err = e.message; }
   C.busy = false; H.render();
 }
@@ -183,7 +255,8 @@ function renderBuild() {
       ${[["Recesión: bolsa −25 %", r.stress.recesion, "Beta de cada valor × −25 %."], ["Tipos +100 pb", r.stress.tipos, "Sensibilidad típica de cada sector (heurística)."],
         ["Petróleo +30 %", r.stress.petroleo, "Sensibilidad típica de cada sector (heurística)."], ["Dólar +10 % frente al euro", r.stress.dolar, "Efecto cambiario para un inversor en euros."]]
         .map(([t, v, d]) => `<tr><td data-tip="${esc(d)}">${t}</td><td class="num chg ${cls(v)}">${spct(v)}</td><td class="num">${eur(C.cfg.capital * v / 100)}</td></tr>`).join("")}</tbody></table></div>
-    <div class="bar" style="margin-top:12px"><button class="icon-btn primary" data-csave="1">Guardar cartera</button><button class="icon-btn" data-ccsv="1">Exportar CSV</button></div></div></div>`;
+    <div class="bar" style="margin-top:12px"><button class="icon-btn primary" data-csave="1">Guardar cartera</button><button class="icon-btn" data-ccsv="1">Exportar CSV</button></div></div></div>
+    ${riskHtml(r.risk)}`;
   return h;
 }
 /* ---------- carteras guardadas ---------- */
@@ -216,13 +289,28 @@ function renderSaved() {
       <table><thead><tr><th>Valor</th><th>Objetivo</th><th>Actual</th><th>Desviación</th><th>Precio inicial</th><th>Precio actual</th><th>Variación</th></tr></thead><tbody>
       ${v.items.map((x) => `<tr data-sym="${esc(x.sym)}"><td><b>${esc(x.sym)}</b></td><td class="num">${pct(x.w * 100)}</td><td class="num">${pct(x.wcur * 100)}</td><td class="num ${Math.abs(x.drift) > 5 ? "stale-txt" : ""}">${sgn(x.drift, 1)} pp</td>
         <td class="num">${nf(x.p0, 2)}</td><td class="num">${nf(x.now, 2)}</td><td class="num chg ${cls(x.now && x.p0 ? x.now / x.p0 - 1 : null)}">${x.now && x.p0 ? spct((x.now / x.p0 - 1) * 100) : "—"}</td></tr>`).join("")}</tbody></table>
+      ${C.riskSaved[p.id] === "busy" ? '<div class="skel" style="height:200px;margin-top:12px"></div>' : C.riskSaved[p.id]?.err ? `<div class="err-box" style="margin-top:12px">${esc(C.riskSaved[p.id].err)}</div>` : riskHtml(C.riskSaved[p.id])}
       <h2 class="sec">Diario de decisiones</h2>
       ${(p.notas || []).slice().reverse().map((n) => `<div class="note"><span class="hint">${fmtDate(n.f.slice(0, 10))}</span> ${esc(n.t)}</div>`).join("") || '<div class="hint">Sin notas.</div>'}
       <div class="bar" style="margin-top:8px"><input id="cnote" class="txt" placeholder="Por qué compras, vendes o rebalanceas" aria-label="Nueva nota"><button class="icon-btn" data-cnote="${p.id}">Añadir nota</button>
       <span style="flex:1"></span><button class="icon-btn" data-ccsvp="${p.id}">Exportar CSV</button><button class="icon-btn" data-cdel="${p.id}">Eliminar cartera</button></div></div>`;
   }
+  if (p && !C.riskSaved[p.id]) savedRisk(p);
   setTimeout(() => C.saved.forEach(async (q) => { const el = document.getElementById("bench_" + q.id); if (el) { const b = await benchRet(q); el.textContent = b == null ? "—" : spct(b, 2); el.className = "num chg " + cls(b); } }), 0);
   return h;
+}
+async function savedRisk(p) {
+  C.riskSaved[p.id] = "busy";
+  try {
+    const uni = window.SCRUni ? window.SCRUni() : [], by = Object.fromEntries(uni.map((r) => [r.sym, r]));
+    const v = valuation(p), list = v.items.filter((x) => by[x.sym]);
+    const [ser, bus, beu] = await Promise.all([Promise.all(list.map((x) => prices(x.sym).catch(() => null))), prices("IDX_SP500").catch(() => null), prices("IDX_STOXX50").catch(() => null)]);
+    const k = list.map((x, i) => [x, ser[i]]).filter(([, s]) => s && s.c.length > 120);
+    if (k.length < 2) throw new Error("No hay histórico suficiente para analizar el riesgo de esta cartera.");
+    const tw = k.reduce((a, [x]) => a + x.wcur, 0);
+    C.riskSaved[p.id] = riskCalc(k.map(([x]) => by[x.sym]), k.map(([, s]) => s), k.map(([x]) => x.wcur / tw), bus, beu, p.capital * (1 + v.ret / 100));
+  } catch (e) { C.riskSaved[p.id] = { err: e.message }; }
+  if (C.open === p.id) H.render();
 }
 async function saveCurrent() {
   const r = C.res; if (!r) return;

@@ -275,6 +275,7 @@ function scoreOf(r) {
   return Math.round(t);
 }
 function computeScores() { if (!E.uni) return; E.uni.filas.forEach((r) => { r.score = scoreOf(r); }); }
+window.SCRFactors = (s) => E.sc?.factores?.[s];
 window.SCRSetWeights = (w) => { E.w = { ...w }; store.set("pesos", E.w); computeScores(); };
 const scoreBadge = (v) => (v == null ? "—" : `<span class="sc sc-${v >= 70 ? "hi" : v >= 50 ? "mid" : "lo"}">${v}</span>`);
 const profileName = () => Object.keys(PROFILES).find((k) => FACT.every(([f]) => PROFILES[k][f] === E.w[f])) || "Personalizado";

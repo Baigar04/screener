@@ -579,3 +579,15 @@ h2.sec .dd{display:inline-block;margin-left:8px;vertical-align:middle;font-size:
 .tes-date small{font-size:11px}
 @media (max-width:720px){.tes-cmp{grid-template-columns:1fr 1fr}}
 #ftesis .f-grid>div{min-width:0}#ftesis .box{min-width:0}
+
+/* riesgo de cartera */
+.rk-kpis{grid-template-columns:repeat(6,minmax(0,1fr));margin-top:4px}
+@media (max-width:900px){.rk-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rk-fx{display:grid;gap:8px;margin-top:10px}
+.rk-fr{display:grid;grid-template-columns:110px 1fr 34px;gap:10px;align-items:center;font-size:14px}
+.rk-bar{position:relative;height:10px;background:var(--surface-2);border-radius:99px}
+.rk-bar i{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--border-strong)}
+.rk-bar b{position:absolute;top:0;bottom:0;border-radius:99px}
+.rk-bar b.p{background:var(--pos)}.rk-bar b.n{background:var(--neg)}
+.rk-corr th,.rk-corr td{font-size:12px;padding:5px 6px;text-align:center;white-space:nowrap}
+.f-grid>*{min-width:0}
