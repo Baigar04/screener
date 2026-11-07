@@ -113,15 +113,21 @@ def composite(cat_sig, w):
 
 
 def suggest(ic_by_cat, base, t_by_cat=None):
-    """Pesos ∝ IC positivo, descontado por su fiabilidad (t ≤ 1 no cuenta; t ≥ 2 cuenta entero), mezclados al 50 % con los actuales,
+    """Pesos ∝ IC positivo, descontado por su fiabilidad (t ≤ 1 no cuenta; t ≥ 2 cuenta entero; un factor que resta con t ≤ −2 pierde la mitad de su peso), mezclados al 50 % con los actuales,
     reescalados al total actual de esas categorías y con un máximo de 40 por categoría. Sin evidencia, se mantienen."""
     tot = sum(base[k] for k in ic_by_cat)
     t_by_cat = t_by_cat or {}
     pos = {k: max(v or 0, 0) * min(1, max((t_by_cat.get(k) or 0) - 1, 0)) for k, v in ic_by_cat.items()}
     s = sum(pos.values())
-    if not s:
+    neg = {k for k, v in ic_by_cat.items() if (v or 0) < 0 and (t_by_cat.get(k) or 0) <= -2}
+    if s:
+        ev = {k: pos[k] / s * tot for k in pos}
+    elif neg and len(neg) < len(pos):
+        # nada aporta con fiabilidad, pero algo resta con claridad: su parte se reparte entre los demás
+        ev = {k: (0 if k in neg else tot / (len(pos) - len(neg))) for k in pos}
+    else:
         return {k: base[k] for k in ic_by_cat}
-    w = {k: 0.5 * pos[k] / s * tot + 0.5 * base[k] for k in pos}
+    w = {k: 0.5 * ev[k] + 0.5 * base[k] for k in pos}
     for _ in range(5):  # tope de 40 y reparto del exceso
         over = {k: v - 40 for k, v in w.items() if v > 40}
         if not over:

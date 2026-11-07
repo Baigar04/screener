@@ -559,3 +559,23 @@ h2.sec .dd{display:inline-block;margin-left:8px;vertical-align:middle;font-size:
 @media (max-width:720px){.nav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .lab-svg{max-height:240px}
 .lab-tw{overflow-x:auto;max-width:100%}.f-grid>.box{min-width:0}
+
+/* ficha de tesis */
+.tes-th ul{margin:6px 0 0;padding-left:18px;display:grid;gap:6px}
+.tes-cmp{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
+.tes-cmp>div{display:flex;flex-direction:column;gap:2px}
+.tes-ver{display:inline-block;margin:6px 0 10px;white-space:normal;line-height:1.4;padding:5px 10px;border-radius:8px}
+.tes-ctl{display:grid;gap:10px;margin:10px 0 12px}
+.tes-ctl label{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:14px;color:var(--muted)}
+.tes-ctl input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+.tes-sp{width:120px;height:24px;display:block}
+.tes-peers td,.tes-peers th{white-space:nowrap}
+.tes-self td{background:var(--accent-soft)}
+.tes-row{cursor:pointer}.tes-row:hover td{background:var(--surface-2)}
+.tes-med td{color:var(--muted);font-size:13px}
+.tes-cat{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:10px}
+.tes-cat li{display:grid;grid-template-columns:92px 1fr;gap:10px;align-items:start}
+.tes-date{font-size:13px;color:var(--muted);display:flex;flex-direction:column}
+.tes-date small{font-size:11px}
+@media (max-width:720px){.tes-cmp{grid-template-columns:1fr 1fr}}
+#ftesis .f-grid>div{min-width:0}#ftesis .box{min-width:0}

@@ -88,6 +88,7 @@ function big(v, cur) {
   return nf(v, 0) + c;
 }
 const cls = (v) => (v == null || v === 0 ? "z" : v > 0 ? "p" : "n");
+window.SCRFmt = { pct, spct, big, cls };
 const SEC_NAMES = { "Technology": "Tecnología", "Financial Services": "Servicios financieros", "Healthcare": "Salud", "Consumer Cyclical": "Consumo cíclico",
   "Consumer Defensive": "Consumo defensivo", "Industrials": "Industria", "Energy": "Energía", "Utilities": "Utilities", "Real Estate": "Inmobiliario",
   "Basic Materials": "Materiales básicos", "Communication Services": "Comunicaciones", "Financials": "Financiero" };
@@ -471,7 +472,7 @@ function exportCsv() {
 }
 
 /* ---------- FICHA DE EMPRESA (pantalla completa con pestañas) ---------- */
-const TABS = [["resumen", "Resumen"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["noticias", "Noticias y eventos"], ["pers", "Personalidades"], ["comparar", "Comparar"]];
+const TABS = [["resumen", "Resumen"], ["tesis", "Tesis"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["noticias", "Noticias y eventos"], ["pers", "Personalidades"], ["comparar", "Comparar"]];
 async function companyDrawer(sym, tab) {
   if (!E.uni) await ensure();
   const r = E.uni?.filas.find((x) => x.sym === sym);
@@ -496,6 +497,7 @@ function paintFicha() {
   if (tab === "grafico") mountChart(sym);
   if (tab === "comparar") mountCompare(sym);
   if (tab === "noticias") mountNews(sym);
+  if (tab === "tesis" && d && window.SCRTesis) { const el = document.getElementById("ftesis"); if (el) window.SCRTesis.mount(el, r, d, { uni: E.uni.filas, fact: E.sc?.factores?.[sym] }); }
 }
 function mountChart(sym) {
   const el = document.getElementById("fchart");
@@ -533,6 +535,7 @@ function fichaTab(tab, r, d) {
   const lv = H.S.level;
   if (!d) return `<div class="skel" style="height:220px"></div>`;
   if (tab === "grafico") return `<div id="fchart" class="fchart"></div>`;
+  if (tab === "tesis") return window.SCRTesis ? `<div id="ftesis"></div>` : `<div class="err-box">Módulo de tesis no disponible.</div>`;
   if (tab === "noticias") return `<div id="fnews"><div class="skel" style="height:220px"></div></div>`;
   if (tab === "pers") return window.SCRSmart ? window.SCRSmart.persTab(r.sym) : `<div class="err-box">Módulo de smart money no disponible.</div>`;
   if (tab === "comparar") {
@@ -713,7 +716,7 @@ function onClick(t, dd) {
   if (t.closest(".c-x")) return true;
   if ((b = t.closest("[data-cmprm]"))) { toggleCmp(b.dataset.cmprm); if (E.ficha) paintFicha(); else if (E.cmp.length >= 2) openCompare(); else H.closeDrawer(); if (H.S.view === "screener") H.render(); return true; }
   if ((b = t.closest("[data-ncat]"))) { newsCat = b.dataset.ncat; if (E.ficha) mountNews(E.ficha.sym); return true; }
-  if ((b = t.closest("[data-ftab]"))) { if (E.ficha) { E.ficha.tab = b.dataset.ftab; store.set("ficha_tab", E.ficha.tab === "grafico" || E.ficha.tab === "resumen" ? E.ficha.tab : "resumen"); paintFicha(); } return true; }
+  if ((b = t.closest("[data-ftab]"))) { if (E.ficha) { E.ficha.tab = b.dataset.ftab; store.set("ficha_tab", ["grafico", "resumen", "tesis"].includes(E.ficha.tab) ? E.ficha.tab : "resumen"); paintFicha(); } return true; }
   if ((b = t.closest("[data-eqr]"))) { E.region = b.dataset.eqr; store.set("eq_region", E.region); H.render(); return true; }
   if ((b = t.closest("[data-secsort]"))) { const k = b.dataset.secsort; if (SEC_COLS.find((c) => c[0] === k)[2] != null) { E.secMetric = k; store.set("sec_metric", k); H.render(); } return true; }
   if ((b = t.closest("[data-rrgh]"))) { E.rrgH = b.dataset.rrgh; store.set("rrg_h", E.rrgH); H.render(); return true; }

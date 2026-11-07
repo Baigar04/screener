@@ -267,6 +267,9 @@ def fundamentals(sym):
         "anual": dict(sorted(annual.items())[-5:]),
         "ern": earnings_hist(t),
         "fecha_fund": NOW.strftime("%Y-%m-%d"),
+        # para el DCF inverso de la ficha de tesis
+        "moneda_fin": info.get("financialCurrency"), "acciones": jnum(info.get("sharesOutstanding"), 0),
+        "caja": jnum(info.get("totalCash"), 0), "deuda": jnum(info.get("totalDebt"), 0), "fcf_ttm": jnum(info.get("freeCashflow"), 0),
     }
 
 
@@ -408,6 +411,32 @@ def rrg(frames, rows):
 
 
 # ------------------------------------------------------------------ main
+def val_hist(c, anual, mcap):
+    """Múltiplos mensuales a 5 años: cada ejercicio se usa desde el 1 de abril del año siguiente; la capitalización
+    pasada se reconstruye con el precio ajustado (acciones constantes)."""
+    if not anual or not mcap or c.empty:
+        return None
+    m = c.groupby([c.index.year, c.index.month]).tail(1)
+    last = float(c.iloc[-1])
+    out = {"t": [], "per": [], "pvc": [], "ps": [], "fcfy": []}
+    for d, px in m.items():
+        ys = [int(y) for y in anual if y.isdigit() and pd.Timestamp(int(y) + 1, 4, 1) <= d]
+        if not ys or not (px == px):
+            continue
+        a = anual[str(max(ys))]
+        mc = mcap * float(px) / last
+        bn, eq, ve, fc = (a.get(k) for k in ("beneficio_neto", "patrimonio", "ventas", "fcf"))
+        out["t"].append(d.strftime("%Y-%m"))
+        out["per"].append(jnum(mc / bn, 1) if bn and bn > 0 else None)
+        out["pvc"].append(jnum(mc / eq, 2) if eq and eq > 0 else None)
+        out["ps"].append(jnum(mc / ve, 2) if ve and ve > 0 else None)
+        out["fcfy"].append(jnum(fc / mc * 100, 2) if fc is not None and mc else None)
+    return out if len(out["t"]) >= 6 else None
+
+
+NVH = [0]
+
+
 def main():
     os.makedirs(os.path.join(DATA, "t"), exist_ok=True)
     os.makedirs(os.path.join(DATA, "p"), exist_ok=True)
@@ -467,6 +496,10 @@ def main():
             r.update(tec)
             c = frames[s]["Close"]
             tail = c.iloc[-252:]
+            try:
+                detail["val_hist"] = val_hist(c, f.get("anual") or {}, f.get("mcap"))
+            except Exception as e:  # noqa: BLE001
+                log("val_hist", s, e)
             detail["diario"] = [[d.strftime("%Y-%m-%d"), jnum(v, 2), jnum(a, 2), jnum(b, 2)]
                                 for d, v, a, b in zip(tail.index, tail, s50.iloc[-252:], s200.iloc[-252:])]
             fr = raw.get(s, frames[s])
@@ -481,7 +514,10 @@ def main():
         with open(os.path.join(DATA, "t", s.replace("/", "_") + ".json"), "w") as fh:
             json.dump(detail, fh, separators=(",", ":"))
         rows.append(r)
+        if detail.get("val_hist"):
+            NVH[0] += 1
 
+    log("Historial de múltiplos (ficha de tesis):", NVH[0], "valores · con datos para DCF:", sum(1 for x in rows if x.get("acciones")))
     stats = {}
     for reg, sub in (("Todos", rows), ("EE. UU.", [r for r in rows if r["region"] == "EE. UU."]),
                      ("Europa", [r for r in rows if r["region"] == "Europa"])):
