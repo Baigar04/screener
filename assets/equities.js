@@ -216,8 +216,8 @@ const FILTERS = [
   ["pais", "País", 1, null, (r, v) => r.pais === v],
   ["sector", "Sector", 0, null, (r, v) => r.sector === v],
   ["industria", "Industria", 2, null, (r, v) => r.industria === v],
-  ["mcap", "Capitalización", 1, opt(["200", "Mega (> 200 mil M)"], ["10", "Grande (> 10 mil M)"], ["2-10", "Mediana (2-10 mil M)"], ["<2", "Pequeña (< 2 mil M)"]),
-    (r, v) => { const m = (r.mcap || 0) / 1e9; return v === "200" ? m > 200 : v === "10" ? m > 10 : v === "2-10" ? m >= 2 && m <= 10 : m < 2; }],
+  ["mcap", "Capitalización", 1, opt(["200", "Mega (> 200 mil M $)"], ["10", "Grande (> 10 mil M $)"], ["2-10", "Mediana (2-10 mil M $)"], ["<2", "Pequeña (< 2 mil M $)"]),
+    (r, v) => { const m = (r.mcap_usd ?? r.mcap ?? 0) / 1e9; return v === "200" ? m > 200 : v === "10" ? m > 10 : v === "2-10" ? m >= 2 && m <= 10 : m < 2; }],
   ["per", "PER", 1, opt(["<10", "< 10"], ["<15", "< 15"], ["<20", "< 20"], ["<30", "< 30"], [">30", "> 30"], ["neg", "Con pérdidas"]),
     (r, v) => (v === "neg" ? r.per == null && r.margen_neto < 0 : r.per != null && (v[0] === "<" ? r.per < +v.slice(1) : r.per > +v.slice(1)))],
   ["per_vs_sector", "PER vs su sector", 1, opt(["-30", "Descuento > 30 %"], ["-15", "Descuento > 15 %"], ["0", "Por debajo"], ["+0", "Por encima"]),
@@ -363,7 +363,7 @@ function filtered() {
   }
   const { k, d } = E.sort;
   rows.sort((x, y) => {
-    const va = k === "nombre" ? x.sym : x[k], vb = k === "nombre" ? y.sym : y[k];
+    const va = k === "nombre" ? x.sym : k === "mcap" ? x.mcap_usd ?? x.mcap : x[k], vb = k === "nombre" ? y.sym : k === "mcap" ? y.mcap_usd ?? y.mcap : y[k];
     if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1;
     return typeof va === "string" ? d * va.localeCompare(vb, "es") : d * (va - vb);
   });

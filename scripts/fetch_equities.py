@@ -31,6 +31,7 @@ NOW = datetime.now(timezone.utc)
 UA = {"User-Agent": "Mozilla/5.0 (screener personal; github.com/Baigar04)"}
 ERRORS = []
 REFRESH_SHARE = 5  # cada valor se refresca una vez por semana laborable
+MAX_NEW = 400      # valores nuevos sin fundamentales que se descargan por ejecución (el resto, en las siguientes)
 
 IBEX = ["ACS", "ACX", "AENA", "AMS", "ANA", "ANE", "BBVA", "BKT", "CABK", "CLNX", "COL", "ELE", "ENG", "FDR", "FER",
         "GRF", "IAG", "IBE", "IDR", "ITX", "LOG", "MAP", "MRL", "MTS", "NTGY", "PUIG", "RED", "REP", "ROVI", "SAB",
@@ -66,6 +67,29 @@ def jnum(v, nd=4):
 
 
 # ------------------------------------------------------------------ universo
+LISTING_SFX = [("london", ".L"), ("italiana", ".MI"), ("milan", ".MI"), ("stockholm", ".ST"), ("copenhagen", ".CO"), ("helsinki", ".HE"),
+               ("swiss", ".SW"), ("six", ".SW"), ("madrid", ".MC"), ("bme", ".MC"), ("xetra", ".DE"), ("frankfurt", ".DE"), ("deutsche", ".DE"),
+               ("wiener", ".VI"), ("vienna", ".VI"), ("oslo", ".OL"), ("warsaw", ".WA"), ("athens", ".AT"), ("dublin", ".IR"), ("lisbon", ".LS"),
+               ("amsterdam", ".AS"), ("paris", ".PA"), ("brussels", ".BR")]
+COUNTRY_SFX = {"Netherlands": ".AS", "Belgium": ".BR", "France": ".PA", "Portugal": ".LS", "Ireland": ".IR", "Norway": ".OL", "Italy": ".MI",
+               "Germany": ".DE", "Austria": ".VI", "Switzerland": ".SW", "Sweden": ".ST", "Denmark": ".CO", "Finland": ".HE", "United Kingdom": ".L",
+               "Spain": ".MC", "Poland": ".WA", "Greece": ".AT", "Luxembourg": ".AS", "Jersey": ".L", "Guernsey": ".L", "Isle of Man": ".L"}
+
+
+def stoxx_symbol(tk, listing, country):
+    """Ticker de Wikipedia (STOXX Europe 600) → ticker de Yahoo Finance según la bolsa principal y el país."""
+    tk = str(tk or "").strip()
+    if not tk or tk.lower() == "nan":
+        return None
+    lst = str(listing or "").lower()
+    sfx = next((x for k, x in LISTING_SFX if k in lst), None) if "euronext" not in lst or any(k in lst for k in ("paris", "amsterdam", "brussels", "lisbon", "dublin", "milan", "oslo")) else None
+    sfx = sfx or COUNTRY_SFX.get(str(country or "").strip())
+    if not sfx:
+        return None
+    tk = tk.rstrip(".").replace(" ", "-").replace("/", "-")
+    if sfx in (".L", ".ST", ".CO", ".HE", ".OL"):
+        tk = tk.replace(".", "-")
+    return tk.upper() + sfx
 def universe():
     rows = {}
     try:
@@ -88,6 +112,28 @@ def universe():
                 break
     except Exception as e:  # noqa: BLE001
         ERRORS.append({"fuente": "Wikipedia", "serie": "Nasdaq-100", "motivo": str(e)[:200]})
+    try:
+        html = get("https://en.wikipedia.org/wiki/List_of_S%26P_400_companies").decode()
+        df = pd.read_html(io.StringIO(html), attrs={"id": "constituents"})[0] if 'id="constituents"' in html else \
+            next(t for t in pd.read_html(io.StringIO(html)) if "Symbol" in t.columns and len(t) > 300)
+        for _, r in df.iterrows():
+            s = str(r["Symbol"]).replace(".", "-")
+            d = rows.setdefault(s, {"indices": [], "gics_sector": r.get("GICS Sector"), "gics_industry": r.get("GICS Sub-Industry")})
+            d["indices"].append("S&P 400")
+    except Exception as e:  # noqa: BLE001
+        ERRORS.append({"fuente": "Wikipedia", "serie": "S&P 400", "motivo": str(e)[:200]})
+    try:
+        html = get("https://en.wikipedia.org/wiki/STOXX_Europe_600").decode()
+        df = next(t for t in pd.read_html(io.StringIO(html)) if "Ticker" in t.columns and len(t) > 500)
+        n0 = 0
+        for _, r in df.iterrows():
+            y = stoxx_symbol(r.get("Ticker"), r.get("Main listing"), r.get("Country"))
+            if y:
+                rows.setdefault(y, {"indices": []})["indices"].append("STOXX 600")
+                n0 += 1
+        log("STOXX 600: tickers traducidos", n0, "de", len(df))
+    except Exception as e:  # noqa: BLE001
+        ERRORS.append({"fuente": "Wikipedia", "serie": "STOXX Europe 600", "motivo": str(e)[:200]})
     for s in STOXX50:
         rows.setdefault(s, {"indices": []})["indices"].append("Euro Stoxx 50")
     for s in IBEX:
@@ -103,7 +149,7 @@ def universe():
 
 
 # ------------------------------------------------------------------ precios y técnico
-EU_SUFFIX = (".MC", ".DE", ".PA", ".AS", ".MI", ".BR", ".HE", ".LS", ".IR")
+EU_SUFFIX = (".MC", ".DE", ".PA", ".AS", ".MI", ".BR", ".HE", ".LS", ".IR", ".SW", ".L", ".ST", ".CO", ".OL", ".VI", ".WA", ".AT")
 
 
 def drop_open_session(sym, df):
@@ -465,10 +511,13 @@ def main():
         except Exception as e:  # noqa: BLE001
             if k < 3:
                 log("noticias", sym_, e)
-        time.sleep(0.15)
+        time.sleep(0.08)
     log("Noticias: valores con titulares", sum(1 for v in ncache.values() if v))
     day = NOW.toordinal()
-    todo = [s for i, s in enumerate(syms) if s not in cache or i % REFRESH_SHARE == day % REFRESH_SHARE]
+    new = [s for s in syms if s not in cache]
+    todo = new[:MAX_NEW] + [s for i, s in enumerate(syms) if s in cache and i % REFRESH_SHARE == day % REFRESH_SHARE]
+    if len(new) > MAX_NEW:
+        log("Fundamentales nuevos pendientes para próximas ejecuciones:", len(new) - MAX_NEW)
     log("Fundamentales a refrescar:", len(todo), "· en caché:", len(cache))
     for n, s in enumerate(todo):
         try:
@@ -517,6 +566,28 @@ def main():
         if detail.get("val_hist"):
             NVH[0] += 1
 
+    # capitalización en dólares para comparar valores de distintas monedas (filtros, orden y comparables)
+    curs = sorted({(r.get("moneda") or "USD") for r in rows} - {"USD"})
+    fx = {"USD": 1.0}
+    for c in curs:
+        base = "GBP" if c in ("GBp", "GBX") else "ZAR" if c == "ZAc" else "ILS" if c == "ILA" else c
+        try:
+            q = yf.download(f"{base}USD=X", period="5d", interval="1d", auto_adjust=False, progress=False)["Close"].dropna()
+            v = float(q.iloc[-1].iloc[0] if hasattr(q.iloc[-1], "iloc") else q.iloc[-1])
+            fx[c] = v / 100 if c in ("GBp", "GBX", "ZAc", "ILA") else v
+            fx["_mc_" + c] = v  # la capitalización de Yahoo viene en la moneda principal (GBP, no peniques)
+        except Exception as e:  # noqa: BLE001
+            ERRORS.append({"fuente": "Yahoo Finance", "serie": f"{base}USD", "motivo": str(e)[:120]})
+    for r in rows:
+        c = r.get("moneda") or "USD"
+        if r.get("acciones") and r.get("precio") and c in fx:
+            r["mcap_usd"] = jnum(r["acciones"] * r["precio"] * fx[c], 0)
+        elif r.get("mcap") and ("_mc_" + c in fx or c == "USD"):
+            r["mcap_usd"] = jnum(r["mcap"] * fx.get("_mc_" + c, 1.0), 0)
+    uk = next((r for r in rows if r.get("moneda") == "GBp" and r.get("acciones") and r.get("precio") and r.get("mcap")), None)
+    if uk:
+        log("  Control GBp", uk["sym"], "mcap Yahoo", uk["mcap"], "· acciones×precio/100", round(uk["acciones"] * uk["precio"] / 100))
+    log("Monedas:", {c: round(v, 4) for c, v in fx.items() if not c.startswith("_")}, "· con mcap_usd:", sum(1 for r in rows if r.get("mcap_usd")))
     log("Historial de múltiplos (ficha de tesis):", NVH[0], "valores · con datos para DCF:", sum(1 for x in rows if x.get("acciones")))
     stats = {}
     for reg, sub in (("Todos", rows), ("EE. UU.", [r for r in rows if r["region"] == "EE. UU."]),

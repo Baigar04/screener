@@ -129,7 +129,7 @@ function riskCalc(rows, series, w, bus, beu, capital) {
   let pairs = 0, sum = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { sum += corr[i][j] * (w[i] * w[j]); pairs += w[i] * w[j]; }
   const fx = window.SCRFactors ? FACT_ES.map(([k, t]) => { let num = 0, den = 0; rows.forEach((r, i) => { const v = window.SCRFactors(r.sym)?.[k]; if (v != null) { num += w[i] * v; den += w[i]; } }); return [k, t, den ? num / den : null, den]; }) : [];
   const cur = {}; rows.forEach((r, i) => { cur[r.moneda || "—"] = (cur[r.moneda || "—"] || 0) + w[i] * 100; });
-  const capS = rows.map((r, i) => [r.mcap, w[i]]).filter((x) => x[0]).sort((x, y) => x[0] - y[0]); let acc = 0, capMed = null; for (const [m, ww] of capS) { acc += ww; if (acc >= 0.5) { capMed = m; break; } }
+  const capS = rows.map((r, i) => [r.mcap_usd ?? r.mcap, w[i]]).filter((x) => x[0]).sort((x, y) => x[0] - y[0]); let acc = 0, capMed = null; for (const [m, ww] of capS) { acc += ww; if (acc >= 0.5) { capMed = m; break; } }
   return { syms: rows.map((r) => r.sym), w, corr, beta, rho, te, var_, items, capital, us,
     avgCorr: pairs ? sum / pairs : null, divRatio: w.reduce((a, x, i) => a + x * sd[i], 0) / Math.sqrt(quad(S, w)), nEff: 1 / w.reduce((a, x) => a + x * x, 0),
     fx, cur, capMed, dias: T, desde: dates[0], hasta: dates[dates.length - 1] };
@@ -157,7 +157,7 @@ function riskHtml(k) {
     <div class="box"><b>Exposición a factores</b><div class="hint">Media ponderada de la puntuación de cada factor (0-100). 50 = como el universo.</div>
       ${k.fx.length ? `<div class="rk-fx">${k.fx.map(([key, t, v]) => `<div class="rk-fr"><span>${t}</span><div class="rk-bar"><i style="left:50%"></i>${v == null ? "" : `<b style="left:${Math.min(50, v)}%;width:${Math.abs(v - 50)}%" class="${v >= 50 ? "p" : "n"}"></b>`}</div><span class="num">${v == null ? "—" : nf(v, 0)}</span></div>`).join("")}</div>` : '<div class="hint">Puntuación no cargada todavía.</div>'}
       <div class="kv-grid sm" style="margin-top:10px">${Object.entries(k.cur).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div class="kvc"><span>En ${esc(c)}</span><b class="num">${pct(v, 0)}</b></div>`).join("")}
-        <div class="kvc"><span data-tip="Capitalización del valor en el que se alcanza la mitad del peso">Tamaño mediano</span><b class="num">${k.capMed ? (k.capMed >= 1e12 ? nf(k.capMed / 1e12, 2) + " bill." : nf(k.capMed / 1e9, 0) + " mil M") : "—"}</b></div></div></div></div>
+        <div class="kvc"><span data-tip="Capitalización del valor en el que se alcanza la mitad del peso">Tamaño mediano</span><b class="num">${k.capMed ? (k.capMed >= 1e12 ? nf(k.capMed / 1e12, 2) + " bill." : nf(k.capMed / 1e9, 0) + " mil M") + " $" : "—"}</b></div></div></div></div>
   <div class="f-grid" style="margin-top:12px">
     <div class="box"><b>Matriz de correlaciones${k.syms.length > 12 ? " (12 mayores pesos)" : ""}</b><div class="lab-tw"><table class="rk-corr"><thead><tr><th></th>${top.map((i) => `<th>${esc(k.syms[i])}</th>`).join("")}</tr></thead><tbody>
       ${top.map((i) => `<tr><th>${esc(k.syms[i])}</th>${top.map((j) => `<td class="num" style="background:${i === j ? "transparent" : heat(k.corr[i][j])}">${i === j ? "" : nf(k.corr[i][j], 2)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>

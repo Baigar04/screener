@@ -116,9 +116,10 @@ function histBox(r, d) {
 
 function peersBox(r, uni) {
   const same = (x) => (T.peers === "industria" ? x.industria && x.industria === r.industria : x.sector === r.sector);
-  let pool = uni.filter((x) => x.sym !== r.sym && same(x) && x.mcap);
-  if (T.peers === "industria" && pool.length < 3) pool = uni.filter((x) => x.sym !== r.sym && x.sector === r.sector && x.mcap);
-  const peers = pool.sort((a, b) => Math.abs(Math.log(a.mcap / r.mcap)) - Math.abs(Math.log(b.mcap / r.mcap))).slice(0, 8);
+  const mc = (x) => x.mcap_usd ?? x.mcap;
+  let pool = uni.filter((x) => x.sym !== r.sym && same(x) && mc(x));
+  if (T.peers === "industria" && pool.length < 3) pool = uni.filter((x) => x.sym !== r.sym && x.sector === r.sector && mc(x));
+  const peers = pool.sort((a, b) => Math.abs(Math.log(mc(a) / mc(r))) - Math.abs(Math.log(mc(b) / mc(r)))).slice(0, 8);
   const C = [["mcap", "Capitaliz.", (v, x) => F().big(v, x.moneda)], ["per", "PER", (v) => nf(v, 1)], ["per_fwd", "PER prev.", (v) => nf(v, 1)], ["ev_ebitda", "EV/EBITDA", (v) => nf(v, 1)],
     ["pb", "P/VC", (v) => nf(v, 2)], ["margen_op", "Margen op.", (v) => F().pct(v)], ["roe", "ROE", (v) => F().pct(v)], ["crec_ventas", "Crec. ventas", (v) => F().spct(v)],
     ["deuda_neta_ebitda", "DN/EBITDA", (v) => (v == null ? "—" : nf(v, 1) + "×")], ["r1a", "Rent. 1 año", (v) => F().spct(v)], ["score", "Puntuación", (v) => (v == null ? "—" : String(v))]];
