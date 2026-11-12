@@ -313,7 +313,7 @@ document.addEventListener("click", (e) => {
     render(); return;
   }
   let b;
-  if ((b = t.closest("#nav button"))) { S.view = b.dataset.k; render(); window.scrollTo(0, 0); return; }
+  if ((b = t.closest("#nav button"))) { go(b.dataset.k); return; }
   if ((b = t.closest("#level button"))) { S.level = +b.dataset.i; store.set("nivel", S.level); render(); return; }
   if ((b = t.closest("[data-r]"))) {
     const r = b.dataset.r;
@@ -331,7 +331,7 @@ document.addEventListener("click", (e) => {
   if (t.closest("[data-goreg]")) { document.getElementById("regimen")?.scrollIntoView({ behavior: "smooth" }); return; }
   if ((b = t.closest("tr[data-pais]"))) { countryDrawer(b.dataset.pais); return; }
   if (t.closest("#showErr")) { errorsDrawer(); return; }
-  if (t.closest("#drawerClose") || t.id === "overlay") { closeDrawer(); return; }
+  if (t.closest("#drawerClose") || t.id === "overlay") { userClose(); return; }
   if (t.closest("#tsize")) {
     const root = document.documentElement; root.dataset.size = root.dataset.size === "l" ? "" : "l";
     try { localStorage.setItem("tamano", root.dataset.size); } catch (er) { /* */ }
@@ -344,11 +344,51 @@ document.addEventListener("click", (e) => {
     try { localStorage.setItem("tema", root.dataset.theme); } catch (er) { /* */ }
   }
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDrawer(); document.querySelectorAll(".dd.open").forEach((x) => x.classList.remove("open")); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("#drawer").classList.contains("on")) userClose(); document.querySelectorAll(".dd.open").forEach((x) => x.classList.remove("open")); } });
 
 const MODULES = {}, HANDLERS = [];
-function go(v) { S.view = v; render(); window.scrollTo(0, 0); }
-window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, seriesDrawer, modules: MODULES, handlers: HANDLERS };
+
+/* ---------- rutas: enlaces directos #/<sección> y #/empresa/<SYM>[/<pestaña>]; «atrás» del navegador ---------- */
+const VIEWS = NAV.map((x) => x[0]);
+const FICHA_RE = /^#\/empresa\//;
+let fichaPushed = false;   // la ficha abierta tiene su propia entrada en el historial (se abrió desde la web)
+function parseHash() {
+  const p = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/");
+  if (p[0] === "empresa" && p[1]) return { sym: p[1].toUpperCase(), tab: p[2] || null };
+  return VIEWS.includes(p[0]) ? { view: p[0] } : {};
+}
+function setHash(h, replace) {
+  if (location.hash === h) return;
+  if (replace) history.replaceState(null, "", h); else history.pushState(null, "", h);
+}
+function go(v) { fichaPushed = false; S.view = v; setHash("#/" + v, FICHA_RE.test(location.hash)); render(); window.scrollTo(0, 0); }
+function routeFicha(sym) {           /* la ficha se ha abierto desde la web: nueva entrada en el historial */
+  const h = "#/empresa/" + encodeURIComponent(sym);
+  if (location.hash === h) return;
+  const replace = FICHA_RE.test(location.hash);   // de una ficha a otra (comparables): sin acumular entradas
+  setHash(h, replace); if (!replace) fichaPushed = true;
+}
+function userClose() {               /* cierre por la X, el fondo o Escape */
+  const was = FICHA_RE.test(location.hash);
+  window.SCR.closeDrawer();
+  if (!was) return;
+  if (fichaPushed) { fichaPushed = false; history.back(); } else setHash("#/" + S.view, true);
+}
+function route() {
+  const r = parseHash();
+  if (r.sym) {
+    if (window.SCRFichaSym?.() !== r.sym) window.SCROpen?.(r.sym, r.tab, true);
+    return;
+  }
+  fichaPushed = false;
+  if ($("#drawer").classList.contains("on")) window.SCR.closeDrawer();
+  if (r.view && r.view !== S.view) { S.view = r.view; render(); window.scrollTo(0, 0); }
+}
+window.addEventListener("hashchange", route);
+window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, seriesDrawer, routeFicha, modules: MODULES, handlers: HANDLERS };
+{ const r0 = parseHash(); if (r0.view) S.view = r0.view; else if (r0.sym) S.view = "screener"; else setHash("#/" + S.view, true); }
 render();
 load();
+/* los módulos (equities.js…) se cargan después: la ficha de un enlace directo se abre cuando ya existen */
+document.addEventListener("DOMContentLoaded", () => { if (parseHash().sym) route(); });
 })();

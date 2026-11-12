@@ -73,6 +73,12 @@ jobs:
           mkdir -p _site/assets/vendor
           curl -fsSL "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js" -o _site/assets/vendor/lightweight-charts.js \
             || echo "Aviso: no se pudo descargar Lightweight Charts; la web usará la copia de unpkg"
+      - name: Prueba de interfaz con los datos reales (solo al subir cambios)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: |
+          pip install -q playwright==1.63.0
+          python scripts/check_ui.py _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

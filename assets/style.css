@@ -602,3 +602,12 @@ h2.sec .dd{display:inline-block;margin-left:8px;vertical-align:middle;font-size:
 .evid-h{border-style:dashed}
 .evid-e{color:var(--accent);border-color:var(--accent)}
 .evid-r{color:var(--pos);border-color:var(--pos)}
+/* ficha a pantalla completa y cabecera ejecutiva (Fase 1.6) */
+.drawer.full{width:100vw;border-left:0}
+.drawer.full #drawerBody{max-width:1280px;margin:0 auto}
+.f-exec{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:12px 0 4px;border:1px solid var(--border);border-radius:var(--r-s,8px);background:var(--surface-2);overflow:hidden}
+.f-exec-i{flex:1 1 130px;display:flex;flex-direction:column;gap:2px;padding:8px 12px;border-right:1px solid var(--border);min-width:0}
+.f-exec-i span{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f-exec-i b{font-size:14px;font-weight:600;white-space:nowrap}
+.f-exec .f-link{align-self:center;margin:6px 10px;flex:none}
+@media (max-width:640px){.f-exec-i{flex-basis:45%;border-bottom:1px solid var(--border)}.f-exec .f-link{margin:8px auto}}

@@ -478,15 +478,36 @@ function exportCsv() {
 
 /* ---------- FICHA DE EMPRESA (pantalla completa con pestañas) ---------- */
 const TABS = [["resumen", "Resumen"], ["tesis", "Tesis"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["noticias", "Noticias y eventos"], ["pers", "Personalidades"], ["comparar", "Comparar"]];
-async function companyDrawer(sym, tab) {
+async function companyDrawer(sym, tab, fromRoute) {
+  if (!fromRoute) H.routeFicha(sym);
   if (!E.uni) await ensure();
   const r = E.uni?.filas.find((x) => x.sym === sym);
-  if (!r) return;
+  if (!r) {
+    if (fromRoute) H.openDrawer(`<h3>${esc(sym)}</h3><div class="box"><b>Valor no encontrado</b>${E.uni ? `${esc(sym)} no está en el universo del screener (${E.uni.filas.length} valores).` : "No se pudieron cargar los datos de acciones."} Busca otro ticker con el buscador de arriba.</div>`);
+    return;
+  }
+  if (tab && !TABS.some(([k]) => k === tab)) tab = null;
   E.ficha = { sym, tab: tab || store.get("ficha_tab", "resumen"), d: null };
   document.getElementById("drawer").classList.add("full");
   paintFicha();
   try { E.ficha.d = await fetch(`data/t/${encodeURIComponent(sym)}.json`).then((x) => (x.ok ? x.json() : {})); } catch (e) { E.ficha.d = {}; }
   if (E.ficha?.sym === sym) paintFicha();
+}
+/* cabecera ejecutiva: lo esencial de un vistazo, con enlace directo a la ficha */
+function execHeader(r) {
+  const days = r.resultados ? Math.round((new Date(r.resultados + "T00:00:00Z") - Date.now()) / 864e5) : null;
+  const tv = r.veredicto;
+  const items = [
+    [scoreName().replace("Puntuación", "Nota"), r.score == null ? "—" : scoreBadge(r.score), "Nota con tus pesos; percentil frente a su sector"],
+    ["Técnico 1-3 m", `<span class="chg ${tv === "Alcista" ? "p" : tv === "Bajista" ? "n" : "z"}">${esc(tv || "—")}</span>`, r.motivo_tec || ""],
+    ["PER frente a su sector", r.per_vs_sector == null ? "—" : `<span class="chg ${cls(r.per_vs_sector == null ? null : -r.per_vs_sector)}">${spct(r.per_vs_sector, 0)}</span>`, "Negativo = más barato que la mediana de su sector"],
+    ["Rentabilidad 1 año", `<span class="chg ${cls(r.r1a)}">${spct(r.r1a)}</span>`, ""],
+    ["Capitalización", big(r.mcap, r.moneda), ""],
+    ["Próximos resultados", r.resultados ? `${fmtDate(r.resultados)}${days != null && days >= 0 && days <= 30 ? ` <span class="hint">en ${days} d</span>` : ""}` : "—", ""],
+    ["Superinversores", r.n_smart ? String(r.n_smart) : "—", "Gestores de Dataroma que lo tienen en su último 13F"],
+  ];
+  return `<div class="f-exec">${items.map(([k, v, tp]) => `<div class="f-exec-i"${tp ? ` data-tip="${esc(tp)}"` : ""}><span>${esc(k)}</span><b class="num">${v}</b></div>`).join("")}
+    <button class="chip f-link" data-copylink="${esc(r.sym)}" title="Copiar el enlace directo a esta ficha">🔗 Enlace</button></div>`;
 }
 function paintFicha() {
   const { sym, tab, d } = E.ficha, r = E.uni.filas.find((x) => x.sym === sym);
@@ -497,6 +518,7 @@ function paintFicha() {
       <div class="f-px"><div class="bigv num">${nf(r.precio, 2)} <small>${esc(r.moneda || "")}</small></div>
       <div class="num"><span class="chg ${cls(r.r1d)}">${spct(r.r1d, 2)}</span> <span class="hint">cierre ${fmtDate(r.fecha_precio)}</span></div>
       <button class="chip ${isC(sym) ? "on" : ""}" data-cmp-toggle="${esc(sym)}">${isC(sym) ? "En comparador ✓" : "+ Comparar"}</button></div></div>
+    ${execHeader(r)}
     <div class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? "on" : ""}" data-ftab="${k}">${t}</button>`).join("")}</div>
     <div class="f-body" id="fbody">${fichaTab(tab, r, d)}</div>`);
   if (tab === "grafico") mountChart(sym);
@@ -721,6 +743,11 @@ function onClick(t, dd) {
   if (t.closest(".c-x")) return true;
   if ((b = t.closest("[data-cmprm]"))) { toggleCmp(b.dataset.cmprm); if (E.ficha) paintFicha(); else if (E.cmp.length >= 2) openCompare(); else H.closeDrawer(); if (H.S.view === "screener") H.render(); return true; }
   if ((b = t.closest("[data-ncat]"))) { newsCat = b.dataset.ncat; if (E.ficha) mountNews(E.ficha.sym); return true; }
+  if ((b = t.closest("[data-copylink]"))) {
+    const url = location.href.split("#")[0] + "#/empresa/" + encodeURIComponent(b.dataset.copylink);
+    (navigator.clipboard?.writeText(url) || Promise.reject()).then(() => { b.textContent = "✓ Copiado"; }, () => { b.textContent = url; });
+    return true;
+  }
   if ((b = t.closest("[data-ftab]"))) { if (E.ficha) { E.ficha.tab = b.dataset.ftab; store.set("ficha_tab", ["grafico", "resumen", "tesis"].includes(E.ficha.tab) ? E.ficha.tab : "resumen"); paintFicha(); } return true; }
   if ((b = t.closest("[data-eqr]"))) { E.region = b.dataset.eqr; store.set("eq_region", E.region); H.render(); return true; }
   if ((b = t.closest("[data-secsort]"))) { const k = b.dataset.secsort; if (SEC_COLS.find((c) => c[0] === k)[2] != null) { E.secMetric = k; store.set("sec_metric", k); H.render(); } return true; }
@@ -812,7 +839,8 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !documen
 window.SCRUni = () => (E.uni ? E.uni.filas : []);
 window.SCRFiltered = () => (E.uni ? filtered() : []);
 window.SCREnsureUni = () => ensure();
-window.SCROpen = (sym) => companyDrawer(sym);
+window.SCROpen = (sym, tab, fromRoute) => companyDrawer(sym, tab, fromRoute);
+window.SCRFichaSym = () => E.ficha?.sym || null;
 if (window.SCRSmart) window.SCRSmart.onload = () => { if (E.ficha && E.ficha.tab === "pers") paintFicha(); };
 H.modules.sectores = renderSectores;
 H.modules.screener = renderScreener;
