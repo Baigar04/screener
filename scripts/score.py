@@ -5,6 +5,7 @@ Entradas: data/universe.json, data/smart.json, data/macro.json.
 Salidas: data/score.json (factores por valor) y data/score_hist.json (top 20 semanal y su resultado posterior).
 La nota final se combina en la web con los pesos que elija el usuario; aquí se guarda también con los pesos por defecto.
 """
+import bisect
 import json
 import os
 from datetime import datetime, timezone
@@ -13,6 +14,9 @@ DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 SITE = os.environ.get("SITE_URL", "https://baigar04.github.io/screener/")
 NOW = datetime.now(timezone.utc)
 DEFAULT_W = {"calidad": 20, "valor": 20, "crecimiento": 15, "momentum": 20, "smart": 15, "macro": 10}
+HZ = {"1m": 21, "3m": 63, "6m": 126, "12m": 252}   # horizontes cerrados (sesiones) para evaluar señales y notas
+DAILY_KEEP = 300                                    # fotos diarias de la nota que se conservan (≈ 14 meses de sesiones)
+SPLITS = (2, 3, 4, 5, 8, 10, 15, 20, 25, 30, 40, 50)
 
 # Comportamiento típico de cada sector según la fase del ciclo (0-100). Heurística de rotación sectorial, no estimación estadística.
 CYCLE = {
@@ -62,6 +66,109 @@ def pct_ranks(pairs):
             out[vals[t][1]] = 100.0 if n == 1 else round(100 * r / (n - 1), 1)
         i = j + 1
     return out
+
+
+def split_safe(q):
+    """Los precios publicados no están ajustados: un salto que coincide con un split típico (2:1, 1:10…) cuenta como día sin cambio."""
+    if 0.6 < q < 1.6:
+        return q
+    for k in SPLITS:
+        if abs(q * k - 1) < 0.04 or abs(q / k - 1) < 0.04:
+            return 1.0
+    return q
+
+
+class Closes:
+    """Cierres diarios de data/p/<SYM>.json convertidos en un índice acumulado sin saltos por splits."""
+
+    def __init__(self, folder):
+        self.folder, self.cache = folder, {}
+
+    def get(self, sym):
+        if sym not in self.cache:
+            t, idx = [], []
+            try:
+                d = json.load(open(os.path.join(self.folder, sym.replace("/", "_") + ".json")))
+                lv, last = 1.0, None
+                for day, c in zip(d.get("t", []), d.get("c", [])):
+                    if not c or c <= 0:
+                        continue
+                    if last:
+                        lv *= split_safe(c / last)
+                    t.append(day)
+                    idx.append(lv)
+                    last = c
+            except Exception:  # noqa: BLE001
+                pass
+            self.cache[sym] = (t, idx)
+        return self.cache[sym]
+
+    def fwd(self, sym, day, h):
+        """Rentabilidad de h sesiones desde el último cierre en o antes de «day»; None si el horizonte aún no se ha cerrado."""
+        t, idx = self.get(sym)
+        i = bisect.bisect_right(t, day) - 1
+        if i < 0 or i + h >= len(t):
+            return None
+        return idx[i + h] / idx[i] - 1
+
+
+def spearman(pairs):
+    """Correlación de rangos de [(x, y)]."""
+    if len(pairs) < 3:
+        return None
+    rx = pct_ranks([(i, x) for i, (x, _) in enumerate(pairs)])
+    ry = pct_ranks([(i, y) for i, (_, y) in enumerate(pairs)])
+    a = [rx[i] for i in range(len(pairs))]
+    b = [ry[i] for i in range(len(pairs))]
+    ma, mb = sum(a) / len(a), sum(b) / len(b)
+    num = sum((x - ma) * (y - mb) for x, y in zip(a, b))
+    den = (sum((x - ma) ** 2 for x in a) * sum((y - mb) ** 2 for y in b)) ** 0.5
+    return num / den if den else None
+
+
+def eval_signals(weeks, closes):
+    """Acierto de las señales técnicas a horizontes cerrados: alcista acierta si sube más que el universo en esas
+    mismas sesiones; bajista, si sube menos. Solo cuenta un horizonte cuando ya ha transcurrido entero."""
+    out = []
+    for w in weeks:
+        if not w.get("senales"):
+            continue
+        day = w["fecha"][:10]
+        for hn, h in HZ.items():
+            ur = [x for x in (closes.fwd(s, day, h) for s in w["precios"]) if x is not None]
+            if len(ur) < 20:
+                continue
+            u = sum(ur) / len(ur)
+            for kind in ("Alcista", "Bajista"):
+                rs = [x for x in (closes.fwd(s, day, h) for s, (v, _) in w["senales"].items() if v == kind) if x is not None]
+                if rs:
+                    hits = sum(1 for x in rs if (x > u if kind == "Alcista" else x < u))
+                    out.append({"fecha": w["fecha"], "horizonte": hn, "sesiones": h, "tipo": kind, "n": len(rs), "aciertos": round(100 * hits / len(rs), 1),
+                                "rent_media": round(100 * sum(rs) / len(rs), 2), "universo": round(100 * u, 2)})
+    return out
+
+
+def eval_daily(days, closes):
+    """Nota operativa registrada cada día, evaluada tal cual: IC (Spearman) entre la nota y la rentabilidad posterior
+    a cada horizonte cerrado, y diferencia del mejor quinto frente al universo."""
+    res = {}
+    for hn, h in HZ.items():
+        ics, q5 = [], []
+        for d in days:
+            pairs = [(n, r) for s, n in d["nota"].items() if n is not None for r in [closes.fwd(s, d["fecha"], h)] if r is not None]
+            if len(pairs) < 40:
+                continue
+            ic = spearman(pairs)
+            if ic is None:
+                continue
+            ics.append(ic)
+            pairs.sort(key=lambda x: -x[0])
+            top = pairs[: max(1, len(pairs) // 5)]
+            q5.append(sum(r for _, r in top) / len(top) - sum(r for _, r in pairs) / len(pairs))
+        res[hn] = {"dias": len(ics), "ic": round(sum(ics) / len(ics), 4) if ics else None,
+                   "ic_pos": round(100 * sum(1 for x in ics if x > 0) / len(ics), 1) if ics else None,
+                   "q5_vs_universo": round(100 * sum(q5) / len(q5), 2) if q5 else None}
+    return res
 
 
 def by_group(rows, key, fn):
@@ -172,31 +279,30 @@ def main():
         res.append({"fecha": w["fecha"], "dias": (NOW - datetime.fromisoformat(w["fecha"])).days, "n": len(tr),
                     "top": round(100 * sum(tr) / len(tr), 2) if tr else None, "universo": round(100 * sum(ur) / len(ur), 2) if ur else None,
                     "valores": [s for s, _, _ in w["top"]]})
-    # acierto de las señales técnicas: alcista acierta si sube más que el universo; bajista, si sube menos
-    sig = []
-    for w in hist["semanas"]:
-        d = (NOW - datetime.fromisoformat(w["fecha"])).days
-        if d < 21 or not w.get("senales"):
-            continue
-        ur = [price[s] / p0 - 1 for s, p0 in w["precios"].items() if price.get(s) and p0]
-        u = sum(ur) / len(ur) if ur else 0
-        for kind in ("Alcista", "Bajista"):
-            rs = [price[s] / p0 - 1 for s, (v, p0) in w["senales"].items() if v == kind and price.get(s) and p0]
-            if rs:
-                hits = sum(1 for x in rs if (x > u if kind == "Alcista" else x < u))
-                sig.append({"fecha": w["fecha"], "dias": d, "tipo": kind, "n": len(rs), "aciertos": round(100 * hits / len(rs), 1),
-                            "rent_media": round(100 * sum(rs) / len(rs), 2), "universo": round(100 * u, 2)})
+    # acierto de las señales técnicas a horizontes cerrados (21/63/126/252 sesiones)
+    closes = Closes(os.path.join(DATA, "p"))
+    sig = eval_signals(hist["semanas"], closes)
+
+    # foto diaria de la nota operativa (con los pesos por defecto) para evaluarla tal cual, sin reconstrucciones
+    daily = remote("score_diario.json") or load("score_diario.json", False) or {"dias": []}
+    fday = max((r.get("fecha_precio") or "" for r in rows if "." not in r["sym"]), default="") or NOW.strftime("%Y-%m-%d")
+    daily["dias"] = [d for d in daily["dias"] if d["fecha"] != fday] + [{"fecha": fday, "nota": {s: tot[s] for s in tot if tot[s] is not None}}]
+    daily["dias"] = sorted(daily["dias"], key=lambda d: d["fecha"])[-DAILY_KEEP:]
+    daily["generado"] = NOW.isoformat(timespec="seconds")
+    nota_reg = {"desde": daily["dias"][0]["fecha"], "fotos": len(daily["dias"]), "horizontes": eval_daily(daily["dias"], closes)}
+    json.dump(daily, open(os.path.join(DATA, "score_diario.json"), "w"), separators=(",", ":"))
     try:
         lab_v = json.load(open(os.path.join(DATA, "lab.json"))).get("veredicto")
     except Exception:  # noqa: BLE001
         lab_v = None
     json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot, "veredicto_lab": lab_v,
-               "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res, "senales": sig,
+               "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res, "senales": sig, "nota_registrada": nota_reg,
                "metodo": "Cada factor es el percentil (0-100) del valor dentro de su sector; momentum y smart money, dentro de todo el universo. "
                          "Un veredicto técnico bajista limita la nota a 60. Sin al menos 3 de los 4 factores básicos (calidad, valor, crecimiento, momentum) no hay nota. El encaje macro es una heurística de rotación sectorial según el régimen de EE. UU."},
               open(os.path.join(DATA, "score.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(hist, open(os.path.join(DATA, "score_hist.json"), "w"), separators=(",", ":"))
-    print("Puntuación: valores", len(out), "· top 5:", [(s, tot[s]) for s in top[:5]], "· semanas registradas:", len(hist["semanas"]))
+    print("Puntuación: valores", len(out), "· top 5:", [(s, tot[s]) for s in top[:5]], "· semanas registradas:", len(hist["semanas"]),
+          "· señales evaluadas:", len(sig), "· fotos diarias de la nota:", len(daily["dias"]), nota_reg["horizontes"]["1m"])
     print("  muestra", {s: (out[s], tot[s]) for s in ("AAPL", "FN", "SAN.MC") if s in out})
 
 

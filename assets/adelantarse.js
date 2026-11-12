@@ -87,9 +87,25 @@ function render() {
         <td class="num chg ${x.top == null || x.universo == null || x.top === x.universo ? "z" : x.top > x.universo ? "p" : "n"}">${x.top == null || x.universo == null ? "—" : sgn(x.top - x.universo, 2) + " pp"}</td></tr>`).join("")}</tbody></table>
       ${(() => { const old = hist.filter((x) => x.dias >= 28 && x.top != null); if (!old.length) return '<div class="method">Hace falta al menos un mes de registros para valorar el resultado.</div>';
         const w = old.filter((x) => x.top > x.universo).length; return `<div class="method">Semanas con al menos 4 semanas de antigüedad en que el top 20 batió al universo: <b>${w} de ${old.length}</b>.</div>`; })()}` : '<div class="hint">Sin registros todavía.</div>'}</div>
-    <div class="box"><b>Señales técnicas (alcista / bajista)</b>${sig.length ? `<table><thead><tr><th>Semana</th><th>Tipo</th><th>Señales</th><th data-tip="Alcista acierta si lo hace mejor que el universo; bajista, si lo hace peor">Aciertos</th><th>Rent. media</th><th>Universo</th></tr></thead><tbody>
-      ${sig.slice().reverse().slice(0, 12).map((x) => `<tr><td>${fmtDate(x.fecha.slice(0, 10))}</td><td>${esc(x.tipo)}</td><td class="num">${x.n}</td><td class="num">${nf(x.aciertos, 0)} %</td><td class="num">${sgn(x.rent_media, 2)} %</td><td class="num">${sgn(x.universo, 2)} %</td></tr>`).join("")}</tbody></table>`
-      : '<div class="hint">Las señales de esta semana se evaluarán dentro de 3 semanas. Por encima del 50 % de aciertos, la señal aporta algo.</div>'}</div></div>`;
+    <div class="box"><b>Señales técnicas (alcista / bajista) · horizontes cerrados</b>${(() => {
+      const HZN = [["1m", "1 mes (21 sesiones)"], ["3m", "3 meses (63)"], ["6m", "6 meses (126)"], ["12m", "12 meses (252)"]];
+      const agg = HZN.flatMap(([k, t]) => ["Alcista", "Bajista"].map((tipo) => {
+        const xs = sig.filter((x) => x.horizonte === k && x.tipo === tipo); if (!xs.length) return null;
+        const n = xs.reduce((a, x) => a + x.n, 0), hit = xs.reduce((a, x) => a + x.n * x.aciertos, 0) / n;
+        return { t, tipo, sem: xs.length, n, hit, rm: xs.reduce((a, x) => a + x.n * x.rent_media, 0) / n, u: xs.reduce((a, x) => a + x.universo, 0) / xs.length };
+      })).filter(Boolean);
+      return agg.length ? `<table><thead><tr><th>Horizonte</th><th>Tipo</th><th>Semanas</th><th>Señales</th><th data-tip="Alcista acierta si lo hace mejor que el universo en esas mismas sesiones; bajista, si lo hace peor">Aciertos</th><th>Rent. media</th><th>Universo</th></tr></thead><tbody>
+        ${agg.map((x) => `<tr><td>${x.t}</td><td>${esc(x.tipo)}</td><td class="num">${x.sem}</td><td class="num">${x.n}</td><td class="num">${nf(x.hit, 0)} %</td><td class="num">${sgn(x.rm, 2)} %</td><td class="num">${sgn(x.u, 2)} %</td></tr>`).join("")}</tbody></table>
+        <div class="method">Cada semana registrada solo se evalúa en un horizonte cuando han pasado todas sus sesiones. Por encima del 50 % de aciertos, la señal aporta algo.</div>`
+        : '<div class="hint">Las señales de cada semana se evalúan cuando se cierra cada horizonte: el primero, a las 21 sesiones. Por encima del 50 % de aciertos, la señal aporta algo.</div>';
+    })()}</div>
+    <div class="box" style="grid-column:1/-1"><b>Nota operativa registrada a diario</b>${(() => {
+      const N = A.sc?.nota_registrada; if (!N) return '<div class="hint">Sin registros todavía.</div>';
+      const rows = [["1m", "1 mes"], ["3m", "3 meses"], ["6m", "6 meses"], ["12m", "12 meses"]].map(([k, t]) => [t, N.horizontes?.[k] || {}]);
+      return `<div class="hint">Foto diaria de la nota tal como la ve la web, desde ${fmtDate(N.desde)} (${N.fotos} sesiones). Se evalúa sin reconstrucciones a cada horizonte cerrado.</div>
+        <div class="lab-tw"><table><thead><tr><th>Horizonte</th><th>Días evaluados</th><th data-tip="Correlación de rangos entre la nota y la rentabilidad posterior">IC medio</th><th>Días con IC &gt; 0</th><th>Mejor quinto − universo</th></tr></thead><tbody>
+        ${rows.map(([t, x]) => `<tr><td>${t}</td><td class="num">${x.dias || 0}</td><td class="num">${x.ic == null ? "—" : nf(x.ic, 3)}</td><td class="num">${x.ic_pos == null ? "—" : nf(x.ic_pos, 0) + " %"}</td><td class="num">${x.q5_vs_universo == null ? "—" : sgn(x.q5_vs_universo, 2) + " pp"}</td></tr>`).join("")}</tbody></table></div>`;
+    })()}</div></div>`;
   return h;
 }
 function onClick(t) {

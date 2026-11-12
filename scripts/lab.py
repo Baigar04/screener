@@ -272,6 +272,14 @@ def prices_10y(syms):
     return pd.DataFrame(adj).sort_index(), pd.DataFrame(cls).sort_index()
 
 
+def train_dates(D, me, test_k, h):
+    """Fechas de entrenamiento con embargo igual al horizonte: solo las anteriores a la prueba cuya rentabilidad futura
+    (h sesiones) termina, como tarde, el día en que empieza la prueba. Así ningún dato de la prueba entra en el entrenamiento.
+    D: fechas de rebalanceo; me: su posición en el calendario de sesiones; test_k: índice en D de la primera fecha de prueba."""
+    start = me[test_k]
+    return D[[k for k in range(test_k) if me[k] + h <= start]]
+
+
 def sec_at(fy, d):
     """Último 10-K presentado antes de d y el del ejercicio anterior (datos SEC «a fecha»)."""
     lim = (d - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
@@ -452,15 +460,18 @@ def run(frames, rows, cache, default_w):
     comp_sug = stats(composite(cat_sig, sug), fwd)
 
     # fuera de muestra: pesos estimados con la primera mitad, medidos en la segunda
+    # embargo igual al horizonte: un mes de entrenamiento solo cuenta si su rentabilidad futura ya se conocía al empezar la prueba
     oos = None
-    half = D[len(D) // 2]
-    first = {c: stats(cat_sig[c].loc[:half], fwd.loc[:half]) for c in CATS}
+    hk = len(D) // 2
+    half, train = D[hk], train_dates(D, me, hk, H)
+    first = {c: stats(cat_sig[c].loc[train], fwd.loc[train]) for c in CATS}
     if all(first.values()):
         w1 = suggest({c: first[c]["ic"] for c in CATS}, base, {c: first[c]["ic_t"] for c in CATS})
         a = stats(composite(cat_sig, base).loc[half:], fwd.loc[half:])
         b = stats(composite(cat_sig, w1).loc[half:], fwd.loc[half:])
         if a and b:
-            oos = {"corte": half.strftime("%Y-%m-%d"), "pesos_primera_mitad": w1,
+            oos = {"corte": half.strftime("%Y-%m-%d"), "fin_entrenamiento": train[-1].strftime("%Y-%m-%d") if len(train) else None,
+                   "embargo_sesiones": H, "pesos_primera_mitad": w1,
                    "actual": {k: a[k] for k in ("meses", "ic", "ic_t", "ls_anual", "ls_sharpe")},
                    "sugerido": {k: b[k] for k in ("meses", "ic", "ic_t", "ls_anual", "ls_sharpe")}}
 
@@ -468,9 +479,11 @@ def run(frames, rows, cache, default_w):
     wf_rows, ic_a, ic_w = [], [], []
     comp_base = composite(cat_sig, base)
     for y in sorted(set(D.year)):
-        past = D[D < pd.Timestamp(y, 1, 1)]
         cur = D[D.year == y]
-        if len(past) < 12 or not len(cur):
+        if not len(cur):
+            continue
+        past = train_dates(D, me, D.get_loc(cur[0]), H)   # con embargo: sin solapes con el año de prueba
+        if len(past) < 12:
             continue
         st = {c: stats(cat_sig[c].loc[past], fwd.loc[past]) for c in CATS}
         if not all(st.values()):
@@ -481,7 +494,7 @@ def run(frames, rows, cache, default_w):
         if len(a) and len(b):
             ic_a += list(a.values)
             ic_w += list(b.values)
-            wf_rows.append({"anio": int(y), "meses": int(len(b)), "pesos": wy, "ic_actual": round(float(a.mean()), 4), "ic_wf": round(float(b.mean()), 4)})
+            wf_rows.append({"anio": int(y), "meses": int(len(b)), "fin_entrenamiento": past[-1].strftime("%Y-%m-%d"), "pesos": wy, "ic_actual": round(float(a.mean()), 4), "ic_wf": round(float(b.mean()), 4)})
     wf = None
     if wf_rows:
         ia, iw = np.array(ic_a), np.array(ic_w)
@@ -514,7 +527,7 @@ def run(frames, rows, cache, default_w):
         "compuesto": {"actual": comp_now, "sugerido": comp_sug},
         "pesos": {"actual": default_w, "sugerido": {**default_w, **sug}},
         "fuera_muestra": oos,
-        "walk_forward": wf, "veredicto": veredicto,
+        "walk_forward": wf, "veredicto": veredicto, "embargo_sesiones": H,
         "fuentes": {"sec": n_sec, "ex_miembros": len([k for k in extra if k in P.columns]), "anios_precio": round((P.index[-1] - P.index[0]).days / 365.25, 1)}, "horizontes": list(HZ), "coste_pb": COST * 1e4,
         "no_evaluables": [
             {"k": "smart", "nombre": "Smart money", "motivo": "Dataroma y las declaraciones del Congreso no ofrecen gratis un historial fechado de cuándo se conoció cada dato. Mantiene su peso, sin evidencia a favor ni en contra."},
@@ -526,6 +539,7 @@ def run(frames, rows, cache, default_w):
             "Capitalización pasada reconstruida con el precio (acciones constantes); en ex miembros, con las acciones del último 10-K.",
             "Costes: 15 pb por operación y lado aplicados a la rotación mensual de la cartera Q5 − Q1; sin impuestos, sin coste de préstamo de títulos para las posiciones cortas ni impacto en precio.",
             "Horizontes de 3, 6 y 12 meses: las ventanas se solapan; el estadístico t usa la corrección de Newey-West.",
+            f"Pruebas fuera de muestra (mitades y walk-forward) con embargo de {H} sesiones: el entrenamiento termina cuando su rentabilidad futura ya se conocía, sin solaparse con el periodo de prueba.",
         ],
     }
     with open(os.path.join(DATA, "lab.json"), "w") as fh:
