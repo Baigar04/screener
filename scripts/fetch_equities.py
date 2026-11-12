@@ -162,6 +162,80 @@ def drop_open_session(sym, df):
     return df
 
 
+# ------------------------------------------------------------------ respaldo de precios: Stooq
+STOOQ_SFX = {".L": ".uk", ".DE": ".de"}   # bolsas europeas que Stooq cubre con el mismo ticker; el resto no tiene respaldo
+STOOQ_USED = set()
+STOOQ_MAX = int(os.environ.get("STOOQ_MAX", "600"))   # peticiones por ejecución (Stooq limita las descargas diarias)
+# Prueba: YAHOO_FALLO_SIMULADO=1 (todos) o lista de tickers separados por comas → Yahoo «falla» para ellos
+_SIM = os.environ.get("YAHOO_FALLO_SIMULADO", "").strip()
+
+
+def yahoo_fails(sym):
+    return bool(_SIM) and (_SIM == "1" or sym in {x.strip() for x in _SIM.split(",")})
+
+
+def stooq_symbol(sym):
+    """Ticker de Yahoo → ticker de Stooq (None si Stooq no lo cubre)."""
+    if sym.startswith("^"):
+        return None
+    if "." not in sym or sym.count(".") == 0:
+        return sym.lower() + ".us"
+    base, _, sfx = sym.rpartition(".")
+    m = STOOQ_SFX.get("." + sfx)
+    return base.lower() + m if m else None
+
+
+def stooq_prices(sym, years=5):
+    """OHLCV diario de Stooq (CSV público). Stooq ajusta por splits; no da dividendos."""
+    st = stooq_symbol(sym)
+    if not st:
+        return None
+    d1 = (NOW - pd.Timedelta(days=int(365.25 * years))).strftime("%Y%m%d")
+    url = f"https://stooq.com/q/d/l/?s={st}&d1={d1}&d2={NOW.strftime('%Y%m%d')}&i=d"
+    txt = get(url, 30).decode("utf-8", "replace")
+    if "limit" in txt.lower() and "date" not in txt[:40].lower():
+        raise RuntimeError("Stooq: límite diario de descargas alcanzado")
+    if not txt.lower().startswith("date"):
+        return None
+    df = pd.read_csv(io.StringIO(txt), parse_dates=["Date"], index_col="Date")
+    df = df.rename(columns=str.title)
+    if "Close" not in df or len(df) < 30:
+        return None
+    if "Volume" not in df:
+        df["Volume"] = np.nan
+    return df[["Open", "High", "Low", "Close", "Volume"]].astype(float).sort_index()
+
+
+def stooq_fallback(missing, frames, raw):
+    """Rellena con Stooq los valores sin precios de Yahoo. Devuelve cuántos ha recuperado."""
+    got, tried = 0, 0
+    for s in missing:
+        if tried >= STOOQ_MAX:
+            log("Stooq: máximo de peticiones por ejecución alcanzado; quedan", len(missing) - tried)
+            break
+        if not stooq_symbol(s):
+            continue
+        tried += 1
+        try:
+            df = stooq_prices(s)
+        except RuntimeError as e:
+            log(str(e))
+            break
+        except Exception as e:  # noqa: BLE001
+            if tried <= 3:
+                log("stooq", s, str(e)[:120])
+            continue
+        if df is None:
+            continue
+        df = drop_open_session(s, df)
+        raw[s] = df.assign(Dividends=0.0)
+        frames[s] = df.copy()
+        STOOQ_USED.add(s)
+        got += 1
+        time.sleep(0.25)
+    return got
+
+
 def prices(symbols):
     frames, raw = {}, {}
     for i in range(0, len(symbols), 150):
@@ -171,6 +245,8 @@ def prices(symbols):
                 df = yf.download(chunk, period="5y", interval="1d", group_by="ticker", auto_adjust=False,
                                  actions=True, threads=True, progress=False)
                 for s in chunk:
+                    if yahoo_fails(s):
+                        continue
                     try:
                         sub = df[s].dropna(subset=["Close"]) if isinstance(df.columns, pd.MultiIndex) else df.dropna(subset=["Close"])
                         sub = drop_open_session(s, sub)
@@ -189,6 +265,10 @@ def prices(symbols):
             except Exception as e:  # noqa: BLE001
                 log("download error", e)
                 time.sleep(10 * (attempt + 1))
+    missing = [s for s in symbols if s not in frames]
+    if missing:
+        n = stooq_fallback(missing, frames, raw)
+        log(f"Respaldo Stooq: {n} de {len(missing)} valores sin precios de Yahoo recuperados")
     return frames, raw
 
 
@@ -543,6 +623,7 @@ def main():
         if s in frames:
             tec, s50, s200 = technical(frames[s])
             r.update(tec)
+            r["fuente_precio"] = "Stooq" if s in STOOQ_USED else "Yahoo"
             c = frames[s]["Close"]
             tail = c.iloc[-252:]
             try:
@@ -558,8 +639,9 @@ def main():
                      "o": [jnum(x, 3) for x in fr["Open"]], "h": [jnum(x, 3) for x in fr["High"]],
                      "l": [jnum(x, 3) for x in fr["Low"]], "c": [jnum(x, 3) for x in fr["Close"]],
                      "v": [int(x) if x == x else None for x in fr["Volume"]]}
+            fuente = "Stooq (respaldo: Yahoo sin datos; precios ajustados por splits)" if s in STOOQ_USED else "Yahoo Finance (precios sin ajustar, como TradingView)"
             with open(os.path.join(DATA, "p", s.replace("/", "_") + ".json"), "w") as fh:
-                json.dump({"sym": s, "fuente": "Yahoo Finance (precios sin ajustar, como TradingView)", **ohlcv, "ev": ev}, fh, separators=(",", ":"))
+                json.dump({"sym": s, "fuente": fuente, **ohlcv, "ev": ev}, fh, separators=(",", ":"))
         with open(os.path.join(DATA, "t", s.replace("/", "_") + ".json"), "w") as fh:
             json.dump(detail, fh, separators=(",", ":"))
         rows.append(r)
@@ -635,7 +717,8 @@ def main():
         ERRORS.append({"fuente": "Cálculo", "serie": "Laboratorio", "motivo": str(e)[:200]})
 
     meta = {"generado": NOW.isoformat(timespec="seconds"), "n": len(rows), "errores": ERRORS[:200], "n_errores": len(ERRORS),
-            "fuentes": ["Wikipedia (composición S&P 500 y Nasdaq-100)", "Yahoo Finance vía yfinance (precios y fundamentales)"],
+            "fuentes": ["Wikipedia (composición S&P 500 y Nasdaq-100)", "Yahoo Finance vía yfinance (precios y fundamentales)", "Stooq (respaldo de precios si Yahoo falla)"],
+            "n_stooq": len(STOOQ_USED),
             "notas": "Fundamentales refrescados por rotación (cada valor, una vez por semana). Revisiones de beneficios: sin fuente pública fiable."}
     json.dump({**meta, "filas": rows}, open(os.path.join(DATA, "universe.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump({**meta, "stats": stats, "rrg": rot}, open(os.path.join(DATA, "sectors.json"), "w"), ensure_ascii=False, separators=(",", ":"))
