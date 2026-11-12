@@ -17,6 +17,10 @@ SYMS = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "JPM", "XOM", "JNJ", "P
 
 
 def main():
+    try:  # diagnóstico: respuesta en bruto de Stooq para un valor
+        print("Stooq AAPL (bruto):", " ".join(fe.get("https://stooq.com/q/d/l/?s=aapl.us&i=d", 30).decode("utf-8", "replace")[:300].split()), flush=True)
+    except Exception as e:  # noqa: BLE001
+        print("Stooq AAPL: error de conexión", e, flush=True)
     frames, raw = fe.prices(SYMS)
     from_stooq = [s for s in SYMS if s in fe.STOOQ_USED]
     print(f"Fallo simulado de Yahoo: {len(from_stooq)} de {len(SYMS)} con precios de Stooq", flush=True)

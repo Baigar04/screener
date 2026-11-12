@@ -165,6 +165,7 @@ def drop_open_session(sym, df):
 # ------------------------------------------------------------------ respaldo de precios: Stooq
 STOOQ_SFX = {".L": ".uk", ".DE": ".de"}   # bolsas europeas que Stooq cubre con el mismo ticker; el resto no tiene respaldo
 STOOQ_USED = set()
+STOOQ_NOCSV = []   # respuestas de Stooq que no son CSV (diagnóstico)
 STOOQ_MAX = int(os.environ.get("STOOQ_MAX", "600"))   # peticiones por ejecución (Stooq limita las descargas diarias)
 # Prueba: YAHOO_FALLO_SIMULADO=1 (todos) o lista de tickers separados por comas → Yahoo «falla» para ellos
 _SIM = os.environ.get("YAHOO_FALLO_SIMULADO", "").strip()
@@ -196,6 +197,7 @@ def stooq_prices(sym, years=5):
     if "limit" in txt.lower() and "date" not in txt[:40].lower():
         raise RuntimeError("Stooq: límite diario de descargas alcanzado")
     if not txt.lower().startswith("date"):
+        STOOQ_NOCSV.append(f"{st}: {' '.join(txt[:160].split())}")
         return None
     df = pd.read_csv(io.StringIO(txt), parse_dates=["Date"], index_col="Date")
     df = df.rename(columns=str.title)
@@ -269,6 +271,8 @@ def prices(symbols):
     if missing:
         n = stooq_fallback(missing, frames, raw)
         log(f"Respaldo Stooq: {n} de {len(missing)} valores sin precios de Yahoo recuperados")
+        for x in STOOQ_NOCSV[:2]:
+            log("  Stooq no devolvió CSV →", x)
     return frames, raw
 
 
