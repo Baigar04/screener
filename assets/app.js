@@ -30,8 +30,16 @@ const SOON = {
   screener: ["Filtros por país, sector, industria, capitalización, múltiplos (también frente a su sector), crecimiento, calidad, deuda, dividendo y técnico", "Ficha de empresa con fundamentales a 5 años, PER frente a sector e industria, técnico y catalizadores"],
   smart: ["Dataroma, 13F, compras de directivos (Form 4) y declaraciones de congresistas", "Fecha de operación y fecha de declaración separadas, con su desfase"],
   carteras: ["Constructor por perfil, horizonte y restricciones", "Equiponderada, riesgo-paridad, mínima varianza y máximo Sharpe; stress test y seguimiento"],
-  adelantarse: ["Cuadro de indicadores adelantados con su historial", "Escenarios con probabilidades y registro de señales con su tasa de acierto real"],
+  adelantarse: ["Cuadro de indicadores adelantados con su historial", "Escenarios con su peso y registro de señales con su tasa de acierto real"],
 };
+
+/* ---------- marco de evidencia: qué respaldo tiene cada cifra ---------- */
+const EVID = {
+  h: ["Heurística", "Regla construida a priori. No se ha medido si acierta: úsala como lectura, no como predicción."],
+  e: ["Evaluada históricamente", "Contrastada en el Laboratorio con 10 años de datos «a fecha» (solo lo que se sabía en cada momento)."],
+  r: ["Registrada en funcionamiento", "Se guarda tal cual cada día o semana y se mide su resultado real cuando se cierra cada horizonte."],
+};
+const evid = (...ks) => `<span class="evid-w">${ks.map((k) => `<span class="evid evid-${k}" data-tip="${EVID[k][1]}">${EVID[k][0]}</span>`).join("")}</span>`;
 
 /* ---------- estado y preferencias ---------- */
 const store = {
@@ -150,13 +158,13 @@ function renderPulso() {
   /* resumen */
   const KPI = ["us10y", "t10y3m", "vix", "hy_oas", "brent", "eurusd"];
   const R0 = D.regimen;
-  h += `<div class="kpis">${R0?.estado === "ok" ? `<button class="kpi kpi-reg" data-goreg="1"><span class="k-l">Régimen EE. UU.</span><span class="k-v">${esc(R0.dominante)}</span><span class="k-c">${R0.probabilidades[R0.dominante]} % de probabilidad</span></button>` : ""}
+  h += `<div class="kpis">${R0?.estado === "ok" ? `<button class="kpi kpi-reg" data-goreg="1"><span class="k-l">Régimen EE. UU.</span><span class="k-v">${esc(R0.dominante)}</span><span class="k-c">peso del escenario ${R0.probabilidades[R0.dominante]} %</span></button>` : ""}
     ${KPI.map((id) => { const s = D.series[id]; if (!s || s.estado !== "ok") return `<div class="kpi"><span class="k-l">${esc(s?.nombre || id)}</span><span class="k-v">—</span></div>`;
       return `<button class="kpi card-lite" data-id="${id}"><span class="k-l">${esc(s.nombre)}</span><span class="k-v num">${nf(s.valor)}<small>${esc(s.unidad)}</small></span><span class="k-c num chg ${chgClass(id, s.cambio_1m)}">${sgn(s.cambio_1m)} en 1 mes</span></button>`; }).join("")}</div>`;
 
   /* régimen */
   const R = D.regimen;
-  h += `<h2 class="sec" id="regimen">Régimen macro · EE. UU. <span class="hint">${lv === 0 ? "En qué fase del ciclo está la economía" : "Probabilidad por fase del ciclo"}</span></h2>`;
+  h += `<h2 class="sec" id="regimen">Régimen macro · EE. UU. ${evid("h")} <span class="hint">${lv === 0 ? "En qué fase del ciclo está la economía" : "Peso de cada escenario (fase del ciclo)"}</span></h2>`;
   if (R?.estado === "ok") {
     const order = ["Expansión", "Desaceleración", "Recesión", "Recuperación"];
     h += `<div class="panel regime"><div><div class="sub">Fase dominante</div><div class="big">${R.dominante}</div>
@@ -164,7 +172,7 @@ function renderPulso() {
       ${R.inflacion ? `<div class="sub" style="margin-top:8px">Inflación subyacente (PCE): <b>${R.inflacion}</b></div>` : ""}</div>
       <div>${order.map((k) => `<div class="prob ${k === R.dominante ? "dom" : ""}" title="${esc(REGIME_TXT[k])}"><span>${k}</span><div class="track"><div class="fill" style="width:${R.probabilidades[k]}%"></div></div><span class="num">${R.probabilidades[k]} %</span></div>`).join("")}
       ${lv >= 2 ? `<div class="signals">${Object.entries(R.senales).map(([k, v]) => `<span class="sig ${v > 0 ? "p" : v < 0 ? "n" : "z"}">${esc(k)}: ${v > 0 ? "positiva" : v < 0 ? "negativa" : "neutral"}</span>`).join("")}</div>` : ""}
-      ${lv >= 3 ? `<div class="method">Nivel de crecimiento ${sgn(R.nivel_crecimiento)} · cambio en 3 meses ${sgn(R.direccion_3m)}. ${esc(R.metodo)}</div>` : `<div class="method">Modelo heurístico: las probabilidades no están calibradas estadísticamente.</div>`}
+      ${lv >= 3 ? `<div class="method">Nivel de crecimiento ${sgn(R.nivel_crecimiento)} · cambio en 3 meses ${sgn(R.direccion_3m)}. ${esc(R.metodo)}</div>` : `<div class="method">Modelo heurístico: los pesos de escenario indican cuánto se parece la situación a cada fase; no son probabilidades calibradas.</div>`}
       </div></div>`;
   } else {
     h += `<div class="panel nodata">Sin datos: ${esc(R?.motivo || "no calculado")}</div>`;
@@ -172,7 +180,7 @@ function renderPulso() {
 
   /* visiones */
   const V = D.visiones?.[S.viewRegion];
-  h += `<h2 class="sec">Visión por horizonte <span class="hint">Lectura basada en reglas a partir de los datos; no es una recomendación</span></h2>
+  h += `<h2 class="sec">Visión por horizonte ${evid("h")} <span class="hint">Lectura basada en reglas a partir de los datos; no es una recomendación</span></h2>
     <div class="bar">${[["US", "EE. UU."], ["EZ", "Zona euro"]].map(([k, n]) => `<button class="chip ${S.viewRegion === k ? "on" : ""}" data-vr="${k}">${n}</button>`).join("")}</div>`;
   if (V) {
     const hz = [["corto", "Corto plazo · 1-3 meses"], ["medio", "Medio plazo · 3-12 meses"], ["largo", "Largo plazo · 1-3 años"]];
@@ -340,7 +348,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDra
 
 const MODULES = {}, HANDLERS = [];
 function go(v) { S.view = v; render(); window.scrollTo(0, 0); }
-window.SCR = { S, esc, nf, sgn, fmtDate, store, dropdown, openDrawer, closeDrawer, render, go, seriesDrawer, modules: MODULES, handlers: HANDLERS };
+window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, seriesDrawer, modules: MODULES, handlers: HANDLERS };
 render();
 load();
 })();

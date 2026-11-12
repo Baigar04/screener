@@ -158,7 +158,7 @@ async function mount(el, sym, opts = {}) {
       <div class="seg seg-s">${PERIODS.map(([p]) => `<button data-cx-per="${p}" class="${cfg.period === p ? "on" : ""}">${p}</button>`).join("")}</div>
       <div class="dd cx-ind"><button class="dd-btn"><span class="lab">Indicadores</span> ${Object.values(cfg.ind).filter((x) => x.on).length} ▾</button>
         <div class="dd-menu cx-menu">${Object.entries(IND_META).filter(([k]) => k !== "konkorde" || window.SCRKonkorde).map(([k, [t, d, ps]]) => `<div class="cx-row">
-          <label data-tip="${esc(d)}"><input type="checkbox" data-cx-on="${k}" ${cfg.ind[k].on ? "checked" : ""}> ${t}</label>
+          <label data-tip="${esc(d)}"><input type="checkbox" data-cx-on="${k}" ${cfg.ind[k].on ? "checked" : ""}> ${t}${k === "konkorde" ? " " + window.SCR.evid("h") : ""}</label>
           <span>${ps.map(([p, pl, mn, mx]) => `<input type="number" class="cx-num" data-cx-p="${k}.${p}" value="${cfg.ind[k][p]}" min="${mn}" max="${mx}" step="${p === "k" ? 0.5 : 1}" title="${pl}" aria-label="${t} ${pl}">`).join("")}</span></div>`).join("")}
           <div class="cx-row"><button class="chip" data-cx-reset="1">Restablecer</button></div></div></div>
       ${window.SCRDraw ? window.SCRDraw.toolbarHtml(drTool, drMag) : ""}

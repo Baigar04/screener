@@ -565,7 +565,7 @@ function fichaTab(tab, r, d) {
   const vs = (k, lab, v, ms, mi, f) => `<tr><td${tip(k)}>${lab}</td><td class="num">${nf(v, 1)}</td><td class="num">${nf(ms, 1)}</td><td class="num">${nf(mi, 1)}</td><td class="num chg ${cls(f == null ? null : -f)}">${spct(f, 0)}</td></tr>`;
   const up = r.precio_objetivo && r.precio ? (r.precio_objetivo / r.precio - 1) * 100 : null, tv = r.veredicto;
   return `<div class="f-grid"><div>${miniChart(d.diario)}
-      <div class="box"><b>Técnico · ${esc(r.horizonte_tec || "1-3 meses")}</b><span class="badge ${tv === "Alcista" ? "Favorable" : tv === "Bajista" ? "Defensivo" : "Neutral"}">${esc(tv || "Sin datos")}</span>
+      <div class="box"><b>Técnico · ${esc(r.horizonte_tec || "1-3 meses")}</b> ${H.evid("h", "r")}<span class="badge ${tv === "Alcista" ? "Favorable" : tv === "Bajista" ? "Defensivo" : "Neutral"}">${esc(tv || "Sin datos")}</span>
         <div style="margin-top:6px">${esc(r.motivo_tec || "")}.</div>
         ${r.invalidacion ? `<div style="margin-top:4px">Se invalida si cierra ${tv === "Alcista" ? "por debajo" : "por encima"} de <b class="num">${nf(r.invalidacion, 2)}</b>.</div>` : ""}
         ${lv >= 1 ? `<div class="kv-grid sm">${[["MM50 / MM200", `${nf(r.sma50, 2)} / ${nf(r.sma200, 2)}`], ["RSI (14)", nf(r.rsi, 0), "rsi"], ["MACD (hist.)", sgn(r.macd_hist, 3)],
@@ -585,7 +585,7 @@ function fichaTab(tab, r, d) {
 function scoreBox(r) {
   const f = E.sc?.factores?.[r.sym]; if (!f) return "";
   const ex = explain(r), lv = H.S.level;
-  return `<div class="box scbox"><b>${esc(scoreName())} · perfil ${esc(profileName())}</b>
+  return `<div class="box scbox"><b>${esc(scoreName())} · perfil ${esc(profileName())}</b> ${H.evid("e", "r")}
     <div class="sc-top">${scoreBadge(r.score)}<span class="hint">de 100 · percentil frente a su sector</span></div>
     ${FACT.map(([k, t]) => `<div class="prob" data-tip="${esc(FACT_TIP[k])}"><span>${t}${E.w[k] ? "" : ' <span class="hint">(peso 0)</span>'}</span><div class="track"><div class="fill" style="width:${f[k] ?? 0}%;background:${f[k] == null ? "var(--surface-3)" : f[k] >= 70 ? "var(--good)" : f[k] >= 40 ? "var(--faint)" : "var(--bad)"}"></div></div><span class="num">${f[k] == null ? "—" : Math.round(f[k])}</span></div>`).join("")}
     ${ex ? `<div class="sc-ex"><div>${esc(ex.por)}</div>${ex.inv ? `<div>${esc(ex.inv)}</div>` : ""}<div>${esc(ex.hz)}</div></div>` : ""}

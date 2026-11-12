@@ -70,24 +70,24 @@ function render() {
   const R = D.regimen, ciclo = A.sc?.ciclo;
   if (R?.estado === "ok") {
     const order = Object.entries(R.probabilidades).sort((a, b) => b[1] - a[1]);
-    h += `<h2 class="sec">Escenarios a 6-12 meses <span class="hint">Probabilidades del modelo de régimen (EE. UU.), heurístico y sin calibrar estadísticamente</span></h2><div class="views" style="grid-template-columns:repeat(2,1fr)">
+    h += `<h2 class="sec">Escenarios a 6-12 meses ${H.evid("h")} <span class="hint">Peso de cada escenario según el modelo de régimen (EE. UU.): heurístico, no son probabilidades calibradas</span></h2><div class="views" style="grid-template-columns:repeat(2,1fr)">
       ${order.map(([k, p]) => { const sec = ciclo?.[k] ? Object.entries(ciclo[k]).sort((a, b) => b[1] - a[1]) : [];
-        return `<div class="view-card"><h3>${esc(k)} · ${p} %</h3><div class="track" style="height:6px;background:var(--surface-3);border-radius:3px;margin-bottom:8px"><div style="height:100%;width:${p}%;background:${k === R.dominante ? "var(--accent)" : "var(--faint)"};border-radius:3px"></div></div>
+        return `<div class="view-card"><h3>${esc(k)} · peso ${p} %</h3><div class="track" style="height:6px;background:var(--surface-3);border-radius:3px;margin-bottom:8px"><div style="height:100%;width:${p}%;background:${k === R.dominante ? "var(--accent)" : "var(--faint)"};border-radius:3px"></div></div>
           <div style="font-size:12.5px">${esc(SCEN[k][0])}</div><div class="hint" style="margin-top:4px">${esc(SCEN[k][1])}</div>
           ${sec.length ? `<div style="margin-top:8px;font-size:12px"><span class="chg p">Suelen ganar:</span> ${sec.slice(0, 3).map(([s]) => `<a href="#" data-gosector="${esc(s)}">${esc(SEC_ES[s] || s)}</a>`).join(", ")}<br>
           <span class="chg n">Suelen perder:</span> ${sec.slice(-3).map(([s]) => esc(SEC_ES[s] || s)).join(", ")}</div>` : ""}</div>`; }).join("")}</div>
-      <div class="method">Las preferencias sectoriales por fase son la rotación típica descrita en la literatura de ciclo, no una predicción. Lo que movería las probabilidades: regla de Sahm, diferencial high yield y condiciones financieras.</div>`;
+      <div class="method">Las preferencias sectoriales por fase son la rotación típica descrita en la literatura de ciclo, no una predicción. Lo que movería los pesos: regla de Sahm, diferencial high yield y condiciones financieras.</div>`;
   }
 
   /* registro de aciertos */
   const hist = A.sc?.historial || [], sig = A.sc?.senales || [];
   h += `<h2 class="sec">Registro de aciertos <span class="hint">Se mide sola cada semana: así sabrás si las señales de esta herramienta funcionan</span></h2>
-    <div class="f-grid"><div class="box"><b>Top 20 de la puntuación frente al universo</b>${hist.length ? `<table><thead><tr><th>Semana</th><th>Días</th><th>Top 20</th><th>Universo</th><th>Diferencia</th></tr></thead><tbody>
+    <div class="f-grid"><div class="box"><b>Top 20 de la puntuación frente al universo</b> ${H.evid("r")}${hist.length ? `<table><thead><tr><th>Semana</th><th>Días</th><th>Top 20</th><th>Universo</th><th>Diferencia</th></tr></thead><tbody>
       ${hist.slice().reverse().slice(0, 10).map((x) => `<tr><td>${fmtDate(x.fecha.slice(0, 10))}</td><td class="num">${x.dias}</td><td class="num">${x.top == null ? "—" : sgn(x.top, 2) + " %"}</td><td class="num">${x.universo == null ? "—" : sgn(x.universo, 2) + " %"}</td>
         <td class="num chg ${x.top == null || x.universo == null || x.top === x.universo ? "z" : x.top > x.universo ? "p" : "n"}">${x.top == null || x.universo == null ? "—" : sgn(x.top - x.universo, 2) + " pp"}</td></tr>`).join("")}</tbody></table>
       ${(() => { const old = hist.filter((x) => x.dias >= 28 && x.top != null); if (!old.length) return '<div class="method">Hace falta al menos un mes de registros para valorar el resultado.</div>';
         const w = old.filter((x) => x.top > x.universo).length; return `<div class="method">Semanas con al menos 4 semanas de antigüedad en que el top 20 batió al universo: <b>${w} de ${old.length}</b>.</div>`; })()}` : '<div class="hint">Sin registros todavía.</div>'}</div>
-    <div class="box"><b>Señales técnicas (alcista / bajista) · horizontes cerrados</b>${(() => {
+    <div class="box"><b>Señales técnicas (alcista / bajista) · horizontes cerrados</b> ${H.evid("h", "r")}${(() => {
       const HZN = [["1m", "1 mes (21 sesiones)"], ["3m", "3 meses (63)"], ["6m", "6 meses (126)"], ["12m", "12 meses (252)"]];
       const agg = HZN.flatMap(([k, t]) => ["Alcista", "Bajista"].map((tipo) => {
         const xs = sig.filter((x) => x.horizonte === k && x.tipo === tipo); if (!xs.length) return null;
@@ -99,7 +99,7 @@ function render() {
         <div class="method">Cada semana registrada solo se evalúa en un horizonte cuando han pasado todas sus sesiones. Por encima del 50 % de aciertos, la señal aporta algo.</div>`
         : '<div class="hint">Las señales de cada semana se evalúan cuando se cierra cada horizonte: el primero, a las 21 sesiones. Por encima del 50 % de aciertos, la señal aporta algo.</div>';
     })()}</div>
-    <div class="box" style="grid-column:1/-1"><b>Nota operativa registrada a diario</b>${(() => {
+    <div class="box" style="grid-column:1/-1"><b>Nota operativa registrada a diario</b> ${H.evid("e", "r")}${(() => {
       const N = A.sc?.nota_registrada; if (!N) return '<div class="hint">Sin registros todavía.</div>';
       const rows = [["1m", "1 mes"], ["3m", "3 meses"], ["6m", "6 meses"], ["12m", "12 meses"]].map(([k, t]) => [t, N.horizontes?.[k] || {}]);
       return `<div class="hint">Foto diaria de la nota tal como la ve la web, desde ${fmtDate(N.desde)} (${N.fotos} sesiones). Se evalúa sin reconstrucciones a cada horizonte cerrado.</div>

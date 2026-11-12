@@ -531,7 +531,7 @@ def run(frames, rows, cache, default_w):
         "fuentes": {"sec": n_sec, "ex_miembros": len([k for k in extra if k in P.columns]), "anios_precio": round((P.index[-1] - P.index[0]).days / 365.25, 1)}, "horizontes": list(HZ), "coste_pb": COST * 1e4,
         "no_evaluables": [
             {"k": "smart", "nombre": "Smart money", "motivo": "Dataroma y las declaraciones del Congreso no ofrecen gratis un historial fechado de cuándo se conoció cada dato. Mantiene su peso, sin evidencia a favor ni en contra."},
-            {"k": "macro", "nombre": "Encaje macro", "motivo": "El modelo de régimen no guarda historial de probabilidades; se podrá medir cuando acumule meses."},
+            {"k": "macro", "nombre": "Encaje macro", "motivo": "El modelo de régimen no guarda historial de los pesos de escenario; se podrá medir cuando acumule meses."},
         ],
         "sesgos": [
             f"Supervivencia, reducida: entran {len([k for k in extra if k in P.columns])} ex miembros del S&P 500/400 que siguen cotizando, cada uno hasta su fecha de salida. Siguen fuera las empresas que dejaron de cotizar (compradas o quebradas), porque Yahoo no guarda sus precios, y los miembros actuales cuentan también antes de entrar en el índice.",

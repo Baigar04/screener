@@ -596,3 +596,9 @@ h2.sec .dd{display:inline-block;margin-left:8px;vertical-align:middle;font-size:
 .lab-verd.ok{border-left-color:var(--pos)}.lab-verd.bad{border-left-color:var(--warn,#f5a524)}
 .lab-hz th,.lab-hz td{white-space:nowrap;text-align:center}.lab-hz td:first-child{text-align:left}
 .lab-hit{background:color-mix(in srgb,var(--pos) 16%,transparent);font-weight:600}
+/* marco de evidencia (Fase 1.4) */
+.evid-w{display:inline-flex;gap:4px;flex-wrap:wrap;vertical-align:middle;font-weight:500}
+.evid{display:inline-block;font-size:10.5px;line-height:1.5;padding:0 6px;border-radius:999px;border:1px solid var(--border);color:var(--muted);white-space:nowrap;letter-spacing:.01em;text-transform:none}
+.evid-h{border-style:dashed}
+.evid-e{color:var(--accent);border-color:var(--accent)}
+.evid-r{color:var(--pos);border-color:var(--pos)}

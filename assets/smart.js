@@ -36,7 +36,7 @@ function render() {
   if (!S.d) { ensure(); return stateBox(); }
   const D = S.d, lv = H.S.level;
   const tabs = [["gestores", `Superinversores (${D.gestores.length})`], ["consenso", "Consenso"], ["mov", "Movimientos del trimestre"], ["congreso", `Congreso de EE. UU. (${D.congreso.length})`]];
-  let h = `<div class="sm-head"><div class="hint">${esc(SMART_TIP)} Datos: ${new Date(D.generado).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+  let h = `<div class="sm-head"><div class="hint">${H.evid("h")} ${esc(SMART_TIP)} Datos: ${new Date(D.generado).toLocaleString("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
     ${D.n_errores ? ` · <span class="stale-txt">${D.n_errores} aviso(s) de fuente</span>` : ""}</div></div>
     <div class="tabs" role="tablist">${tabs.map(([k, t]) => `<button role="tab" class="${S.tab === k ? "on" : ""}" data-smtab="${k}">${t}</button>`).join("")}</div>
     <div class="bar"><div class="search-in"><svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg>

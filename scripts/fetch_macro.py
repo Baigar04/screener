@@ -302,7 +302,7 @@ def regime(S):
         "senales": {k: v for k, v in sigs.items() if v is not None},
         "inflacion": infl,
         "metodo": "Heurístico y transparente: 5 señales de crecimiento (−1/0/+1), su nivel actual y su cambio en 3 meses. "
-                  "Las probabilidades salen de la distancia a cada régimen; no están calibradas estadísticamente.",
+                  "El peso de cada escenario sale de la distancia a cada régimen; no son probabilidades calibradas estadísticamente.",
     }
 
 
@@ -345,7 +345,7 @@ def views(S, R, imf):
         n += 1
         d = R["dominante"]
         sc += {"Expansión": 1, "Recuperación": 1, "Desaceleración": -1, "Recesión": -2}[d]
-        mot.append(f"régimen dominante: {d} ({R['probabilidades'][d]} %)")
+        mot.append(f"régimen dominante: {d} (peso del escenario {R['probabilidades'][d]} %)")
     c3m = _v(S, "t10y3m")
     if c3m is not None:
         n += 1
