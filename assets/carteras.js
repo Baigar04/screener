@@ -239,7 +239,7 @@ function renderBuild() {
     ${dd("c_seccap", "Máx. por sector:", [1, 2, 3, 4, 5, 99].map((x) => [String(x), x === 99 ? "Sin límite" : x + " valores"]), String(f.seccap))}
     ${dd("c_capital", "Capital:", [1000, 5000, 10000, 25000, 50000, 100000].map((x) => [String(x), nf(x, 0) + " €"]), String(f.capital))}
     <button class="icon-btn primary" data-cbuild="1" ${C.busy ? "disabled" : ""}>${C.busy ? "Calculando…" : "Construir"}</button></div>
-    <div class="method" style="margin-top:-4px">${esc(METODO_TIP[f.metodo])} Los candidatos se ordenan por la puntuación de oportunidad con tus pesos actuales.</div>`;
+    <div class="method" style="margin-top:-4px">${esc(METODO_TIP[f.metodo])} Los candidatos se ordenan por la ${esc((window.SCRScoreName ? window.SCRScoreName() : "Puntuación de oportunidad").toLowerCase())} con tus pesos actuales.</div>`;
   if (C.err) h += `<div class="err-box" style="margin-top:10px">${esc(C.err)}</div>`;
   if (C.busy) h += `<div class="skel" style="height:260px;margin-top:10px"></div>`;
   const r = C.res; if (!r) return h + (C.busy || C.err ? "" : `<div class="soon-box" style="margin-top:10px">Elige los parámetros y pulsa «Construir». Se usa el último año de precios diarios para estimar volatilidades y correlaciones.</div>`);

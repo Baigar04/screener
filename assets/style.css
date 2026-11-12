@@ -591,3 +591,8 @@ h2.sec .dd{display:inline-block;margin-left:8px;vertical-align:middle;font-size:
 .rk-bar b.p{background:var(--pos)}.rk-bar b.n{background:var(--neg)}
 .rk-corr th,.rk-corr td{font-size:12px;padding:5px 6px;text-align:center;white-space:nowrap}
 .f-grid>*{min-width:0}
+
+.lab-verd{margin:12px 0 4px;border-left:4px solid var(--border-strong)}
+.lab-verd.ok{border-left-color:var(--pos)}.lab-verd.bad{border-left-color:var(--warn,#f5a524)}
+.lab-hz th,.lab-hz td{white-space:nowrap;text-align:center}.lab-hz td:first-child{text-align:left}
+.lab-hit{background:color-mix(in srgb,var(--pos) 16%,transparent);font-weight:600}

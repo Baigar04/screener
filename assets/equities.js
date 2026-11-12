@@ -277,6 +277,9 @@ function scoreOf(r) {
 }
 function computeScores() { if (!E.uni) return; E.uni.filas.forEach((r) => { r.score = scoreOf(r); }); }
 window.SCRFactors = (s) => E.sc?.factores?.[s];
+/* el laboratorio decide el nombre: «de oportunidad» solo si algún factor supera el umbral estadístico */
+function scoreName() { return E.sc?.veredicto_lab?.etiqueta === "ordenación" ? "Puntuación de ordenación" : "Puntuación de oportunidad"; }
+window.SCRScoreName = scoreName;
 window.SCRSetWeights = (w) => { E.w = { ...w }; store.set("pesos", E.w); computeScores(); };
 const scoreBadge = (v) => (v == null ? "—" : `<span class="sc sc-${v >= 70 ? "hi" : v >= 50 ? "mid" : "lo"}">${v}</span>`);
 const profileName = () => Object.keys(PROFILES).find((k) => FACT.every(([f]) => PROFILES[k][f] === E.w[f])) || "Personalizado";
@@ -582,7 +585,7 @@ function fichaTab(tab, r, d) {
 function scoreBox(r) {
   const f = E.sc?.factores?.[r.sym]; if (!f) return "";
   const ex = explain(r), lv = H.S.level;
-  return `<div class="box scbox"><b>Puntuación de oportunidad · perfil ${esc(profileName())}</b>
+  return `<div class="box scbox"><b>${esc(scoreName())} · perfil ${esc(profileName())}</b>
     <div class="sc-top">${scoreBadge(r.score)}<span class="hint">de 100 · percentil frente a su sector</span></div>
     ${FACT.map(([k, t]) => `<div class="prob" data-tip="${esc(FACT_TIP[k])}"><span>${t}${E.w[k] ? "" : ' <span class="hint">(peso 0)</span>'}</span><div class="track"><div class="fill" style="width:${f[k] ?? 0}%;background:${f[k] == null ? "var(--surface-3)" : f[k] >= 70 ? "var(--good)" : f[k] >= 40 ? "var(--faint)" : "var(--bad)"}"></div></div><span class="num">${f[k] == null ? "—" : Math.round(f[k])}</span></div>`).join("")}
     ${ex ? `<div class="sc-ex"><div>${esc(ex.por)}</div>${ex.inv ? `<div>${esc(ex.inv)}</div>` : ""}<div>${esc(ex.hz)}</div></div>` : ""}

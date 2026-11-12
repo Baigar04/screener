@@ -186,7 +186,11 @@ def main():
                 hits = sum(1 for x in rs if (x > u if kind == "Alcista" else x < u))
                 sig.append({"fecha": w["fecha"], "dias": d, "tipo": kind, "n": len(rs), "aciertos": round(100 * hits / len(rs), 1),
                             "rent_media": round(100 * sum(rs) / len(rs), 2), "universo": round(100 * u, 2)})
-    json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot,
+    try:
+        lab_v = json.load(open(os.path.join(DATA, "lab.json"))).get("veredicto")
+    except Exception:  # noqa: BLE001
+        lab_v = None
+    json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot, "veredicto_lab": lab_v,
                "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res, "senales": sig,
                "metodo": "Cada factor es el percentil (0-100) del valor dentro de su sector; momentum y smart money, dentro de todo el universo. "
                          "Un veredicto técnico bajista limita la nota a 60. Sin al menos 3 de los 4 factores básicos (calidad, valor, crecimiento, momentum) no hay nota. El encaje macro es una heurística de rotación sectorial según el régimen de EE. UU."},

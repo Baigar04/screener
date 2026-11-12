@@ -3,6 +3,7 @@
 "use strict";
 const H = window.SCR;
 const { esc, nf, sgn, fmtDate, store, dropdown } = H;
+const pct = (v) => (v == null ? "—" : nf(v, 1) + " %");
 const L = { d: null, loading: false, f: store.get("lab_f", "momentum") };
 const CAT_ES = { calidad: "Calidad", valor: "Valor", crecimiento: "Crecimiento", momentum: "Momentum", smart: "Smart money", macro: "Encaje macro", extra: "No incluido en la puntuación" };
 
@@ -55,13 +56,19 @@ const thead = `<thead><tr><th>Factor</th><th>Veredicto</th><th data-tip="Correla
 function render() {
   ensure();
   const d = L.d, lv = H.S.level;
-  let h = `<p class="lead">¿La puntuación de oportunidad anticipa qué valores lo harán mejor? Aquí se mide cada factor con datos históricos, mes a mes.</p>`;
+  let h = `<p class="lead">¿La puntuación anticipa qué valores lo harán mejor? Aquí se mide cada factor con datos históricos, mes a mes.</p>`;
   if (!d) return h + `<div class="skel" style="height:240px"></div>`;
   if (d.err || !d.categorias) return h + `<div class="err-box"><b>Todavía no hay resultados del laboratorio.</b> Se calculan en la actualización diaria de los datos. ${esc(d.err || "")}</div>`;
 
   if (lv <= 1) h += `<div class="box lab-intro"><b>Cómo leerlo</b> Cada fin de mes se ordenan los valores por un factor (por ejemplo, momentum) y se mira qué pasó el mes siguiente.
     Si los mejor puntuados suben más que los peor puntuados de forma repetida, el factor <strong>aporta</strong>. Si no hay diferencia clara, es <strong>ruido</strong>, y darle mucho peso solo añade riesgo.</div>`;
   h += `<div class="status-line hint">Universo: ${d.universo} valores · ${d.meses} meses evaluados (${fmtDate(d.desde)} – ${fmtDate(d.hasta)}) · horizonte ${esc(d.horizonte)} · calculado ${fmtDate(d.generado.slice(0, 10))}</div>`;
+
+  /* veredicto global (Fase 1): ¿la nota es «de oportunidad» o solo «de ordenación»? */
+  const V = d.veredicto;
+  if (V) h += `<div class="box lab-verd ${V.etiqueta === "oportunidad" ? "ok" : "bad"}"><div class="lab-ch"><b>Veredicto: puntuación de ${esc(V.etiqueta)}</b><span class="lab-v lab-${V.etiqueta === "oportunidad" ? "ok" : "sin"}">umbral t ≥ ${nf(V.t_umbral, 2)} · ${V.pruebas} pruebas</span></div>
+    <div class="hint" style="margin-top:6px">${esc(V.texto)}</div>
+    ${V.supera?.length ? `<div class="hint">Superan: ${V.supera.map((x) => `${esc(x.nombre)} a ${x.horizonte} (IC ${nf(x.ic, 3)}, t ${nf(x.t, 1)}${x.t_n != null ? `, t neutral ${nf(x.t_n, 1)}` : ""})`).join(" · ")}</div>` : ""}</div>`;
 
   /* tarjetas por categoría */
   h += `<h2 class="sec">Resultado por factor de la puntuación</h2><div class="lab-cards">${d.categorias.map((c) => `<button class="box lab-card ${L.f === c.k ? "on" : ""}" data-labf="${c.k}">
@@ -82,6 +89,30 @@ function render() {
     <div class="box"><b>Puntuación completa (sin smart money ni macro)</b><div class="lab-tw"><table>${thead}<tbody>${cn ? row(cn, "Pesos actuales") : ""}${cs ? row(cs, "Pesos sugeridos") : ""}</tbody></table></div>
     ${o ? `<div class="method"><strong>Prueba fuera de muestra.</strong> Con pesos calculados solo con los datos hasta ${fmtDate(o.corte)}, en los ${o.sugerido.meses} meses siguientes: IC ${nf(o.sugerido.ic, 3)} frente a ${nf(o.actual.ic, 3)} con los pesos actuales
       (Q5 − Q1: ${sgn(o.sugerido.ls_anual, 1)} % frente a ${sgn(o.actual.ls_anual, 1)} % al año). ${keys.filter((k) => k in (o.pesos_primera_mitad || {})).every((k) => o.pesos_primera_mitad[k] === P.actual[k]) ? "Con la primera mitad no había evidencia suficiente para mover los pesos, así que no hay mejora que comprobar." : o.sugerido.ic > o.actual.ic + 0.005 ? "La mejora se mantiene con datos que el ajuste no vio." : "La mejora no se mantiene con datos nuevos: tómalo como señal de prudencia antes de cambiar los pesos."}</div>` : ""}</div></div>`;
+
+  /* horizontes y neutralización */
+  const HZ = d.horizontes || ["1m"], HZN = { "1m": "1 mes", "3m": "3 meses", "6m": "6 meses", "12m": "12 meses" };
+  const cell = (v) => { if (!v) return `<td class="num">—</td><td class="num">—</td>`; const strong = v.ic >= (V?.ic_min ?? 0.02) && (v.t || 0) >= (V?.t_umbral ?? 3);
+    return `<td class="num ${strong ? "lab-hit" : ""}">${nf(v.ic, 3)} <span class="hint">t ${v.t == null ? "—" : nf(v.t, 1)}</span></td><td class="num">${v.ic_n == null ? "—" : nf(v.ic_n, 3)} <span class="hint">t ${v.t_n == null ? "—" : nf(v.t_n, 1)}</span></td>`; };
+  const hzRows = (list) => list.filter((x) => x.hz).map((x) => `<tr><td>${esc(x.nombre)}</td>${HZ.map((k) => cell(x.hz[k])).join("")}</tr>`).join("");
+  if (d.categorias.some((c) => c.hz)) h += `<h2 class="sec">Por horizonte y neutralizado</h2><div class="box"><div class="lab-tw"><table class="lab-hz"><thead><tr><th rowspan="2">Factor</th>${HZ.map((k) => `<th colspan="2">${HZN[k] || k}</th>`).join("")}</tr>
+      <tr>${HZ.map(() => `<th data-tip="IC medio y estadístico t (Newey-West en horizontes solapados)">IC</th><th data-tip="IC tras quitar el efecto de sector, tamaño y beta cada mes">Neutral</th>`).join("")}</tr></thead>
+      <tbody>${hzRows(d.categorias)}${lv >= 1 ? `<tr><td colspan="${1 + HZ.length * 2}" class="hint">Subfactores y controles</td></tr>${hzRows(d.factores)}` : ""}</tbody></table></div>
+    <div class="method">Neutral: lo que el factor aporta por sí mismo, descontado el sector, el tamaño y la beta. Si el IC cae mucho al neutralizar, el factor era en realidad una apuesta por un sector, por empresas grandes o pequeñas, o por más o menos riesgo de mercado.
+      Resaltado: supera IC ≥ ${nf(V?.ic_min ?? 0.02, 2)} y el umbral de t corregido por pruebas múltiples (${nf(V?.t_umbral, 2)}).</div></div>`;
+
+  /* costes */
+  if (d.categorias.some((c) => c.ls_neto_anual != null)) h += `<h2 class="sec">Después de costes</h2><div class="box"><div class="lab-tw"><table><thead><tr><th>Factor</th><th data-tip="Parte media de cada quinto que cambia de un mes al siguiente">Rotación mensual</th><th>Q5 − Q1 bruto</th><th>Q5 − Q1 neto</th><th>Sharpe neto</th></tr></thead><tbody>
+      ${[...d.categorias, ...(lv >= 1 ? d.factores : [])].filter((x) => x.ls_neto_anual != null).map((x) => `<tr><td>${esc(x.nombre)}</td><td class="num">${pct(x.rotacion)}</td><td class="num chg ${x.ls_anual >= 0 ? "p" : "n"}">${sgn(x.ls_anual, 1)} %</td>
+        <td class="num chg ${x.ls_neto_anual >= 0 ? "p" : "n"}"><strong>${sgn(x.ls_neto_anual, 1)} %</strong></td><td class="num">${x.ls_neto_sharpe == null ? "—" : nf(x.ls_neto_sharpe, 2)}</td></tr>`).join("")}</tbody></table></div>
+    <div class="method">${nf(d.coste_pb ?? 15, 0)} pb por operación y lado sobre la parte renovada cada mes, en las dos patas. Sin impuestos ni coste de préstamo de títulos para vender en corto.</div></div>`;
+
+  /* walk-forward */
+  const W = d.walk_forward;
+  if (W) h += `<h2 class="sec">Pesos recalculados año a año (walk-forward)</h2><div class="box"><div class="lab-tw"><table><thead><tr><th>Año</th><th>Meses</th><th>Pesos usados (calc. con años anteriores)</th><th>IC pesos actuales</th><th>IC walk-forward</th></tr></thead><tbody>
+      ${W.anios.map((y) => `<tr><td>${y.anio}</td><td class="num">${y.meses}</td><td class="hint">${Object.entries(y.pesos).map(([k, v]) => `${esc(CAT_ES[k] || k)} ${v}`).join(" · ")}</td><td class="num">${nf(y.ic_actual, 3)}</td><td class="num"><strong>${nf(y.ic_wf, 3)}</strong></td></tr>`).join("")}
+      <tr class="tes-med"><td>Total</td><td class="num">${W.meses}</td><td></td><td class="num">${nf(W.ic_actual, 3)} <span class="hint">t ${nf(W.t_actual, 1)}</span></td><td class="num"><strong>${nf(W.ic_wf, 3)}</strong> <span class="hint">t ${nf(W.t_wf, 1)}</span></td></tr></tbody></table></div>
+    <div class="method">Cada año se usan solo los pesos que la regla habría sugerido con los datos disponibles hasta entonces: es la prueba más parecida a usar el laboratorio en tiempo real. ${W.ic_wf > W.ic_actual + 0.005 ? "Ajustar los pesos con la evidencia ha mejorado el resultado fuera de muestra." : "Ajustar los pesos con la evidencia no ha mejorado el resultado fuera de muestra."}</div></div>`;
 
   /* detalle de un factor */
   const all = [...d.categorias.map((c) => [c.k, c.nombre + " (factor completo)", c]), ...d.factores.map((f) => [f.k, `${CAT_ES[f.categoria] || f.categoria} · ${f.nombre}`, f])];

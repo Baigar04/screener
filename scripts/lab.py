@@ -18,12 +18,16 @@ Fiabilidad:
 import json
 import os
 from datetime import datetime, timezone
+from statistics import NormalDist
 
 import numpy as np
 import pandas as pd
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 H = 21                      # sesiones hasta el siguiente rebalanceo (≈ 1 mes)
+HZ = {"1m": 21, "3m": 63, "6m": 126, "12m": 252}   # horizontes evaluados
+COST = 0.0015               # coste por operación y lado (15 pb: comisión + horquilla, mezcla de grandes y medianas)
+IC_MIN = 0.02               # IC mínimo para considerar útil un factor
 MIN_N = 40                  # valores mínimos con dato para contar un mes
 FACT = [
     # clave, nombre, categoría, fiabilidad, explicación
@@ -75,7 +79,8 @@ def pct_rank(s, groups=None):
 
 def stats(sig, fwd):
     """sig, fwd: DataFrames (fechas × valores). Devuelve IC, quintiles y cartera Q5−Q1."""
-    ics, qs, ls, dates = [], [], [], []
+    ics, qs, ls, dates, turn = [], [], [], [], []
+    prev = None
     for d in sig.index:
         x, y = sig.loc[d], fwd.loc[d]
         m = x.notna() & y.notna()
@@ -87,6 +92,10 @@ def stats(sig, fwd):
         g = y.groupby(q).mean() - y.mean()
         qs.append(g.reindex(range(5)).values)
         ls.append(g.get(4, np.nan) - g.get(0, np.nan))
+        top, bot = set(q.index[q == 4]), set(q.index[q == 0])
+        # rotación: parte de cada pata que se renueva respecto al mes anterior
+        turn.append(1.0 if prev is None else (len(top - prev[0]) / max(len(top), 1) + len(bot - prev[1]) / max(len(bot), 1)) / 2)
+        prev = (top, bot)
         dates.append(d)
     if len(ics) < 6:
         return None
@@ -94,7 +103,13 @@ def stats(sig, fwd):
     ls = np.array(ls)
     q = np.nanmean(np.array(qs), axis=0)
     cum = np.cumsum(np.nan_to_num(ls)) * 100
+    tv = np.array(turn[1:]) if len(turn) > 1 else np.array([1.0])
+    # coste mensual: cada pata vende y compra la parte renovada → 2 × rotación × coste por pata, 2 patas
+    net = ls - np.concatenate([[0.0], 4 * np.array(turn[1:]) * COST]) if len(turn) > 1 else ls
     return {
+        "rotacion": round(float(tv.mean() * 100), 1),
+        "ls_neto_anual": round(float(np.nanmean(net) * 12 * 100), 2),
+        "ls_neto_sharpe": round(float(np.nanmean(net) / np.nanstd(net, ddof=1) * np.sqrt(12)), 2) if np.nanstd(net, ddof=1) > 0 else None,
         "meses": len(ic), "ic": round(float(ic.mean()), 4), "ic_t": round(float(ic.mean() / ic.std(ddof=1) * np.sqrt(len(ic))), 2) if ic.std(ddof=1) > 0 else None,
         "ic_pos": round(float((ic > 0).mean() * 100), 1),
         "q": [round(float(v) * 100, 3) for v in q],
@@ -104,6 +119,63 @@ def stats(sig, fwd):
         "ic_serie": [[d.strftime("%Y-%m-%d"), round(float(v), 3)] for d, v in zip(dates, ic)],
         "desde": dates[0].strftime("%Y-%m-%d"), "hasta": dates[-1].strftime("%Y-%m-%d"),
     }
+
+
+def ic_series(sig, fwd):
+    out = {}
+    for d in sig.index:
+        if d not in fwd.index:
+            continue
+        x, y = sig.loc[d], fwd.loc[d]
+        m = x.notna() & y.notna()
+        if m.sum() >= MIN_N:
+            out[d] = x[m].rank().corr(y[m].rank())
+    return pd.Series(out, dtype=float)
+
+
+def nw_t(x, lag):
+    """Estadístico t de la media con errores de Newey-West: corrige el solapamiento de horizontes > 1 mes."""
+    x = np.asarray(x, float)
+    x = x[~np.isnan(x)]
+    n = len(x)
+    if n < 8:
+        return None
+    e = x - x.mean()
+    v = e @ e / n
+    for k in range(1, min(lag, n - 1) + 1):
+        v += 2 * (1 - k / (lag + 1)) * (e[k:] @ e[:-k]) / n
+    return float(x.mean() / np.sqrt(v / n)) if v > 0 else None
+
+
+def neutralize(sig, expo):
+    """Residuo de la nota tras quitar, cada mes, lo que explican sector, tamaño y beta (regresión transversal)."""
+    out = pd.DataFrame(index=sig.index, columns=sig.columns, dtype=float)
+    for d in sig.index:
+        X = expo.get(d)
+        if X is None:
+            continue
+        y = sig.loc[d]
+        m = y.notna() & X.notna().all(axis=1)
+        if m.sum() < MIN_N:
+            continue
+        A = X[m].values
+        b, *_ = np.linalg.lstsq(A, y[m].values, rcond=None)
+        out.loc[d, m[m].index] = y[m].values - A @ b
+    return out
+
+
+def hz_stats(sig, sig_n, fwdH):
+    r = {}
+    for h, n in HZ.items():
+        a, b = ic_series(sig, fwdH[h]), ic_series(sig_n, fwdH[h])
+        if len(a) < 8:
+            continue
+        lag = max(0, n // 21 - 1)
+        r[h] = {"n": int(len(a)), "ic": round(float(a.mean()), 4), "t": None if nw_t(a, lag) is None else round(nw_t(a, lag), 2),
+                "ic_pos": round(float((a > 0).mean() * 100), 1),
+                "ic_n": round(float(b.mean()), 4) if len(b) >= 8 else None,
+                "t_n": None if len(b) < 8 or nw_t(b, lag) is None else round(nw_t(b, lag), 2)}
+    return r
 
 
 def composite(cat_sig, w):
@@ -164,6 +236,24 @@ def run(frames, rows, cache, default_w):
     D = idx[me]
     fwd = pd.DataFrame({d: P.iloc[i + H] / P.iloc[i] - 1 for d, i in zip(D, me)}).T
     fwd = fwd.clip(-0.9, 3)
+    fwdH = {h: pd.DataFrame({d: (P.iloc[i + n] / P.iloc[i] - 1) if i + n < len(idx) else pd.Series(np.nan, index=P.columns)
+                             for d, i in zip(D, me)}).T.clip(-0.95, 5) for h, n in HZ.items()}
+
+    # exposiciones para neutralizar: sector (dummies), tamaño (log capitalización) y beta de 1 año frente al universo
+    mkt = rets.mean(axis=1)
+    dums = pd.get_dummies(sector.fillna("Otros"), dtype=float)
+    expo = {}
+    for d, i in zip(D, me):
+        R = rets.iloc[i - 251:i + 1]
+        mk = mkt.iloc[i - 251:i + 1]
+        mc = mk - mk.mean()
+        beta = (R - R.mean()).mul(mc, axis=0).sum() / (mc @ mc) if (mc @ mc) > 0 else pd.Series(np.nan, index=P.columns)
+        beta = beta.where(R.notna().sum() > 200)
+        size = np.log((mcap_now * P.iloc[i] / last_px).where(lambda x: x > 0))
+        X = pd.concat([dums, size.rename("_size"), beta.rename("_beta")], axis=1)
+        X["_size"] = (X["_size"] - X["_size"].mean()) / X["_size"].std()
+        X["_beta"] = (X["_beta"] - X["_beta"].mean()) / X["_beta"].std()
+        expo[d] = X
 
     sma200 = P.rolling(200, min_periods=150).mean()
     vol63 = rets.rolling(63, min_periods=50).std()
@@ -219,12 +309,14 @@ def run(frames, rows, cache, default_w):
     for k, name, cat, fia, txt in FACT:
         st = stats(sig[k], fwd)
         if st:
-            out_f.append({"k": k, "nombre": name, "categoria": cat, "fiabilidad": fia, "explica": txt, **st})
+            out_f.append({"k": k, "nombre": name, "categoria": cat, "fiabilidad": fia, "explica": txt, **st,
+                          "hz": hz_stats(sig[k], neutralize(sig[k], expo), fwdH)})
     out_c = []
     for c in CATS:
         st = stats(cat_sig[c], fwd)
         if st:
-            out_c.append({"k": c, "nombre": CAT_NAME[c], "fiabilidad": "completa" if c == "momentum" else "aproximada", **st})
+            out_c.append({"k": c, "nombre": CAT_NAME[c], "fiabilidad": "completa" if c == "momentum" else "aproximada", **st,
+                          "hz": hz_stats(cat_sig[c], neutralize(cat_sig[c], expo), fwdH)})
     ic_cat = {c["k"]: c["ic"] for c in out_c}
     t_cat = {c["k"]: c["ic_t"] for c in out_c}
 
@@ -246,6 +338,47 @@ def run(frames, rows, cache, default_w):
                    "actual": {k: a[k] for k in ("meses", "ic", "ic_t", "ls_anual", "ls_sharpe")},
                    "sugerido": {k: b[k] for k in ("meses", "ic", "ic_t", "ls_anual", "ls_sharpe")}}
 
+    # walk-forward: cada año, pesos calculados solo con los meses anteriores y aplicados a ese año
+    wf_rows, ic_a, ic_w = [], [], []
+    comp_base = composite(cat_sig, base)
+    for y in sorted(set(D.year)):
+        past = D[D < pd.Timestamp(y, 1, 1)]
+        cur = D[D.year == y]
+        if len(past) < 12 or not len(cur):
+            continue
+        st = {c: stats(cat_sig[c].loc[past], fwd.loc[past]) for c in CATS}
+        if not all(st.values()):
+            continue
+        wy = suggest({c: st[c]["ic"] for c in CATS}, base, {c: st[c]["ic_t"] for c in CATS})
+        a = ic_series(comp_base.loc[cur], fwd.loc[cur])
+        b = ic_series(composite(cat_sig, wy).loc[cur], fwd.loc[cur])
+        if len(a) and len(b):
+            ic_a += list(a.values)
+            ic_w += list(b.values)
+            wf_rows.append({"anio": int(y), "meses": int(len(b)), "pesos": wy, "ic_actual": round(float(a.mean()), 4), "ic_wf": round(float(b.mean()), 4)})
+    wf = None
+    if wf_rows:
+        ia, iw = np.array(ic_a), np.array(ic_w)
+        wf = {"anios": wf_rows, "meses": len(iw), "ic_actual": round(float(ia.mean()), 4), "ic_wf": round(float(iw.mean()), 4),
+              "t_actual": None if nw_t(ia, 0) is None else round(nw_t(ia, 0), 2), "t_wf": None if nw_t(iw, 0) is None else round(nw_t(iw, 0), 2)}
+
+    # pruebas múltiples: umbral de t con corrección de Bonferroni (5 %, bilateral) para todas las pruebas hechas
+    n_tests = (len(out_f) + len(out_c)) * len(HZ)
+    t_crit = round(NormalDist().inv_cdf(1 - 0.05 / (2 * max(n_tests, 1))), 2)
+    passing = []
+    for x in out_c + [f for f in out_f if f["categoria"] in CATS]:
+        for h, v in (x.get("hz") or {}).items():
+            if v["ic"] >= IC_MIN and (v["t"] or 0) >= t_crit:
+                passing.append({"k": x["k"], "nombre": x["nombre"], "horizonte": h, "ic": v["ic"], "t": v["t"], "t_n": v["t_n"]})
+    veredicto = {
+        "etiqueta": "oportunidad" if passing else "ordenación",
+        "supera": passing, "t_umbral": t_crit, "pruebas": n_tests, "ic_min": IC_MIN,
+        "texto": (f"{len(passing)} factor(es) de la puntuación superan IC ≥ {IC_MIN} con t ≥ {t_crit}: la nota tiene evidencia como «puntuación de oportunidad»."
+                  if passing else
+                  f"Ningún factor de la puntuación alcanza IC ≥ {IC_MIN} con t ≥ {t_crit} (umbral corregido por {n_tests} pruebas). "
+                  "La nota sirve para ordenar valores según sus características, no como señal de rentabilidad futura: pasa a llamarse «puntuación de ordenación»."),
+    }
+
     res = {
         "generado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "universo": int(P.shape[1]), "meses": len(D), "desde": D[0].strftime("%Y-%m-%d"), "hasta": D[-1].strftime("%Y-%m-%d"),
@@ -254,6 +387,7 @@ def run(frames, rows, cache, default_w):
         "compuesto": {"actual": comp_now, "sugerido": comp_sug},
         "pesos": {"actual": default_w, "sugerido": {**default_w, **sug}},
         "fuera_muestra": oos,
+        "walk_forward": wf, "veredicto": veredicto, "horizontes": list(HZ), "coste_pb": COST * 1e4,
         "no_evaluables": [
             {"k": "smart", "nombre": "Smart money", "motivo": "Dataroma y las declaraciones del Congreso no ofrecen gratis un historial fechado de cuándo se conoció cada dato. Mantiene su peso, sin evidencia a favor ni en contra."},
             {"k": "macro", "nombre": "Encaje macro", "motivo": "El modelo de régimen no guarda historial de probabilidades; se podrá medir cuando acumule meses."},
@@ -261,7 +395,8 @@ def run(frames, rows, cache, default_w):
         "sesgos": [
             "Supervivencia: solo entran los valores que hoy están en los índices; los que quebraron o salieron no cuentan. Infla algo los resultados, sobre todo de valor y reversión.",
             "Fundamentales aproximados: cuentas anuales de Yahoo (4-5 ejercicios), supuestas conocidas el 1 de abril del año siguiente; la capitalización pasada se reconstruye con el precio. Cobertura más corta que la de precios.",
-            "Sin costes de transacción ni impuestos. La cartera Q5 − Q1 es teórica (incluye posiciones cortas).",
+            "Costes: 15 pb por operación y lado aplicados a la rotación mensual de la cartera Q5 − Q1; sin impuestos, sin coste de préstamo de títulos para las posiciones cortas ni impacto en precio.",
+            "Horizontes de 3, 6 y 12 meses: las ventanas se solapan; el estadístico t usa la corrección de Newey-West.",
             "Muestra corta (unos 4 años de meses evaluables): un IC medio necesita t > 2 para ser fiable.",
         ],
     }
