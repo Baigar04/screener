@@ -34,7 +34,8 @@ jobs:
       - name: Fundamentales SEC «a fecha» (laboratorio)
         continue-on-error: true
         env:
-          SEC_UA: "screener-personal barrillaga94@gmail.com"
+          # Nombre y correo de contacto que exige la SEC: secreto de Actions (Settings → Secrets and variables → Actions → SEC_UA)
+          SEC_UA: ${{ secrets.SEC_UA }}
         run: python scripts/fetch_sec.py
       - name: Acciones, sectores y técnico
         continue-on-error: true

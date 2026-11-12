@@ -1,2 +1,10 @@
+# datos generados por el workflow (se publican en GitHub Pages, no se versionan)
 data/
+_site/
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+# sistema
+.DS_Store

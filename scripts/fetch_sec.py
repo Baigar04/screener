@@ -92,10 +92,16 @@ def parse(facts):
 
 
 def main():
-    if not UA or "@" not in UA:
-        log("SEC_UA no definido: la SEC exige nombre y correo; se omite.")
-        return 0
     os.makedirs(DATA, exist_ok=True)
+    if not UA or "@" not in UA:
+        log("SEC_UA no definido (secreto de Actions): la SEC exige nombre y correo; no se piden datos nuevos.")
+        # el laboratorio corre antes de restaurar los ficheros publicados: se deja ya la última caché publicada
+        try:
+            open(os.path.join(DATA, "sec_cache.json"), "wb").write(get_site("data/sec_cache.json"))
+            log("Se usa la caché SEC publicada.")
+        except Exception as e:  # noqa: BLE001
+            log("Sin caché SEC publicada:", e)
+        return 0
     try:
         cache = json.loads(get_site("data/sec_cache.json"))
     except Exception:  # noqa: BLE001
