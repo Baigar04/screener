@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,6 +31,11 @@ jobs:
         run: pip install -r requirements.txt
       - name: Datos macro
         run: python scripts/fetch_macro.py
+      - name: Fundamentales SEC «a fecha» (laboratorio)
+        continue-on-error: true
+        env:
+          SEC_UA: "screener-personal barrillaga94@gmail.com"
+        run: python scripts/fetch_sec.py
       - name: Acciones, sectores y técnico
         continue-on-error: true
         run: python scripts/fetch_equities.py
@@ -44,7 +49,7 @@ jobs:
         run: python scripts/score.py
       - name: Si falla alguna fuente, conservar los datos publicados
         run: |
-          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json news_cache.json lab.json; do
+          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json news_cache.json lab.json sec_cache.json lab_extra.json; do
             if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; fi
           done
       - name: Preparar sitio

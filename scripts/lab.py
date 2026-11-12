@@ -221,13 +221,104 @@ def suggest(ic_by_cat, base, t_by_cat=None):
     return {k: int(round(v)) for k, v in w.items()}
 
 
+def sp_removed():
+    """Valores que salieron del S&P 500 / S&P 400 desde 2015, con la fecha de salida (Wikipedia)."""
+    import io
+    import urllib.request
+    out = {}
+    for u in ("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"):
+        try:
+            req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (screener personal; github.com/Baigar04)"})
+            html = urllib.request.urlopen(req, timeout=60).read().decode()
+            for t in pd.read_html(io.StringIO(html)):
+                cols = [" ".join(map(str, c)) if isinstance(c, tuple) else str(c) for c in t.columns]
+                rc = [i for i, c in enumerate(cols) if "Removed" in c]
+                dc = [i for i, c in enumerate(cols) if "Date" in c]
+                if not rc or not dc:
+                    continue
+                tc = next((i for i in rc if "Ticker" in cols[i] or "Symbol" in cols[i]), rc[0])
+                for _, r in t.iterrows():
+                    d = pd.to_datetime(str(r.iloc[dc[0]]), errors="coerce")
+                    tk = str(r.iloc[tc]).strip().upper().replace(".", "-")
+                    if pd.isna(d) or d < pd.Timestamp(2015, 1, 1) or not tk or tk == "NAN" or len(tk) > 6:
+                        continue
+                    out[tk] = min(out.get(tk, d), d)
+        except Exception as e:  # noqa: BLE001
+            print("lab: sin historial de cambios", u[-30:], e)
+    return out
+
+
+def prices_10y(syms):
+    """Precios ajustados (Adj Close) y sin ajustar por dividendos (Close) a 10 años, por lotes."""
+    import yfinance as yf
+    adj, cls = {}, {}
+    for i in range(0, len(syms), 200):
+        ch = syms[i:i + 200]
+        try:
+            df = yf.download(ch, period="10y", interval="1d", auto_adjust=False, progress=False, threads=True, group_by="column")
+        except Exception as e:  # noqa: BLE001
+            print("lab: lote sin precios", i, e)
+            continue
+        for k, dst in (("Adj Close", adj), ("Close", cls)):
+            if k not in df:
+                continue
+            x = df[k]
+            if isinstance(x, pd.Series):
+                x = x.to_frame(ch[0])
+            for c in x.columns:
+                v = x[c].dropna()
+                if len(v) > 300:
+                    dst[c] = v
+    return pd.DataFrame(adj).sort_index(), pd.DataFrame(cls).sort_index()
+
+
+def sec_at(fy, d):
+    """Último 10-K presentado antes de d y el del ejercicio anterior (datos SEC «a fecha»)."""
+    lim = (d - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    known = [r for r in fy if r[1] <= lim]
+    if not known:
+        return None, None
+    cur = max(known, key=lambda r: r[0])
+    ce = pd.Timestamp(cur[0])
+    prev = next((r for r in sorted(known, key=lambda r: r[0], reverse=True)
+                 if 300 <= (ce - pd.Timestamp(r[0])).days <= 430), None)
+    return cur, prev
+
+
 def run(frames, rows, cache, default_w):
-    P = pd.DataFrame({s: f["Close"] for s, f in frames.items()}).sort_index().ffill(limit=5)
+    # ---- datos: 10 años de precios + ex miembros del S&P que siguen cotizando + fundamentales SEC «a fecha»
+    syms = [r["sym"] for r in rows]
+    removed = {k: v for k, v in sp_removed().items() if k not in set(syms)}
+    try:
+        sec = json.load(open(os.path.join(DATA, "sec_cache.json"))).get("sim", {})
+    except Exception:  # noqa: BLE001
+        sec = {}
+    P, C = prices_10y(syms + sorted(removed))
+    if P.shape[1] < 0.5 * len(syms):  # si falla la descarga larga, se usan los 5 años de la web
+        P = pd.DataFrame({s: f["Close"] for s, f in frames.items()}).sort_index()
+        C = P.copy()
+        removed = {}
+    P = P[P.index >= P.index[-1] - pd.Timedelta(days=3660)].ffill(limit=5)
+    extra = sorted(k for k in removed if k in P.columns)
+    for k in extra:  # un ex miembro solo cuenta hasta su salida del índice
+        P.loc[P.index > removed[k], k] = np.nan
+    json.dump({"generado": datetime.now(timezone.utc).isoformat(timespec="seconds"), "extra": extra},
+              open(os.path.join(DATA, "lab_extra.json"), "w"))
     P = P.loc[:, P.notna().sum() > 300]
     rets = P.pct_change(fill_method=None)
     sector = pd.Series({r["sym"]: r.get("sector") for r in rows}).reindex(P.columns)
     mcap_now = pd.Series({r["sym"]: _f(r.get("mcap")) for r in rows}).reindex(P.columns)
     last_px = P.ffill().iloc[-1]
+    # capitalización de referencia de los ex miembros: acciones del último 10-K × precio de ese día
+    for k in extra:
+        fy = (sec.get(k) or {}).get("fy") or []
+        f = next((r for r in sorted(fy, key=lambda r: r[1], reverse=True) if r[9]), None)
+        if not f or k not in C.columns or k not in P.columns:
+            continue
+        dd = C.index[C.index <= pd.Timestamp(f[1])]
+        if len(dd) and C.at[dd[-1], k] == C.at[dd[-1], k] and P.at[dd[-1], k] == P.at[dd[-1], k]:
+            mcap_now[k] = f[9] * C.at[dd[-1], k] * last_px[k] / P.at[dd[-1], k]
+    us_cols = [c for c in P.columns if "." not in c]
 
     # fechas de rebalanceo: último día de cada mes con 12 meses de historia detrás y 1 mes por delante
     idx = P.index
@@ -263,7 +354,40 @@ def run(frames, rows, cache, default_w):
     }
     # fundamentales «a fecha»
     fund = {k: pd.DataFrame(index=D, columns=P.columns, dtype=float) for k in ("roe", "mg", "dp", "ep", "bp", "fy", "cv", "cb")}
+    n_sec = 0
     for s in P.columns:
+        fy = (sec.get(s) or {}).get("fy") or []
+        if len(fy) >= 2 and mcap_now.get(s):
+            n_sec += 1
+            for d in D:
+                cur, prev = sec_at(fy, d)
+                if not cur:
+                    continue
+                px = P.at[d, s]
+                if not (px == px):
+                    continue
+                mc = mcap_now[s] * px / last_px[s]
+                ve, bn, eb, eq, de, cfo, cpx = cur[2:9]
+                if bn is not None and eq and eq > 0:
+                    fund["roe"].at[d, s] = bn / eq
+                if eb is not None and ve and ve > 0:
+                    fund["mg"].at[d, s] = eb / ve
+                if de is not None and eq and eq > 0:
+                    fund["dp"].at[d, s] = -de / eq
+                if mc and mc > 0:
+                    if bn is not None:
+                        fund["ep"].at[d, s] = bn / mc
+                    if eq is not None:
+                        fund["bp"].at[d, s] = eq / mc
+                    if cfo is not None:
+                        fund["fy"].at[d, s] = (cfo - (cpx or 0)) / mc
+                if prev:
+                    pv, pb = prev[2], prev[3]
+                    if ve is not None and pv and pv > 0:
+                        fund["cv"].at[d, s] = ve / pv - 1
+                    if bn is not None and pb and pb > 0:
+                        fund["cb"].at[d, s] = bn / pb - 1
+            continue
         an = (cache.get(s) or {}).get("anual") or {}
         if not an or not mcap_now.get(s):
             continue
@@ -309,14 +433,16 @@ def run(frames, rows, cache, default_w):
     for k, name, cat, fia, txt in FACT:
         st = stats(sig[k], fwd)
         if st:
-            out_f.append({"k": k, "nombre": name, "categoria": cat, "fiabilidad": fia, "explica": txt, **st,
+            out_f.append({"k": k, "nombre": name, "categoria": cat, "fiabilidad": "sec" if fia == "aproximada" else fia, "explica": txt, **st,
                           "hz": hz_stats(sig[k], neutralize(sig[k], expo), fwdH)})
     out_c = []
     for c in CATS:
         st = stats(cat_sig[c], fwd)
         if st:
-            out_c.append({"k": c, "nombre": CAT_NAME[c], "fiabilidad": "completa" if c == "momentum" else "aproximada", **st,
-                          "hz": hz_stats(cat_sig[c], neutralize(cat_sig[c], expo), fwdH)})
+            us = cat_sig[c][us_cols]
+            out_c.append({"k": c, "nombre": CAT_NAME[c], "fiabilidad": "completa" if c == "momentum" else "sec", **st,
+                          "hz": hz_stats(cat_sig[c], neutralize(cat_sig[c], expo), fwdH),
+                          "hz_us": hz_stats(us, neutralize(us, {d: x.loc[us_cols] for d, x in expo.items()}), {h: f[us_cols] for h, f in fwdH.items()})})
     ic_cat = {c["k"]: c["ic"] for c in out_c}
     t_cat = {c["k"]: c["ic_t"] for c in out_c}
 
@@ -368,14 +494,15 @@ def run(frames, rows, cache, default_w):
     passing = []
     for x in out_c + [f for f in out_f if f["categoria"] in CATS]:
         for h, v in (x.get("hz") or {}).items():
-            if v["ic"] >= IC_MIN and (v["t"] or 0) >= t_crit:
+            # además debe sobrevivir a la neutralización (t ≥ 2): si no, era un efecto de sector, tamaño, beta o región
+            if v["ic"] >= IC_MIN and (v["t"] or 0) >= t_crit and (v["t_n"] or 0) >= 2:
                 passing.append({"k": x["k"], "nombre": x["nombre"], "horizonte": h, "ic": v["ic"], "t": v["t"], "t_n": v["t_n"]})
     veredicto = {
         "etiqueta": "oportunidad" if passing else "ordenación",
         "supera": passing, "t_umbral": t_crit, "pruebas": n_tests, "ic_min": IC_MIN,
-        "texto": (f"{len(passing)} factor(es) de la puntuación superan IC ≥ {IC_MIN} con t ≥ {t_crit}: la nota tiene evidencia como «puntuación de oportunidad»."
+        "texto": (f"{len(passing)} factor(es) de la puntuación superan IC ≥ {IC_MIN} con t ≥ {t_crit} y siguen siendo significativos tras neutralizar (t ≥ 2): la nota tiene evidencia como «puntuación de oportunidad»."
                   if passing else
-                  f"Ningún factor de la puntuación alcanza IC ≥ {IC_MIN} con t ≥ {t_crit} (umbral corregido por {n_tests} pruebas). "
+                  f"Ningún factor de la puntuación alcanza IC ≥ {IC_MIN} con t ≥ {t_crit} (umbral corregido por {n_tests} pruebas) y t ≥ 2 tras neutralizar. "
                   "La nota sirve para ordenar valores según sus características, no como señal de rentabilidad futura: pasa a llamarse «puntuación de ordenación»."),
     }
 
@@ -387,17 +514,18 @@ def run(frames, rows, cache, default_w):
         "compuesto": {"actual": comp_now, "sugerido": comp_sug},
         "pesos": {"actual": default_w, "sugerido": {**default_w, **sug}},
         "fuera_muestra": oos,
-        "walk_forward": wf, "veredicto": veredicto, "horizontes": list(HZ), "coste_pb": COST * 1e4,
+        "walk_forward": wf, "veredicto": veredicto,
+        "fuentes": {"sec": n_sec, "ex_miembros": len([k for k in extra if k in P.columns]), "anios_precio": round((P.index[-1] - P.index[0]).days / 365.25, 1)}, "horizontes": list(HZ), "coste_pb": COST * 1e4,
         "no_evaluables": [
             {"k": "smart", "nombre": "Smart money", "motivo": "Dataroma y las declaraciones del Congreso no ofrecen gratis un historial fechado de cuándo se conoció cada dato. Mantiene su peso, sin evidencia a favor ni en contra."},
             {"k": "macro", "nombre": "Encaje macro", "motivo": "El modelo de régimen no guarda historial de probabilidades; se podrá medir cuando acumule meses."},
         ],
         "sesgos": [
-            "Supervivencia: solo entran los valores que hoy están en los índices; los que quebraron o salieron no cuentan. Infla algo los resultados, sobre todo de valor y reversión.",
-            "Fundamentales aproximados: cuentas anuales de Yahoo (4-5 ejercicios), supuestas conocidas el 1 de abril del año siguiente; la capitalización pasada se reconstruye con el precio. Cobertura más corta que la de precios.",
+            f"Supervivencia, reducida: entran {len([k for k in extra if k in P.columns])} ex miembros del S&P 500/400 que siguen cotizando, cada uno hasta su fecha de salida. Siguen fuera las empresas que dejaron de cotizar (compradas o quebradas), porque Yahoo no guarda sus precios, y los miembros actuales cuentan también antes de entrar en el índice.",
+            f"Fundamentales de EE. UU. ({n_sec} empresas): cuentas del 10-K original de la SEC con su fecha real de presentación, sin reexpresiones. Europa: cuentas anuales de Yahoo (4-5 ejercicios) supuestas conocidas el 1 de abril siguiente.",
+            "Capitalización pasada reconstruida con el precio (acciones constantes); en ex miembros, con las acciones del último 10-K.",
             "Costes: 15 pb por operación y lado aplicados a la rotación mensual de la cartera Q5 − Q1; sin impuestos, sin coste de préstamo de títulos para las posiciones cortas ni impacto en precio.",
             "Horizontes de 3, 6 y 12 meses: las ventanas se solapan; el estadístico t usa la corrección de Newey-West.",
-            "Muestra corta (unos 4 años de meses evaluables): un IC medio necesita t > 2 para ser fiable.",
         ],
     }
     with open(os.path.join(DATA, "lab.json"), "w") as fh:

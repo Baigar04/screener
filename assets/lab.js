@@ -21,7 +21,9 @@ function verdict(x) {
   return ["sin", "Sin evidencia"];
 }
 const badge = (x) => { const [c, t] = verdict(x); return `<span class="lab-v lab-${c}">${t}</span>`; };
-const fia = (f) => `<span class="lab-fia ${f === "completa" ? "c" : "a"}" data-tip="${f === "completa" ? "Solo usa precios conocidos en cada fecha" : "Cuentas anuales supuestas publicadas el 1 de abril siguiente; cobertura más corta"}">${f === "completa" ? "Fiabilidad completa" : "Fiabilidad aproximada"}</span>`;
+const fia = (f) => f === "completa" ? `<span class="lab-fia c" data-tip="Solo usa precios conocidos en cada fecha">Fiabilidad completa</span>`
+  : f === "sec" ? `<span class="lab-fia c" data-tip="EE. UU.: 10-K original de la SEC con su fecha real de presentación. Europa: cuentas anuales de Yahoo aproximadas">EE. UU.: SEC a fecha · Europa: aproximada</span>`
+  : `<span class="lab-fia a" data-tip="Cuentas anuales supuestas publicadas el 1 de abril siguiente; cobertura más corta">Fiabilidad aproximada</span>`;
 
 function qBars(q) {
   const W = 520, Hh = 170, pad = 30, m = Math.max(0.05, ...q.map((v) => Math.abs(v || 0)));
@@ -62,7 +64,7 @@ function render() {
 
   if (lv <= 1) h += `<div class="box lab-intro"><b>Cómo leerlo</b> Cada fin de mes se ordenan los valores por un factor (por ejemplo, momentum) y se mira qué pasó el mes siguiente.
     Si los mejor puntuados suben más que los peor puntuados de forma repetida, el factor <strong>aporta</strong>. Si no hay diferencia clara, es <strong>ruido</strong>, y darle mucho peso solo añade riesgo.</div>`;
-  h += `<div class="status-line hint">Universo: ${d.universo} valores · ${d.meses} meses evaluados (${fmtDate(d.desde)} – ${fmtDate(d.hasta)}) · horizonte ${esc(d.horizonte)} · calculado ${fmtDate(d.generado.slice(0, 10))}</div>`;
+  h += `<div class="status-line hint">Universo: ${d.universo} valores · ${d.meses} meses evaluados (${fmtDate(d.desde)} – ${fmtDate(d.hasta)}) · horizonte ${esc(d.horizonte)} · calculado ${fmtDate(d.generado.slice(0, 10))}${d.fuentes ? ` · ${nf(d.fuentes.anios_precio, 0)} años de precios · ${d.fuentes.sec} empresas con cuentas SEC · ${d.fuentes.ex_miembros} ex miembros del S&P` : ""}</div>`;
 
   /* veredicto global (Fase 1): ¿la nota es «de oportunidad» o solo «de ordenación»? */
   const V = d.veredicto;
@@ -97,7 +99,7 @@ function render() {
   const hzRows = (list) => list.filter((x) => x.hz).map((x) => `<tr><td>${esc(x.nombre)}</td>${HZ.map((k) => cell(x.hz[k])).join("")}</tr>`).join("");
   if (d.categorias.some((c) => c.hz)) h += `<h2 class="sec">Por horizonte y neutralizado</h2><div class="box"><div class="lab-tw"><table class="lab-hz"><thead><tr><th rowspan="2">Factor</th>${HZ.map((k) => `<th colspan="2">${HZN[k] || k}</th>`).join("")}</tr>
       <tr>${HZ.map(() => `<th data-tip="IC medio y estadístico t (Newey-West en horizontes solapados)">IC</th><th data-tip="IC tras quitar el efecto de sector, tamaño y beta cada mes">Neutral</th>`).join("")}</tr></thead>
-      <tbody>${hzRows(d.categorias)}${lv >= 1 ? `<tr><td colspan="${1 + HZ.length * 2}" class="hint">Subfactores y controles</td></tr>${hzRows(d.factores)}` : ""}</tbody></table></div>
+      <tbody>${hzRows(d.categorias)}${d.categorias.some((c) => c.hz_us) ? `<tr><td colspan="${1 + HZ.length * 2}" class="hint">Solo EE. UU. (fundamentales de la SEC)</td></tr>${d.categorias.filter((c) => c.hz_us).map((x) => `<tr><td>${esc(x.nombre)}</td>${HZ.map((k) => cell(x.hz_us[k])).join("")}</tr>`).join("")}` : ""}${lv >= 1 ? `<tr><td colspan="${1 + HZ.length * 2}" class="hint">Subfactores y controles</td></tr>${hzRows(d.factores)}` : ""}</tbody></table></div>
     <div class="method">Neutral: lo que el factor aporta por sí mismo, descontado el sector, el tamaño y la beta. Si el IC cae mucho al neutralizar, el factor era en realidad una apuesta por un sector, por empresas grandes o pequeñas, o por más o menos riesgo de mercado.
       Resaltado: supera IC ≥ ${nf(V?.ic_min ?? 0.02, 2)} y el umbral de t corregido por pruebas múltiples (${nf(V?.t_umbral, 2)}).</div></div>`;
 
