@@ -28,7 +28,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Pruebas (si fallan, no se publica nada)
+        run: python -m pytest -q tests
       - name: Datos macro
         run: python scripts/fetch_macro.py
       - name: Fundamentales SEC «a fecha» (laboratorio)
@@ -50,9 +52,16 @@ jobs:
         run: python scripts/score.py
       - name: Si falla alguna fuente, conservar los datos publicados
         run: |
-          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json news_cache.json lab.json sec_cache.json lab_extra.json; do
+          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json score_diario.json news_cache.json lab.json sec_cache.json lab_extra.json; do
             if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; fi
           done
+      - name: Prueba de la validación (solo si existe tests/INYECTAR_CORRUPTO)
+        if: hashFiles('tests/INYECTAR_CORRUPTO') != ''
+        run: |
+          echo "Prueba: se corrompe data/universe.json; la validación debe publicar la última versión válida"
+          head -c 5000 data/universe.json > /tmp/u && mv /tmp/u data/universe.json
+      - name: Validar antes de publicar (si un fichero no pasa, se publica la última versión válida)
+        run: python scripts/validate.py
       - name: Preparar sitio
         run: |
           mkdir -p _site

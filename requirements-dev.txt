@@ -1,0 +1,2 @@
+# Solo para las pruebas (tests/), que el workflow ejecuta antes de calcular nada
+pytest==9.1.1
