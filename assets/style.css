@@ -611,3 +611,13 @@ h2.sec .dd{display:inline-block;margin-left:8px;vertical-align:middle;font-size:
 .f-exec-i b{font-size:14px;font-weight:600;white-space:nowrap}
 .f-exec .f-link{align-self:center;margin:6px 10px;flex:none}
 @media (max-width:640px){.f-exec-i{flex-basis:45%;border-bottom:1px solid var(--border)}.f-exec .f-link{margin:8px auto}}
+/* navegación en 4 áreas y modos Compacto / Explicado (Fase 1.7) */
+.subnav{display:flex;gap:6px;margin:0 0 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;border-bottom:1px solid var(--border);padding-bottom:10px}
+.subnav::-webkit-scrollbar{display:none}
+.subnav button{display:inline-flex;align-items:center;gap:6px;flex:none;background:none;border:1px solid var(--border);border-radius:999px;padding:6px 12px;color:var(--muted);cursor:pointer;font:500 13px var(--font);white-space:nowrap}
+.subnav button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.subnav button:hover{color:var(--text);background:var(--surface-2)}
+.subnav button.on{background:var(--accent-soft);color:var(--text);border-color:var(--accent)}
+html[data-mode="c"] h2.sec > .hint,html[data-mode="c"] .method:not(.keep),html[data-mode="c"] .lab-intro{display:none}
+#level button{min-width:84px}
+@media (max-width:640px){#level button{min-width:0}.subnav{margin:-4px -14px 14px;padding:0 14px 10px}}

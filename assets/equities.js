@@ -149,7 +149,7 @@ function renderSectores() {
   let h = `<h2 class="sec">Radar de sectores <span class="hint">Medianas de ${E.uni.n} valores. Azul = mejor, naranja = peor en cada columna. Pulsa un sector para ver sus industrias.</span></h2>
     <div class="bar">${["Todos", "EE. UU.", "Europa"].map((r) => `<button class="chip ${E.region === r ? "on" : ""}" data-eqr="${r}">${r}</button>`).join("")}
     ${H.dropdown("secmetric", "Ordenar por:", SEC_COLS.filter((c) => c[2] != null && c[3] <= lv).map((c) => [c[0], c[1]]), m)}</div>`;
-  if (lv === 0) {
+  if (H.S.explain) {
     const lab = SEC_COLS.find((c) => c[0] === m)[1];
     h += `<div class="panel" style="margin-bottom:10px">Por «${esc(lab)}», los sectores más fuertes son <b>${esc(rows.slice(0, 3).map((r) => sn(r[0])).join(", "))}</b> y los más débiles <b>${esc(rows.slice(-3).map((r) => sn(r[0])).join(", "))}</b>. Que un sector haya subido no garantiza que siga subiendo.</div>`;
   }
@@ -611,7 +611,7 @@ function scoreBox(r) {
     <div class="sc-top">${scoreBadge(r.score)}<span class="hint">de 100 · percentil frente a su sector</span></div>
     ${FACT.map(([k, t]) => `<div class="prob" data-tip="${esc(FACT_TIP[k])}"><span>${t}${E.w[k] ? "" : ' <span class="hint">(peso 0)</span>'}</span><div class="track"><div class="fill" style="width:${f[k] ?? 0}%;background:${f[k] == null ? "var(--surface-3)" : f[k] >= 70 ? "var(--good)" : f[k] >= 40 ? "var(--faint)" : "var(--bad)"}"></div></div><span class="num">${f[k] == null ? "—" : Math.round(f[k])}</span></div>`).join("")}
     ${ex ? `<div class="sc-ex"><div>${esc(ex.por)}</div>${ex.inv ? `<div>${esc(ex.inv)}</div>` : ""}<div>${esc(ex.hz)}</div></div>` : ""}
-    ${lv === 0 ? `<div class="method">Nota para ordenar ideas, no una recomendación de compra.</div>` : ""}</div>`;
+    ${H.S.explain ? `<div class="method">Nota para ordenar ideas, no una recomendación de compra.</div>` : ""}</div>`;
 }
 function miniChart(rows) {
   if (!rows || rows.length < 10) return `<div class="err-box">Sin histórico de precios para el gráfico simplificado.</div>`;

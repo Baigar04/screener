@@ -4,6 +4,8 @@
 Uso: python scripts/check_ui.py _site
 Comprueba en Chrome sin pantalla:
   · Fase 1.6: #/empresa/NVDA abre la ficha a pantalla completa; «atrás» la cierra y vuelve a la sección anterior.
+  · Fase 1.7: las 7 secciones a ≤ 2 clics desde cualquier otra, 4 áreas en la barra, modos Compacto/Explicado
+    y, a 390 px de ancho, sin desbordes horizontales en ninguna sección.
   · Errores de JavaScript en cada sección.
 Imprime OK/FALLA por comprobación y termina con error si alguna falla.
 """
@@ -58,6 +60,54 @@ def fichas(pg, base):
     check("«adelante» la vuelve a abrir", True)
 
 
+AREAS = {"pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "screener": "empresas", "smart": "empresas",
+         "carteras": "carteras", "laboratorio": "laboratorio"}
+
+
+def navegacion(pg, base):
+    pg.goto(base + "#/pulso")
+    pg.wait_for_timeout(1500)
+    n = pg.locator("#nav button").count()
+    check("barra con 4 áreas", n == 4, f"{n} botones")
+    worst = 0
+    for start in ("pulso", "smart", "laboratorio"):
+        for v, area in AREAS.items():
+            pg.goto(base + "#/" + start)
+            pg.wait_for_timeout(300)
+            clicks = 0
+            pg.click(f"#nav button[data-area={area}]")
+            clicks += 1
+            pg.wait_for_timeout(300)
+            if not pg.url.endswith("#/" + v):
+                pg.click(f"[data-sub={v}]")
+                clicks += 1
+                pg.wait_for_timeout(300)
+            if not pg.url.endswith("#/" + v):
+                clicks = 99
+            worst = max(worst, clicks)
+    check("cualquier sección a ≤ 2 clics desde cualquier otra", worst <= 2, f"máximo {worst}")
+    pg.click("#level button[data-mode=c]")
+    c = pg.evaluate("document.documentElement.dataset.mode")
+    pg.click("#level button[data-mode=x]")
+    x = pg.evaluate("document.documentElement.dataset.mode")
+    check("2 modos (Compacto / Explicado)", pg.locator("#level button").count() == 2 and c == "c" and x == "x")
+
+
+def movil(pg, base):
+    pg.set_viewport_size({"width": 390, "height": 844})
+    bad = []
+    for v in AREAS:
+        pg.goto(base + "#/" + v)
+        pg.wait_for_timeout(2500)
+        sw = pg.evaluate("document.documentElement.scrollWidth")
+        if sw > 391:
+            bad.append(f"{v} ({sw} px)")
+    check("sin desbordes a 390 px", not bad, ", ".join(bad) or "7 secciones")
+    vis = pg.evaluate("[...document.querySelectorAll('#nav button')].filter(b => b.getBoundingClientRect().width > 0).length")
+    check("móvil: 4-5 accesos en la barra inferior", 4 <= vis <= 5, f"{vis}")
+    pg.set_viewport_size({"width": 1366, "height": 900})
+
+
 def main():
     base = serve(SITE)
     with sync_playwright() as p:
@@ -66,10 +116,11 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        try:
-            fichas(pg, base)
-        except Exception as e:  # noqa: BLE001
-            check("fichas y enlaces directos", False, str(e)[:200])
+        for fn in (fichas, navegacion, movil):
+            try:
+                fn(pg, base)
+            except Exception as e:  # noqa: BLE001
+                check(fn.__name__, False, str(e)[:200])
         for v in ("pulso", "sectores", "adelantarse", "screener", "smart", "carteras", "laboratorio"):
             where[0] = v
             pg.goto(base + "#/" + v)

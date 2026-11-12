@@ -44,7 +44,7 @@ function render() {
   const q = S.q.trim().toLowerCase();
   if (S.tab === "gestores") {
     const rows = D.gestores.filter((g) => !q || g.nombre.toLowerCase().includes(q) || g.pos.some((p) => p[0].toLowerCase() === q));
-    h += `</div>${lv === 0 ? `<div class="panel" style="margin-bottom:10px">Carteras declaradas por gestores con historial reconocido (Buffett, Pabrai, Ackman…). Pulsa uno para ver todo lo que tiene.</div>` : ""}
+    h += `</div>${H.S.explain ? `<div class="panel" style="margin-bottom:10px">Carteras declaradas por gestores con historial reconocido (Buffett, Pabrai, Ackman…). Pulsa uno para ver todo lo que tiene.</div>` : ""}
       <div class="tbl-wrap"><table><thead><tr><th>Gestor</th><th>Trimestre</th><th>Actualizado</th><th>Valores</th><th style="text-align:left">Mayores posiciones</th></tr></thead><tbody>
       ${rows.map((g) => `<tr data-mgr="${esc(g.code)}"><td>${esc(g.nombre)}</td><td>${esc(g.trimestre || "—")}</td><td>${esc(g.actualizado || "—")}</td><td class="num">${g.n}</td>
         <td style="text-align:left"><div class="pos-chips">${g.pos.slice(0, 4).map((p) => `<span class="pos-chip"><b>${esc(p[0])}</b><span>${nf(p[2], 1)} %</span><i style="width:${Math.min(100, (p[2] || 0) * 3)}%"></i></span>`).join("")}</div></td></tr>`).join("")}</tbody></table></div>`;
@@ -102,7 +102,7 @@ function persTab(sym) {
   if (c.length) h += `<h2 class="sec">Congreso de EE. UU. <span class="hint">Operaciones declaradas en los últimos 12 meses</span></h2><div class="tbl-wrap"><table><thead><tr><th style="text-align:left">Congresista</th><th style="text-align:left">Tipo</th><th>Operación</th><th>Declarada</th><th>Desfase</th><th>Importe</th></tr></thead><tbody>
     ${c.map(([n, t, fo, fd, imp, cl]) => `<tr><td style="text-align:left">${esc(n)}</td><td style="text-align:left" class="chg ${t === "Compra" ? "p" : t.startsWith("Venta") ? "n" : ""}">${esc(t)}${cl === "Opción" ? " (opción)" : ""}</td><td>${fmtDate(fo)}</td><td>${fmtDate(fd)}</td><td class="num">${days(fo, fd)} d</td><td class="num">${esc(imp || "—")}</td></tr>`).join("")}
     </tbody></table></div>`;
-  h += `<div class="method">${esc(SMART_TIP)} ${lv === 0 ? "Que un gestor famoso tenga un valor no significa que siga siendo buena compra hoy." : "Las operaciones del Congreso se extraen automáticamente del PDF oficial; el enlace a cada documento está en Smart money → Congreso."}</div>`;
+  h += `<div class="method">${esc(SMART_TIP)} ${H.S.explain ? "Que un gestor famoso tenga un valor no significa que siga siendo buena compra hoy. " : ""}Las operaciones del Congreso se extraen automáticamente del PDF oficial; el enlace a cada documento está en Smart money → Congreso.</div>`;
   return h;
 }
 

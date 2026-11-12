@@ -62,7 +62,7 @@ function render() {
   if (!d) return h + `<div class="skel" style="height:240px"></div>`;
   if (d.err || !d.categorias) return h + `<div class="err-box"><b>Todavía no hay resultados del laboratorio.</b> Se calculan en la actualización diaria de los datos. ${esc(d.err || "")}</div>`;
 
-  if (lv <= 1) h += `<div class="box lab-intro"><b>Cómo leerlo</b> Cada fin de mes se ordenan los valores por un factor (por ejemplo, momentum) y se mira qué pasó el mes siguiente.
+  if (H.S.explain) h += `<div class="box lab-intro"><b>Cómo leerlo</b> Cada fin de mes se ordenan los valores por un factor (por ejemplo, momentum) y se mira qué pasó el mes siguiente.
     Si los mejor puntuados suben más que los peor puntuados de forma repetida, el factor <strong>aporta</strong>. Si no hay diferencia clara, es <strong>ruido</strong>, y darle mucho peso solo añade riesgo.</div>`;
   h += `<div class="status-line hint">Universo: ${d.universo} valores · ${d.meses} meses evaluados (${fmtDate(d.desde)} – ${fmtDate(d.hasta)}) · horizonte ${esc(d.horizonte)} · calculado ${fmtDate(d.generado.slice(0, 10))}${d.fuentes ? ` · ${nf(d.fuentes.anios_precio, 0)} años de precios · ${d.fuentes.sec} empresas con cuentas SEC · ${d.fuentes.ex_miembros} ex miembros del S&P` : ""}</div>`;
 

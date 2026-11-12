@@ -11,8 +11,16 @@ const NAV = [
   ["adelantarse", "Adelantarse", true],
   ["laboratorio", "Laboratorio", true],
 ];
-const LEVELS = ["Principiante", "Intermedio", "Avanzado", "Experto inversor"];
-const LEVELS_SHORT = ["Principiante", "Intermedio", "Avanzado", "Experto"];
+/* 4 áreas en la barra lateral (o inferior en móvil); dentro de cada área, sus secciones en una barra superior */
+const AREAS = [
+  ["mercado", "Mercado", ["pulso", "sectores", "adelantarse"]],
+  ["empresas", "Empresas", ["screener", "smart"]],
+  ["carteras", "Carteras", ["carteras"]],
+  ["laboratorio", "Laboratorio", ["laboratorio"]],
+];
+const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
+/* 2 modos en lugar de 4 niveles: los dos muestran todos los datos; «Explicado» añade las explicaciones */
+const MODES = [["c", "Compacto", "Todos los datos, sin textos de ayuda"], ["x", "Explicado", "Todos los datos con explicaciones de cada bloque"]];
 const REGIONS = [["US", "EE. UU."], ["EZ", "Zona euro"], ["GL", "Global"]];
 const PERIODS = [["cambio_1m", "1 mes"], ["cambio_3m", "3 meses"], ["cambio_1a", "1 año"]];
 const KEY_BASIC = ["fed_upper", "ecb_dfr", "us10y", "t10y3m", "cpi_us", "hicp_ez", "vix", "brent"];
@@ -48,7 +56,9 @@ const store = {
 };
 const S = {
   view: "pulso",
-  level: store.get("nivel", 1),
+  mode: store.get("modo", store.get("nivel", 1) <= 1 ? "x" : "c"),
+  level: 3,         /* todos los datos en los dos modos (antes dependían del nivel) */
+  explain: true,
   regions: new Set(store.get("regiones", ["US", "EZ", "GL"])),
   group: store.get("grupo", "Todos"),
   period: store.get("periodo", "cambio_1m"),
@@ -132,12 +142,19 @@ const ICONS = {
   adelantarse: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z",
   laboratorio: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9",
 };
-const SHORT = { pulso: "Pulso", sectores: "Sectores", screener: "Screener", smart: "Smart", carteras: "Carteras", adelantarse: "Adelantarse", laboratorio: "Lab" };
+ICONS.mercado = ICONS.pulso; ICONS.empresas = "M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h3a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M3 21h18";
+function subnav() {
+  const [, , secs] = areaOf(S.view);
+  if (secs.length < 2) return "";
+  return `<nav class="subnav" aria-label="Secciones">${secs.map((k) => `<button data-sub="${k}" class="${S.view === k ? "on" : ""}" aria-current="${S.view === k ? "page" : "false"}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg>${NAV.find((x) => x[0] === k)[1]}</button>`).join("")}</nav>`;
+}
 function renderTop() {
-  $("#nav").innerHTML = NAV.map(([k, n, ready]) => `<button data-k="${k}" class="${S.view === k ? "on" : ""}${ready ? "" : " is-soon"}" title="${n}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span><span class="lbl-s">${SHORT[k]}</span>${ready ? "" : '<span class="soon">pronto</span>'}</button>`).join("");
+  const cur = areaOf(S.view)[0];
+  $("#nav").innerHTML = AREAS.map(([k, n, secs]) => `<button data-area="${k}" class="${cur === k ? "on" : ""}" title="${n}: ${secs.map((s) => NAV.find((x) => x[0] === s)[1]).join(", ")}" aria-current="${cur === k ? "page" : "false"}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span><span class="lbl-s">${n}</span></button>`).join("");
   const pt = $("#pageTitle"); if (pt) pt.textContent = NAV.find((x) => x[0] === S.view)[1];
-  $("#level").innerHTML = LEVELS.map((l, i) => `<button role="radio" aria-checked="${S.level === i}" data-i="${i}" class="${S.level === i ? "on" : ""}" title="${l}"><span class="l-f">${LEVELS_SHORT[i]}</span><span class="l-s">${["Inicial", "Medio", "Avanz.", "Experto"][i]}</span></button>`).join("");
+  $("#level").innerHTML = MODES.map(([k, t, tip]) => `<button role="radio" aria-checked="${S.mode === k}" data-mode="${k}" class="${S.mode === k ? "on" : ""}" title="${tip}">${t}</button>`).join("");
   const st = $("#status");
   if (!S.data) { st.innerHTML = `<span><span class="dot err"></span> ${esc(S.error || "Cargando…")}</span>`; return; }
   const ser = Object.values(S.data.series);
@@ -164,7 +181,7 @@ function renderPulso() {
 
   /* régimen */
   const R = D.regimen;
-  h += `<h2 class="sec" id="regimen">Régimen macro · EE. UU. ${evid("h")} <span class="hint">${lv === 0 ? "En qué fase del ciclo está la economía" : "Peso de cada escenario (fase del ciclo)"}</span></h2>`;
+  h += `<h2 class="sec" id="regimen">Régimen macro · EE. UU. ${evid("h")} <span class="hint">${S.explain ? "En qué fase del ciclo está la economía y cuánto pesa cada escenario" : "Peso de cada escenario (fase del ciclo)"}</span></h2>`;
   if (R?.estado === "ok") {
     const order = ["Expansión", "Desaceleración", "Recesión", "Recuperación"];
     h += `<div class="panel regime"><div><div class="sub">Fase dominante</div><div class="big">${R.dominante}</div>
@@ -244,7 +261,9 @@ function renderSoon(k) {
 
 function render() {
   renderTop();
-  $("#view").innerHTML = S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view);
+  S.explain = S.mode === "x";
+  document.documentElement.dataset.mode = S.mode;
+  $("#view").innerHTML = subnav() + (S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view));
   document.title = NAV.find((x) => x[0] === S.view)[1] + " · Screener";
 }
 
@@ -277,7 +296,7 @@ function seriesDrawer(id) {
       <dt>Variación 3 meses</dt><dd class="num chg ${chgClass(id, s.cambio_3m)}">${sgn(s.cambio_3m)}</dd>
       <dt>Variación 1 año</dt><dd class="num chg ${chgClass(id, s.cambio_1a)}">${sgn(s.cambio_1a)}</dd></dl>`
       : `<div class="box"><b>Sin datos</b>${esc(s.motivo || "error de fuente")}</div>`}
-    <div class="box"><b>${S.level === 0 ? "¿Qué es?" : "Definición"}</b>${esc(s.def)}</div>
+    <div class="box"><b>${S.explain ? "¿Qué es?" : "Definición"}</b>${esc(s.def)}</div>
     <div class="box"><b>Por qué importa</b>${esc(s.por)}</div>
     <dl class="kv"><dt>Fuente</dt><dd>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.fuente)} · ${esc(s.codigo)}</a>` : esc(s.fuente + " · " + s.codigo)}</dd>
     <dt>Fecha del dato</dt><dd class="num">${fmtDate(s.fecha_dato)}</dd>
@@ -313,8 +332,9 @@ document.addEventListener("click", (e) => {
     render(); return;
   }
   let b;
-  if ((b = t.closest("#nav button"))) { go(b.dataset.k); return; }
-  if ((b = t.closest("#level button"))) { S.level = +b.dataset.i; store.set("nivel", S.level); render(); return; }
+  if ((b = t.closest("#nav button[data-area]"))) { const a = AREAS.find((x) => x[0] === b.dataset.area); go(a[2].includes(S.view) ? S.view : store.get("area_" + a[0], a[2][0])); return; }
+  if ((b = t.closest("[data-sub]"))) { go(b.dataset.sub); return; }
+  if ((b = t.closest("#level button[data-mode]"))) { S.mode = b.dataset.mode; store.set("modo", S.mode); render(); return; }
   if ((b = t.closest("[data-r]"))) {
     const r = b.dataset.r;
     if (S.regions.has(r) && S.regions.size > 1) S.regions.delete(r); else S.regions.add(r);
@@ -361,7 +381,7 @@ function setHash(h, replace) {
   if (location.hash === h) return;
   if (replace) history.replaceState(null, "", h); else history.pushState(null, "", h);
 }
-function go(v) { fichaPushed = false; S.view = v; setHash("#/" + v, FICHA_RE.test(location.hash)); render(); window.scrollTo(0, 0); }
+function go(v) { fichaPushed = false; S.view = v; store.set("area_" + areaOf(v)[0], v); setHash("#/" + v, FICHA_RE.test(location.hash)); render(); window.scrollTo(0, 0); }
 function routeFicha(sym) {           /* la ficha se ha abierto desde la web: nueva entrada en el historial */
   const h = "#/empresa/" + encodeURIComponent(sym);
   if (location.hash === h) return;
