@@ -148,6 +148,17 @@ def eval_signals(weeks, closes):
     return out
 
 
+def previous_snapshot(prev, fday):
+    """Foto de la sesión anterior a «fday» a partir del score.json publicado. Si ese fichero es de la misma sesión
+    (varias actualizaciones el mismo día), se conserva su propia foto anterior para no comparar el día consigo mismo."""
+    if not isinstance(prev, dict) or not prev.get("factores"):
+        return None
+    pf = prev.get("fecha_precio") or (prev.get("generado") or "")[:10]
+    if pf == fday:
+        return prev.get("anterior")
+    return {"fecha": pf, "factores": prev["factores"], "veredictos": prev.get("veredictos") or {}, "total": prev.get("total_defecto") or {}}
+
+
 def eval_daily(days, closes):
     """Nota operativa registrada cada día, evaluada tal cual: IC (Spearman) entre la nota y la rentabilidad posterior
     a cada horizonte cerrado, y diferencia del mejor quinto frente al universo."""
@@ -291,12 +302,17 @@ def main():
     daily["generado"] = NOW.isoformat(timespec="seconds")
     nota_reg = {"desde": daily["dias"][0]["fecha"], "fotos": len(daily["dias"]), "horizontes": eval_daily(daily["dias"], closes)}
     json.dump(daily, open(os.path.join(DATA, "score_diario.json"), "w"), separators=(",", ":"))
+    # «qué ha cambiado»: factores y técnico de la sesión anterior (la web recalcula la nota con los pesos del usuario)
+    prev = remote("score.json") or {}
+    tec = {r["sym"]: r.get("veredicto") for r in rows if r.get("veredicto")}
+    anterior = previous_snapshot(prev, fday)
     try:
         lab_v = json.load(open(os.path.join(DATA, "lab.json"))).get("veredicto")
     except Exception:  # noqa: BLE001
         lab_v = None
     json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot, "veredicto_lab": lab_v,
                "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res, "senales": sig, "nota_registrada": nota_reg,
+               "fecha_precio": fday, "veredictos": tec, "anterior": anterior,
                "metodo": "Cada factor es el percentil (0-100) del valor dentro de su sector; momentum y smart money, dentro de todo el universo. "
                          "Un veredicto técnico bajista limita la nota a 60. Sin al menos 3 de los 4 factores básicos (calidad, valor, crecimiento, momentum) no hay nota. El encaje macro es una heurística de rotación sectorial según el régimen de EE. UU."},
               open(os.path.join(DATA, "score.json"), "w"), ensure_ascii=False, separators=(",", ":"))

@@ -7,6 +7,7 @@ const NAV = [
   ["sectores", "Sectores", true],
   ["screener", "Screener", true],
   ["smart", "Smart money", true],
+  ["comparar", "Comparar", true],
   ["carteras", "Carteras", true],
   ["adelantarse", "Adelantarse", true],
   ["laboratorio", "Laboratorio", true],
@@ -14,7 +15,7 @@ const NAV = [
 /* 4 áreas en la barra lateral (o inferior en móvil); dentro de cada área, sus secciones en una barra superior */
 const AREAS = [
   ["mercado", "Mercado", ["pulso", "sectores", "adelantarse"]],
-  ["empresas", "Empresas", ["screener", "smart"]],
+  ["empresas", "Empresas", ["screener", "smart", "comparar"]],
   ["carteras", "Carteras", ["carteras"]],
   ["laboratorio", "Laboratorio", ["laboratorio"]],
 ];
@@ -85,6 +86,10 @@ async function load() {
     S.data = null;
     S.error = e.message || String(e);
   }
+  try {   /* amplitud del mercado (la genera el proceso de acciones; si falta, la sección lo dice) */
+    const a = await fetch("data/amplitud.json?t=" + Date.now(), { cache: "no-store" });
+    S.amp = a.ok ? await a.json() : null;
+  } catch { S.amp = null; }
   render();
 }
 
@@ -137,6 +142,7 @@ const ICONS = {
   pulso: "M3 12h4l3-8 4 16 3-8h4",
   sectores: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   screener: "M3 5h18l-7 8v6l-4 2v-8z",
+  comparar: "M8 3v18M16 3v18M3 8h5M16 16h5M3 16h5M16 8h5",
   smart: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5",
   carteras: "M3 7h18v13H3zM8 7V4h8v3M3 12h18",
   adelantarse: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z",
@@ -210,6 +216,8 @@ function renderPulso() {
     }).join("")}</div>`;
   }
 
+  h += breadthLiquidity(D);
+
   /* indicadores */
   const groups = ["Todos", ...new Set(Object.values(D.series).map((s) => s.grupo))];
   let list = Object.values(D.series).filter((s) => S.regions.has(s.region) && (S.group === "Todos" || s.grupo === S.group));
@@ -224,6 +232,56 @@ function renderPulso() {
   /* países */
   if (D.paises) h += countriesTable(D.paises, lv);
   return h;
+}
+
+/* amplitud del mercado y liquidez (Fase 2) */
+function breadthLiquidity(D) {
+  const A = S.amp?.regiones || {};
+  const reg = A[S.ampRegion] ? S.ampRegion : Object.keys(A)[0];
+  const a = A[reg];
+  const pctCls = (v) => (v == null ? "z" : v >= 60 ? "p" : v <= 40 ? "n" : "z");
+  const read50 = (v) => (v == null ? "" : v >= 70 ? "amplitud fuerte: la subida es general" : v >= 50 ? "amplitud positiva" : v >= 30 ? "amplitud débil: pocos valores tiran del índice" : "amplitud muy débil: sobreventa general");
+  let h = `<h2 class="sec" id="amplitud">Amplitud y liquidez ${evid("h")} <span class="hint">¿Sube el mercado entero o solo unos pocos? ¿Entra o sale liquidez del sistema?</span></h2>`;
+  h += `<div class="amp-grid"><div class="panel amp">`;
+  if (a) {
+    const hist = a.hist || [];
+    h += `<div class="amp-head"><b>Amplitud · ${esc(reg)}</b><span class="bar" style="margin:0">${Object.keys(A).map((k) => `<button class="chip ${k === reg ? "on" : ""}" data-ampreg="${esc(k)}">${esc(k)}</button>`).join("")}</span></div>
+      <div class="amp-kpis">
+        <div><span>Sobre su media de 50 sesiones</span><b class="num chg ${pctCls(a.sobre_sma50)}">${nf(a.sobre_sma50, 0)} %</b><small class="num">hace 1 mes ${a.sobre_sma50_1m == null ? "—" : nf(a.sobre_sma50_1m, 0) + " %"}</small></div>
+        <div><span>Sobre su media de 200 sesiones</span><b class="num chg ${pctCls(a.sobre_sma200)}">${nf(a.sobre_sma200, 0)} %</b><small class="num">hace 1 mes ${a.sobre_sma200_1m == null ? "—" : nf(a.sobre_sma200_1m, 0) + " %"}</small></div>
+        <div><span>Avances / descensos hoy</span><b class="num">${a.avances} / ${a.descensos}</b><small>${a.n} valores</small></div>
+        <div><span>Máximos / mínimos de 52 semanas</span><b class="num"><span class="chg p">${a.max52}</span> / <span class="chg n">${a.min52}</span></b><small>${fmtDate(a.fecha)}</small></div>
+      </div>
+      <div class="amp-charts"><div><div class="sub">% sobre la media de 50 (azul) y de 200 sesiones · 1 año</div>${spark2(hist.map((x) => [x[0], x[1]]), hist.map((x) => [x[0], x[2]]))}</div>
+        <div><div class="sub">Línea avance-descenso acumulada · 1 año</div>${spark(hist.map((x) => [x[0], x[4]]), 300, 70)}</div></div>
+      ${S.explain ? `<div class="method">Lectura: ${read50(a.sobre_sma50)}. Si el índice sube pero la amplitud cae, la subida se apoya en pocos valores y es más frágil. ${esc(S.amp.metodo || "")}</div>` : ""}`;
+  } else {
+    h += `<b>Amplitud</b><div class="nodata">Sin datos de amplitud todavía: se calculan en la próxima actualización de acciones.</div>`;
+  }
+  h += `</div><div class="panel amp">`;
+  const L = D.series?.liq_neta;
+  const liq = ["walcl", "tga", "rrp", "m2"].map((k) => D.series?.[k]).filter((s) => s && s.estado === "ok");
+  if (L && L.estado === "ok") {
+    const c3 = L.cambio_3m, tone = c3 == null ? "z" : c3 > 0 ? "p" : "n";
+    h += `<div class="amp-head"><b>Liquidez · EE. UU.</b><button class="chip" data-id="liq_neta">Histórico</button></div>
+      <div class="amp-kpis"><div><span>Liquidez neta de la Fed</span><b class="num">${nf(L.valor / 1000, 2)} bill. $</b><small class="num chg ${tone}">${c3 == null ? "" : sgn(c3, 0) + " mm $ en 3 meses"}</small></div>
+      ${liq.map((s) => `<div><span>${esc(s.nombre)}</span><b class="num">${s.unidad === "bn $" ? nf(s.valor / 1000, 2) + " bill. $" : nf(s.valor, 1) + " " + esc(s.unidad)}</b><small class="num">${fmtDate(s.fecha_dato)}</small></div>`).join("")}</div>
+      <div class="sub">Liquidez neta · 5 años</div>${spark(L.hist, 300, 70)}
+      ${S.explain ? `<div class="method">Liquidez neta = balance de la Fed − cuenta del Tesoro − repos inversos. Si crece, entra dinero en el sistema (suele acompañar a la bolsa); si cae, se retira. ${tone === "p" ? "Ahora está creciendo." : tone === "n" ? "Ahora se está retirando." : ""}</div>` : ""}`;
+  } else {
+    h += `<b>Liquidez</b><div class="nodata">Sin datos de liquidez todavía: se descargan en la próxima actualización macro.</div>`;
+  }
+  return h + `</div></div>`;
+}
+function spark2(a, b, w = 300, h = 70, pad = 2) {
+  if (!a || a.length < 2) return "";
+  const all = [...a, ...b].map((p) => p[1]).filter((v) => v != null);
+  const mn = Math.min(0, ...all), mx = Math.max(100, ...all), rg = mx - mn || 1;
+  const pl = (arr) => arr.map((p, i) => p[1] == null ? null : `${(pad + (i / (arr.length - 1)) * (w - 2 * pad)).toFixed(1)},${(pad + (1 - (p[1] - mn) / rg) * (h - 2 * pad)).toFixed(1)}`).filter(Boolean).join(" ");
+  const y50 = (pad + (1 - (50 - mn) / rg) * (h - 2 * pad)).toFixed(1);
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" x2="${w}" y1="${y50}" y2="${y50}" stroke="var(--border)" stroke-dasharray="3 3"/>
+    <polyline points="${pl(a)}" fill="none" stroke="var(--accent)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+    <polyline points="${pl(b)}" fill="none" stroke="var(--muted)" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg>`;
 }
 
 function card(s) {
@@ -334,6 +392,7 @@ document.addEventListener("click", (e) => {
   let b;
   if ((b = t.closest("#nav button[data-area]"))) { const a = AREAS.find((x) => x[0] === b.dataset.area); go(a[2].includes(S.view) ? S.view : store.get("area_" + a[0], a[2][0])); return; }
   if ((b = t.closest("[data-sub]"))) { go(b.dataset.sub); return; }
+  if ((b = t.closest("[data-ampreg]"))) { S.ampRegion = b.dataset.ampreg; render(); return; }
   if ((b = t.closest("#level button[data-mode]"))) { S.mode = b.dataset.mode; store.set("modo", S.mode); render(); return; }
   if ((b = t.closest("[data-r]"))) {
     const r = b.dataset.r;
@@ -347,7 +406,7 @@ document.addEventListener("click", (e) => {
     store.set("orden_paises", S.sort); render(); return;
   }
   if ((b = t.closest("[data-range]"))) { drawerRange = +b.dataset.range; seriesDrawer(b.dataset.sid); return; }
-  if ((b = t.closest(".card, .card-lite"))) { seriesDrawer(b.dataset.id); return; }
+  if ((b = t.closest(".card, .card-lite, .chip[data-id]"))) { seriesDrawer(b.dataset.id); return; }
   if (t.closest("[data-goreg]")) { document.getElementById("regimen")?.scrollIntoView({ behavior: "smooth" }); return; }
   if ((b = t.closest("tr[data-pais]"))) { countryDrawer(b.dataset.pais); return; }
   if (t.closest("#showErr")) { errorsDrawer(); return; }
@@ -375,6 +434,7 @@ let fichaPushed = false;   // la ficha abierta tiene su propia entrada en el his
 function parseHash() {
   const p = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/");
   if (p[0] === "empresa" && p[1]) return { sym: p[1].toUpperCase(), tab: p[2] || null };
+  if (p[0] === "comparar" && p[1]) return { view: "comparar", cmp: p[1].toUpperCase().split(",").filter(Boolean).slice(0, 4) };
   return VIEWS.includes(p[0]) ? { view: p[0] } : {};
 }
 function setHash(h, replace) {
@@ -402,11 +462,12 @@ function route() {
   }
   fichaPushed = false;
   if ($("#drawer").classList.contains("on")) window.SCR.closeDrawer();
+  if (r.cmp) window.SCRSetCmp?.(r.cmp);
   if (r.view && r.view !== S.view) { S.view = r.view; render(); window.scrollTo(0, 0); }
 }
 window.addEventListener("hashchange", route);
 window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, seriesDrawer, routeFicha, modules: MODULES, handlers: HANDLERS };
-{ const r0 = parseHash(); if (r0.view) S.view = r0.view; else if (r0.sym) S.view = "screener"; else setHash("#/" + S.view, true); }
+{ const r0 = parseHash(); if (r0.view) S.view = r0.view; else if (r0.sym) S.view = "screener"; else setHash("#/" + S.view, true); if (r0.cmp) S.cmp0 = r0.cmp; }
 render();
 load();
 /* los módulos (equities.js…) se cargan después: la ficha de un enlace directo se abre cuando ya existen */

@@ -59,3 +59,14 @@ def test_foto_diaria_evaluada_tal_cual(tmp_path):
     assert r["1m"]["dias"] == 1 and r["1m"]["ic"] == pytest.approx(1.0)
     assert r["1m"]["q5_vs_universo"] > 0
     assert r["3m"]["dias"] == 0 and r["3m"]["ic"] is None
+
+
+def test_foto_anterior_para_que_ha_cambiado():
+    prev = {"generado": "2026-11-12T22:00:00+00:00", "fecha_precio": "2026-11-12", "factores": {"A": {"calidad": 50}},
+            "veredictos": {"A": "Alcista"}, "total_defecto": {"A": 60}, "anterior": {"fecha": "2026-11-11", "factores": {"A": {"calidad": 40}}}}
+    a = score.previous_snapshot(prev, "2026-11-13")                 # nueva sesión: lo publicado pasa a ser «anterior»
+    assert a["fecha"] == "2026-11-12" and a["factores"]["A"]["calidad"] == 50 and a["veredictos"]["A"] == "Alcista"
+    a = score.previous_snapshot(prev, "2026-11-12")                 # misma sesión: se mantiene su anterior
+    assert a["fecha"] == "2026-11-11"
+    assert score.previous_snapshot(None, "2026-11-13") is None
+    assert score.previous_snapshot({"generado": "2026-11-12T22:00:00+00:00", "factores": {"A": {}}}, "2026-11-13")["fecha"] == "2026-11-12"

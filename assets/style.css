@@ -621,3 +621,37 @@ h2.sec .dd{display:inline-block;margin-left:8px;vertical-align:middle;font-size:
 html[data-mode="c"] h2.sec > .hint,html[data-mode="c"] .method:not(.keep),html[data-mode="c"] .lab-intro{display:none}
 #level button{min-width:84px}
 @media (max-width:640px){#level button{min-width:0}.subnav{margin:-4px -14px 14px;padding:0 14px 10px}}
+/* amplitud y liquidez (Fase 2) */
+.amp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:8px}
+.panel.amp{display:flex;flex-direction:column;gap:10px;min-width:0}
+.amp-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.amp-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.amp-kpis>div{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-s,8px);background:var(--surface-2);min-width:0}
+.amp-kpis span{font-size:11px;color:var(--muted)}
+.amp-kpis b{font-size:17px;font-weight:600}
+.amp-kpis small{font-size:11px;color:var(--muted)}
+.amp-charts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.panel.amp svg{width:100%;height:70px;display:block}
+@media (max-width:900px){.amp-grid,.amp-charts{grid-template-columns:1fr}}
+/* nota explicable y «qué ha cambiado» (Fase 2) */
+.sc-why{margin-top:10px;border-top:1px solid var(--border);padding-top:8px}
+.sc-why summary{cursor:pointer;font-weight:600;font-size:13px}
+.why-row{display:grid;grid-template-columns:minmax(150px,1.4fr) 2fr 52px;align-items:center;gap:8px;margin:5px 0;font-size:13px}
+.why-bar{position:relative;height:8px;background:var(--surface-2);border-radius:4px}
+.why-bar::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--border)}
+.why-bar span{position:absolute;top:0;bottom:0;border-radius:4px}
+.why-bar .pos{background:var(--good,var(--pos))}.why-bar .neg{background:var(--bad,var(--neg))}
+.why-row b{text-align:right}
+.why-tot{font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+.sc-chg{margin-top:10px;padding:8px 10px;border:1px dashed var(--border);border-radius:var(--r-s,8px);font-size:13px}
+.chg-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+/* comparador y percentiles (Fase 2) */
+.pp{display:inline-block;font-size:10.5px;padding:0 5px;border-radius:999px;border:1px solid var(--border);color:var(--muted);margin-left:4px;vertical-align:1px}
+.pp-g{color:var(--good);border-color:var(--good)}.pp-b{color:var(--bad);border-color:var(--bad)}
+.cmp-tbl th{text-align:left;font-weight:500;white-space:nowrap}
+.cmp-tbl thead th{vertical-align:bottom;min-width:120px}
+.cmp-tbl td{white-space:nowrap}
+.cmp-best{font-weight:700}
+.cmp-sep th{padding-top:14px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.cmp-chart{width:100%;height:auto;display:block}
+.cmp-page .tbl-wrap{max-height:none}

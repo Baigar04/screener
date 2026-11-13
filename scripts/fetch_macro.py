@@ -182,6 +182,18 @@ CAT = [
     ("usd_broad", "Dólar (índice amplio)", "índice", "GL", "Materias primas y divisas", "D", "FRED", "DTWEXBGS", None,
      "Índice del dólar ponderado por comercio.",
      "Un dólar fuerte presiona a emergentes y materias primas y resta a las multinacionales de EE. UU."),
+    ("walcl", "Balance de la Fed", "bn $", "US", "Liquidez", "W", "FRED", "WALCL", "bn",
+     "Activos totales de la Reserva Federal (miles de millones de dólares).",
+     "Cuando la Fed compra activos (crece el balance) inyecta liquidez; cuando lo reduce, la retira."),
+    ("tga", "Cuenta del Tesoro en la Fed (TGA)", "bn $", "US", "Liquidez", "W", "FRED", "WTREGEN", "bn",
+     "Saldo de la cuenta general del Tesoro en la Fed (miles de millones de dólares).",
+     "Cuando el Tesoro acumula efectivo, lo retira del sistema bancario; cuando lo gasta, lo devuelve."),
+    ("rrp", "Repos inversos de la Fed (ON RRP)", "bn $", "US", "Liquidez", "D", "FRED", "RRPONTSYD", None,
+     "Efectivo que fondos monetarios y bancos aparcan cada noche en la Fed (miles de millones de dólares).",
+     "Es liquidez inmovilizada: si baja, ese dinero vuelve a circular por el mercado."),
+    ("m2", "Masa monetaria M2 (interanual)", "%", "US", "Liquidez", "M", "FRED", "M2SL", "yoy",
+     "Crecimiento interanual del dinero en circulación y depósitos (M2) en EE. UU.",
+     "Un M2 que crece apoya el gasto y los activos; uno que se contrae los frena."),
     ("eurusd", "EUR/USD", "$", "GL", "Materias primas y divisas", "D", "FRED", "DEXUSEU", None,
      "Dólares por euro.",
      "Afecta a la rentabilidad en euros de las inversiones en EE. UU."),
@@ -206,7 +218,7 @@ def build_series():
             for f_, c_, t_ in [(fuente, code, transf)] + ALTS.get(sid, []):
                 try:
                     o_, u_ = fred(c_) if f_ == "FRED" else ecb(c_)
-                    cands.append((yoy(o_) if t_ == "yoy" else o_, u_, f_, c_))
+                    cands.append((yoy(o_) if t_ == "yoy" else [(d, v / 1000) for d, v in o_] if t_ == "bn" else o_, u_, f_, c_))
                 except Exception as e2:  # noqa: BLE001
                     if c_ == code and not ALTS.get(sid):
                         raise
@@ -243,6 +255,23 @@ def build_series():
                 "estado": "ok", "fecha_dato": obs[-1][0].isoformat(), "valor": obs[-1][1],
                 "cambio_1m": _chg(obs, 31), "cambio_3m": _chg(obs, 92), "cambio_1a": _chg(obs, 365),
                 "hist": [[d.isoformat(), v] for d, v in downsample(obs, "D")], "_obs": obs,
+            }
+    # Derivada: liquidez neta de la Fed = balance − TGA − repos inversos (semanal, en la fecha de cada balance)
+    w, t, r = (out.get(k) for k in ("walcl", "tga", "rrp"))
+    if all(x and x.get("estado") == "ok" for x in (w, t, r)):
+        obs = [(d, round(v - value_at(t["_obs"], d) - value_at(r["_obs"], d), 1)) for d, v in w["_obs"]
+               if value_at(t["_obs"], d) is not None and value_at(r["_obs"], d) is not None]
+        if obs:
+            out["liq_neta"] = {
+                "id": "liq_neta", "nombre": "Liquidez neta de la Fed", "unidad": "bn $", "region": "US",
+                "grupo": "Liquidez", "frecuencia": "W", "fuente": "FRED (cálculo propio)",
+                "codigo": "WALCL − WTREGEN − RRPONTSYD", "url": w["url"],
+                "def": "Balance de la Fed menos la cuenta del Tesoro (TGA) y los repos inversos: la liquidez que de verdad queda en el sistema.",
+                "por": "Sus cambios suelen acompañar a la renta variable a medio plazo; es una lectura, no una regla.",
+                "fecha_actualizacion": NOW.isoformat(timespec="seconds"), "umbral_frescura_dias": 14,
+                "estado": "ok", "fecha_dato": obs[-1][0].isoformat(), "valor": obs[-1][1],
+                "cambio_1m": _chg(obs, 31), "cambio_3m": _chg(obs, 92), "cambio_1a": _chg(obs, 365),
+                "hist": [[d.isoformat(), v] for d, v in downsample(obs, "W")], "_obs": obs,
             }
     return out
 

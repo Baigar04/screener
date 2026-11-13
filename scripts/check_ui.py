@@ -60,7 +60,7 @@ def fichas(pg, base):
     check("«adelante» la vuelve a abrir", True)
 
 
-AREAS = {"pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "screener": "empresas", "smart": "empresas",
+AREAS = {"pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "screener": "empresas", "smart": "empresas", "comparar": "empresas",
          "carteras": "carteras", "laboratorio": "laboratorio"}
 
 
@@ -102,10 +102,35 @@ def movil(pg, base):
         sw = pg.evaluate("document.documentElement.scrollWidth")
         if sw > 391:
             bad.append(f"{v} ({sw} px)")
-    check("sin desbordes a 390 px", not bad, ", ".join(bad) or "7 secciones")
+    check("sin desbordes a 390 px", not bad, ", ".join(bad) or f"{len(AREAS)} secciones")
     vis = pg.evaluate("[...document.querySelectorAll('#nav button')].filter(b => b.getBoundingClientRect().width > 0).length")
     check("móvil: 4-5 accesos en la barra inferior", 4 <= vis <= 5, f"{vis}")
     pg.set_viewport_size({"width": 1366, "height": 900})
+
+
+def fase2(pg, base):
+    """Fase 2 (1.ª tanda): amplitud y liquidez, nota explicable, «qué ha cambiado» y comparador con percentiles."""
+    pg.goto(base + "#/pulso")
+    pg.wait_for_selector("#amplitud", timeout=30000)
+    pg.wait_for_timeout(1500)
+    txt = pg.inner_text("#view")
+    check("Pulso: amplitud con datos", "Sobre su media de 50 sesiones" in txt, "sin datos" if "Sin datos de amplitud" in txt else "")
+    check("Pulso: liquidez neta de la Fed", "Liquidez neta de la Fed" in txt and "Sin datos de liquidez" not in txt)
+    pg.goto(base + "#/empresa/MSFT")
+    pg.wait_for_function("window.SCRFichaSym && window.SCRFichaSym() === 'MSFT'", timeout=60000)
+    pg.wait_for_timeout(2500)
+    check("ficha: «por qué esta nota»", pg.locator("#drawerBody .sc-why .why-row").count() >= 4)
+    check("ficha: percentiles en su sector", "Percentiles en su sector" in pg.inner_text("#drawerBody"))
+    pg.goto(base + "#/screener")
+    pg.wait_for_selector("[data-act=changes]", timeout=30000)
+    pg.click("[data-act=changes]")
+    pg.wait_for_timeout(800)
+    t = pg.inner_text("#view")
+    check("screener: «qué ha cambiado»", "Más suben de nota" in t or "segunda actualización" in t, "frente a la sesión anterior" if "Más suben" in t else "aún sin sesión anterior")
+    pg.goto(base + "#/comparar/AAPL,MSFT,NVDA")
+    pg.wait_for_selector("table.cmp", timeout=30000)
+    pills = pg.locator("table.cmp .pp").count()
+    check("comparador por enlace con percentiles", pg.locator("table.cmp thead th a").count() == 3 and pills > 20, f"{pills} percentiles")
 
 
 def main():
@@ -116,12 +141,12 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil):
+        for fn in (fichas, navegacion, movil, fase2):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001
                 check(fn.__name__, False, str(e)[:200])
-        for v in ("pulso", "sectores", "adelantarse", "screener", "smart", "carteras", "laboratorio"):
+        for v in ("pulso", "sectores", "adelantarse", "screener", "smart", "comparar", "carteras", "laboratorio"):
             where[0] = v
             pg.goto(base + "#/" + v)
             pg.wait_for_timeout(2500)

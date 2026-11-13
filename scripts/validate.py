@@ -178,6 +178,18 @@ def v_score_daily(d, prev):
     return f"{len(W)} fotos diarias"
 
 
+def v_amplitud(d, prev):
+    check_generado(d, "amplitud.json")
+    R = d.get("regiones")
+    check(isinstance(R, dict) and R, "amplitud.json: sin regiones")
+    for k, a in R.items():
+        for f in ("sobre_sma50", "sobre_sma200"):
+            v = a.get(f)
+            check(v is None or (finite(v) and 0 <= v <= 100), f"amplitud.json: {k}.{f} fuera de 0-100 ({v!r})")
+        check(isinstance(a.get("hist"), list) and a["hist"], f"amplitud.json: {k} sin histórico")
+    return ", ".join(f"{k}: {a.get('sobre_sma50')} % > SMA50" for k, a in R.items())
+
+
 def v_smart(d, prev):
     check_generado(d, "smart.json")
     G, P = d.get("gestores"), d.get("por_valor")
@@ -217,6 +229,7 @@ RULES = {
     "score.json": v_score,
     "score_hist.json": v_score_hist,
     "score_diario.json": v_score_daily,
+    "amplitud.json": v_amplitud,
     "smart.json": v_smart,
     "lab.json": v_lab,
     "fund_cache.json": v_dict("fund_cache.json"),

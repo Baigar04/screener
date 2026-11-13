@@ -512,6 +512,43 @@ RRG_H = {  # horizonte: (semanas de cola, ventana de la fuerza relativa en sesio
 }
 
 
+def breadth(frames, rows, days=260):
+    """Amplitud del mercado por región con los cierres ajustados: % de valores sobre su media de 50 y 200 sesiones,
+    avances/descensos, línea avance-descenso acumulada y nuevos máximos/mínimos de 52 semanas. Solo cuenta un valor
+    en una fecha si tiene historia suficiente para esa medida."""
+    out = {}
+    reg = {r["sym"]: r.get("region") for r in rows}
+    for name in ("EE. UU.", "Europa"):
+        cols = {s: f["Close"] for s, f in frames.items() if reg.get(s) == name and "Close" in f and len(f) > 260}
+        if len(cols) < 30:
+            continue
+        C = pd.DataFrame(cols).sort_index().ffill(limit=3)
+        C = C[C.index >= C.index[-1] - pd.Timedelta(days=int(days * 1.6) + 400)]
+        s50, s200 = C.rolling(50).mean(), C.rolling(200).mean()
+        hi, lo = C.rolling(252, min_periods=252).max(), C.rolling(252, min_periods=252).min()
+        ret = C.pct_change(fill_method=None)
+        a50 = (C > s50).where(s50.notna()).mean(axis=1) * 100
+        a200 = (C > s200).where(s200.notna()).mean(axis=1) * 100
+        adv, dec = (ret > 0).sum(axis=1), (ret < 0).sum(axis=1)
+        nh = ((C >= hi) & hi.notna()).sum(axis=1)
+        nl = ((C <= lo) & lo.notna()).sum(axis=1)
+        n = C.notna().sum(axis=1)
+        idx = C.index[-days:]
+        adl = (adv - dec).loc[idx].cumsum()
+        rd = lambda x: None if pd.isna(x) else round(float(x), 1)  # noqa: E731
+        last = idx[-1]
+        out[name] = {
+            "fecha": last.strftime("%Y-%m-%d"), "n": int(n.loc[last]),
+            "sobre_sma50": rd(a50.loc[last]), "sobre_sma200": rd(a200.loc[last]),
+            "avances": int(adv.loc[last]), "descensos": int(dec.loc[last]),
+            "max52": int(nh.loc[last]), "min52": int(nl.loc[last]),
+            "sobre_sma50_1m": rd(a50.loc[idx[-22]]) if len(idx) > 22 else None,
+            "sobre_sma200_1m": rd(a200.loc[idx[-22]]) if len(idx) > 22 else None,
+            "hist": [[d.strftime("%Y-%m-%d"), rd(a50.loc[d]), rd(a200.loc[d]), int(nh.loc[d]) - int(nl.loc[d]), int(adl.loc[d])] for d in idx],
+        }
+    return out
+
+
 def rrg(frames, rows):
     """Rotación sectorial: índice equiponderado por sector frente al universo, en tres horizontes. Aproximación propia al gráfico RRG."""
     rets = {s: f["Close"].pct_change() for s, f in frames.items()}
@@ -729,6 +766,14 @@ def main():
             "notas": "Fundamentales refrescados por rotación (cada valor, una vez por semana). Revisiones de beneficios: sin fuente pública fiable."}
     json.dump({**meta, "filas": rows}, open(os.path.join(DATA, "universe.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump({**meta, "stats": stats, "rrg": rot}, open(os.path.join(DATA, "sectors.json"), "w"), ensure_ascii=False, separators=(",", ":"))
+    try:
+        amp = breadth(frames, rows)
+        json.dump({"generado": meta["generado"], "regiones": amp,
+                   "metodo": "Cierres ajustados del universo del screener. % sobre media = valores por encima de su media de 50/200 sesiones entre los que tienen historia suficiente; máximos/mínimos de 52 semanas con cierres."},
+                  open(os.path.join(DATA, "amplitud.json"), "w"), ensure_ascii=False, separators=(",", ":"))
+        log("Amplitud:", {k: (v["sobre_sma50"], v["sobre_sma200"], v["max52"], v["min52"]) for k, v in amp.items()})
+    except Exception as e:  # noqa: BLE001
+        log("Amplitud: error", e)
     json.dump(cache, open(os.path.join(DATA, "fund_cache.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump(ncache, open(os.path.join(DATA, "news_cache.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     log(f"Filas: {len(rows)} · errores: {len(ERRORS)}")

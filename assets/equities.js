@@ -266,14 +266,45 @@ const PROFILES = {
   "Momentum": { calidad: 10, valor: 5, crecimiento: 15, momentum: 45, smart: 15, macro: 10 },
 };
 E.w = store.get("pesos", PROFILES["Equilibrado"]);
-function scoreOf(r) {
-  const f = E.sc?.factores?.[r.sym]; if (!f) return null;
-  if (["calidad", "valor", "crecimiento", "momentum"].filter((k) => f[k] != null).length < 3) return null;
+function scoreFrom(f, tec) {
+  if (!f || ["calidad", "valor", "crecimiento", "momentum"].filter((k) => f[k] != null).length < 3) return null;
   let num = 0, den = 0;
   for (const [k] of FACT) if (f[k] != null && E.w[k] > 0) { num += E.w[k] * f[k]; den += E.w[k]; }
   if (!den) return null;
-  let t = num / den; if (r.veredicto === "Bajista") t = Math.min(t, 60);
+  let t = num / den; if (tec === "Bajista") t = Math.min(t, 60);
   return Math.round(t);
+}
+function scoreOf(r) { return scoreFrom(E.sc?.factores?.[r.sym], r.veredicto); }
+/* nota explicable: cuántos puntos aporta o resta cada factor frente a una nota neutra de 50 */
+function contributions(f, tec) {
+  const ks = FACT.filter(([k]) => f[k] != null && E.w[k] > 0);
+  const den = ks.reduce((a, [k]) => a + E.w[k], 0); if (!den) return null;
+  const items = ks.map(([k, t]) => ({ k, t, pct: f[k], w: Math.round((100 * E.w[k]) / den), pts: ((f[k] - 50) * E.w[k]) / den })).sort((a, b) => b.pts - a.pts);
+  const raw = 50 + items.reduce((a, x) => a + x.pts, 0);
+  return { items, raw, capped: tec === "Bajista" && raw > 60, missing: FACT.filter(([k]) => f[k] == null && E.w[k] > 0).map(([, t]) => t) };
+}
+/* qué ha cambiado desde la sesión anterior, con los pesos del usuario */
+function changeOf(sym) {
+  const A = E.sc?.anterior; if (!A?.factores?.[sym]) return null;
+  const r = E.uni?.filas.find((x) => x.sym === sym); if (!r) return null;
+  const f0 = A.factores[sym], f1 = E.sc.factores[sym] || {};
+  const t0 = A.veredictos?.[sym] || null, t1 = r.veredicto || null;
+  const n0 = scoreFrom(f0, t0), n1 = scoreFrom(f1, t1);
+  const fx = FACT.map(([k, t]) => ({ k, t, d: f1[k] != null && f0[k] != null ? f1[k] - f0[k] : null })).filter((x) => x.d != null && Math.abs(x.d) >= 1).sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+  return { fecha: A.fecha, n0, n1, d: n0 != null && n1 != null ? n1 - n0 : null, fx, t0, t1 };
+}
+function changesPanel() {
+  if (!E.sc?.anterior) return `<div class="wpanel"><div class="hint">«Qué ha cambiado» empieza a funcionar a partir de la segunda actualización con este registro.</div></div>`;
+  const all = rowsRegion().map((r) => ({ r, c: changeOf(r.sym) })).filter((x) => x.c && x.c.d != null);
+  const up = all.filter((x) => x.c.d > 0).sort((a, b) => b.c.d - a.c.d).slice(0, 10);
+  const dn = all.filter((x) => x.c.d < 0).sort((a, b) => a.c.d - b.c.d).slice(0, 10);
+  const tecCh = all.filter((x) => x.c.t0 !== x.c.t1 && x.c.t0 && x.c.t1);
+  const row = ({ r, c }) => `<tr data-sym="${esc(r.sym)}"><td><b>${esc(r.sym)}</b> <span class="hint">${esc(r.nombre || "")}</span></td><td class="num">${c.n0} → ${scoreBadge(c.n1)}</td>
+    <td class="num chg ${cls(c.d)}">${sgn(c.d, 0)}</td><td class="hint">${c.fx.slice(0, 2).map((x) => `${esc(x.t)} ${sgn(x.d, 0)}`).join(" · ") || (c.t0 !== c.t1 ? `técnico ${esc(c.t0 || "—")} → ${esc(c.t1 || "—")}` : "")}</td></tr>`;
+  const tbl = (t, xs) => `<div class="box"><b>${t}</b>${xs.length ? `<div class="lab-tw"><table><thead><tr><th>Valor</th><th>Nota</th><th>Cambio</th><th>Por qué</th></tr></thead><tbody>${xs.map(row).join("")}</tbody></table></div>` : '<div class="hint">Ninguno.</div>'}</div>`;
+  return `<div class="wpanel"><div class="hint">Frente a la sesión del ${fmtDate(E.sc.anterior.fecha)}, con tus pesos (${esc(profileName())}). Pulsa un valor para abrir su ficha.</div>
+    <div class="f-grid">${tbl("Más suben de nota", up)}${tbl("Más bajan de nota", dn)}</div>
+    ${tecCh.length ? `<div class="box"><b>Cambios de veredicto técnico (${tecCh.length})</b><div class="chg-tags">${tecCh.slice(0, 40).map(({ r, c }) => `<button class="chip" data-sym="${esc(r.sym)}">${esc(r.sym)}: ${esc(c.t0)} → <span class="chg ${c.t1 === "Alcista" ? "p" : c.t1 === "Bajista" ? "n" : "z"}">${esc(c.t1)}</span></button>`).join("")}</div></div>` : ""}</div>`;
 }
 function computeScores() { if (!E.uni) return; E.uni.filas.forEach((r) => { r.score = scoreOf(r); }); }
 window.SCRFactors = (s) => E.sc?.factores?.[s];
@@ -427,8 +458,8 @@ function renderScreener() {
     <button class="chip ${E.onlyWatch ? "on" : ""}" data-act="watchonly">★ Seguimiento (${E.watch.length})</button>
     <button class="chip mf-btn ${E.mf ? "on" : ""}" data-act="mf">Filtros${chips.length ? ` (${chips.length})` : ""} ▾</button></div>
     <div class="fwrap ${E.mf ? "open" : ""}"><div class="bar"><span class="hint">Plantillas:</span>${E.sc ? `<button class="chip ${E.tmpl === "Top" ? "on" : ""}" data-tmpl="Top" data-tip="Los valores con mejor puntuación según tus pesos">★ Top puntuación</button>` : ""}${Object.keys(TEMPLATES).map((t) => `<button class="chip ${E.tmpl === t ? "on" : ""}" data-tmpl="${t}" data-tip="${esc(TEMPLATE_TXT[t])}">${t}</button>`).join("")}
-    ${E.sc ? `<button class="chip ${E.showW ? "on" : ""}" data-act="weights">Pesos de la puntuación · ${profileName()}</button>` : ""}</div>
-    ${E.showW && E.sc ? weightsPanel() : ""}
+    ${E.sc ? `<button class="chip ${E.showW ? "on" : ""}" data-act="weights">Pesos de la puntuación · ${profileName()}</button><button class="chip ${E.showChg ? "on" : ""}" data-act="changes">Qué ha cambiado</button>` : ""}</div>
+    ${E.showW && E.sc ? weightsPanel() : ""}${E.showChg && E.sc ? changesPanel() : ""}
     <div class="bar">${fdefs.filter((f) => f[2] <= 1 || E.more || E.f[f[0]]).map(([id, lab]) => H.dropdown("f_" + id, lab + ":", [["", "Cualquiera"], ...filterOptions(id, base)], E.f[id] || "")).join("")}
     ${fdefs.some((f) => f[2] > 1) ? `<button class="chip" data-act="morefilters">${E.more ? "Menos filtros" : `Más filtros (${fdefs.filter((f) => f[2] > 1).length})`}</button>` : ""}
     ${lv >= 1 ? `<button class="chip ${E.showRng ? "on" : ""}" data-act="ranges">Rangos ⇆</button>` : ""}</div>
@@ -568,7 +599,7 @@ function fichaTab(tab, r, d) {
   if (tab === "comparar") {
     const list = [r.sym, ...E.cmp.filter((s) => s !== r.sym)].slice(0, 4);
     return list.length < 2 ? `<div class="soon-box">Añade otros valores al comparador desde el screener (casilla ⇄) o con «+ Comparar» en su ficha. Máximo 4.</div>`
-      : `${cmpTable(list)}<h2 class="sec">Rentabilidad comparada</h2><div id="fcmp"></div>`;
+      : `${cmpTable(list)}<div class="bar"><button class="chip" data-gocmp="${esc(list.join(","))}">Abrir el comparador a pantalla completa →</button></div><h2 class="sec">Rentabilidad comparada</h2><div id="fcmp"></div>`;
   }
   if (tab === "fund") {
     const years = Object.keys(d.anual || {});
@@ -594,7 +625,7 @@ function fichaTab(tab, r, d) {
           ["Soporte / resistencia", `${nf(r.soporte, 2)} / ${nf(r.resistencia, 2)}`], ["ATR (14)", pct(r.atr_pct, 2), "atr_pct"], ["Volumen relativo", nf(r.vol_rel, 2) + "×", "vol_rel"]]
           .map(([t, v, k]) => `<div class="kvc"><span${k ? tip(k) : ""}>${t}</span><b class="num">${v}</b></div>`).join("")}</div>` : ""}
         <button class="link-btn" data-ftab="grafico">Abrir gráfico interactivo →</button></div></div>
-    <div>${scoreBox(r)}<div class="box"><b>Valoración frente a su sector e industria</b><table><thead><tr><th></th><th>Empresa</th><th>Sector</th><th>Industria</th><th>Dif. sector</th></tr></thead><tbody>
+    <div>${scoreBox(r)}${percentilesBox(r)}<div class="box"><b>Valoración frente a su sector e industria</b><table><thead><tr><th></th><th>Empresa</th><th>Sector</th><th>Industria</th><th>Dif. sector</th></tr></thead><tbody>
       ${vs("per", "PER", r.per, sS.per, sI.per, r.per_vs_sector)}${vs("ev_ebitda", "EV/EBITDA", r.ev_ebitda, sS.ev_ebitda, sI.ev_ebitda, r.ev_ebitda_vs_sector)}${vs("pb", "P/VC", r.pb, sS.pb, sI.pb, r.pb_vs_sector)}
       </tbody></table><div class="method">Medianas de su sector (${sS.n || "—"} valores) y de su industria (${sI.n || "—"}). Verde = cotiza con descuento.</div></div>
       <div class="kv-grid">${[["mcap", "Capitalización", big(r.mcap, r.moneda)], ["div", "Dividendo", pct(r.div)], ["roe", "ROE", pct(r.roe)], ["margen_op", "Margen op.", pct(r.margen_op)],
@@ -611,6 +642,25 @@ function scoreBox(r) {
     <div class="sc-top">${scoreBadge(r.score)}<span class="hint">de 100 · percentil frente a su sector</span></div>
     ${FACT.map(([k, t]) => `<div class="prob" data-tip="${esc(FACT_TIP[k])}"><span>${t}${E.w[k] ? "" : ' <span class="hint">(peso 0)</span>'}</span><div class="track"><div class="fill" style="width:${f[k] ?? 0}%;background:${f[k] == null ? "var(--surface-3)" : f[k] >= 70 ? "var(--good)" : f[k] >= 40 ? "var(--faint)" : "var(--bad)"}"></div></div><span class="num">${f[k] == null ? "—" : Math.round(f[k])}</span></div>`).join("")}
     ${ex ? `<div class="sc-ex"><div>${esc(ex.por)}</div>${ex.inv ? `<div>${esc(ex.inv)}</div>` : ""}<div>${esc(ex.hz)}</div></div>` : ""}
+    ${(() => {
+      const C = contributions(f, r.veredicto); if (!C) return "";
+      const mx = Math.max(1, ...C.items.map((x) => Math.abs(x.pts)));
+      return `<details class="sc-why" ${H.S.explain ? "open" : ""}><summary>Por qué esta nota: lo que suma y resta cada factor</summary>
+        <div class="hint">Partiendo de 50 (la mediana), cada factor suma o resta según su percentil y su peso.</div>
+        ${C.items.map((x) => `<div class="why-row"><span>${esc(x.t)} <span class="hint">p${Math.round(x.pct)} · peso ${x.w} %</span></span>
+          <span class="why-bar"><span class="${x.pts >= 0 ? "pos" : "neg"}" style="${x.pts >= 0 ? "left:50%" : `right:50%`};width:${(50 * Math.abs(x.pts)) / mx}%"></span></span>
+          <b class="num chg ${cls(x.pts)}">${sgn(x.pts, 1)}</b></div>`).join("")}
+        <div class="why-tot">50 ${C.items.map((x) => (x.pts >= 0 ? "+ " : "− ") + nf(Math.abs(x.pts), 1)).join(" ")} = <b>${nf(C.raw, 1)}</b>${C.capped ? ` → <b>60</b> <span class="hint">(técnico bajista: la nota se limita a 60)</span>` : ""}</div>
+        ${C.missing.length ? `<div class="hint">Sin dato (no cuentan): ${esc(C.missing.join(", "))}.</div>` : ""}</details>`;
+    })()}
+    ${(() => {
+      const c = changeOf(r.sym); if (!c) return "";
+      const same = c.d === 0 && !c.fx.length && c.t0 === c.t1;
+      return `<div class="sc-chg"><b>Qué ha cambiado desde el ${fmtDate(c.fecha)}</b> ${same ? '<span class="hint">Nada relevante.</span>' : `
+        <span class="num">${c.n0 ?? "—"} → ${c.n1 ?? "—"}</span> ${c.d != null ? `<span class="chg ${cls(c.d)}">${sgn(c.d, 0)}</span>` : ""}
+        ${c.fx.length ? `<div class="hint">${c.fx.map((x) => `${esc(x.t)} ${sgn(x.d, 0)}`).join(" · ")}</div>` : ""}
+        ${c.t0 !== c.t1 ? `<div class="hint">Técnico: ${esc(c.t0 || "—")} → ${esc(c.t1 || "—")}</div>` : ""}`}</div>`;
+    })()}
     ${H.S.explain ? `<div class="method">Nota para ordenar ideas, no una recomendación de compra.</div>` : ""}</div>`;
 }
 function miniChart(rows) {
@@ -640,11 +690,16 @@ function cmpTable(list) {
     ${CMP_ROWS.map(([k, t, f, good]) => {
       const vals = rs.map((r) => r[k]).filter((v) => typeof v === "number");
       const best = good == null || vals.length < 2 ? null : good ? Math.max(...vals) : Math.min(...vals.filter((v) => !["per", "per_fwd", "ev_ebitda", "pb"].includes(k) || v > 0));
-      return `<tr><td${tip(k)}>${t}</td>${rs.map((r) => `<td class="num ${best != null && r[k] === best ? "best" : ""}">${f(r[k], r)}</td>`).join("")}</tr>`;
-    }).join("")}</tbody></table></div><div class="method">Resaltado = mejor valor de la fila (no aplica a precio, beta, RSI ni técnico).</div>`;
+      const dir = good == null ? 0 : good ? 1 : -1;
+      return `<tr><td${tip(k)}>${t}</td>${rs.map((r) => `<td class="num ${best != null && r[k] === best ? "best" : ""}">${f(r[k], r)}${typeof r[k] === "number" && k !== "precio" ? pctPill(pctIn(r, k), dir) : ""}</td>`).join("")}</tr>`;
+    }).join("")}
+    ${E.sc ? `<tr><td>Nota (tus pesos)</td>${rs.map((r) => `<td class="num">${scoreBadge(r.score)}</td>`).join("")}</tr>
+      ${FACT.map(([k, t]) => `<tr><td data-tip="${esc(FACT_TIP[k])}">${t} <span class="hint">percentil</span></td>${rs.map((r) => { const v = E.sc.factores?.[r.sym]?.[k]; return `<td class="num">${v == null ? "—" : `<span class="pp ${v >= 67 ? "pp-g" : v <= 33 ? "pp-b" : ""}">p${Math.round(v)}</span>`}</td>`; }).join("")}</tr>`).join("")}` : ""}
+    </tbody></table></div><div class="method">Resaltado = mejor valor de la fila (no aplica a precio, beta, RSI ni técnico). pNN = percentil dentro de su sector (o del universo si el sector tiene menos de 8 valores con dato); en azul, de lo mejor de su sector en esa medida; en naranja, de lo peor.</div>`;
 }
 function openCompare() {
   if (E.cmp.length < 2) return;
+  if (H.modules.comparar) { H.closeDrawer(); history.replaceState(null, "", location.hash); H.go("comparar"); return; }
   E.ficha = null;
   document.getElementById("drawer").classList.add("full");
   H.openDrawer(`<h3>Comparador</h3><div class="reg">${E.cmp.length} valores · máximo 4</div>${cmpTable(E.cmp)}<h2 class="sec">Rentabilidad comparada</h2><div id="fcmp"></div>`);
@@ -741,8 +796,14 @@ function onClick(t, dd) {
   if ((b = t.closest("[data-cmp-toggle]"))) { toggleCmp(b.dataset.cmpToggle); paintFicha(); if (H.S.view === "screener") H.render(); return true; }
   if (t.closest("[data-cmp]")) { toggleCmp(t.closest("[data-cmp]").dataset.cmp); H.render(); return true; }
   if (t.closest(".c-x")) return true;
-  if ((b = t.closest("[data-cmprm]"))) { toggleCmp(b.dataset.cmprm); if (E.ficha) paintFicha(); else if (E.cmp.length >= 2) openCompare(); else H.closeDrawer(); if (H.S.view === "screener") H.render(); return true; }
+  if ((b = t.closest("[data-cmprm]"))) { toggleCmp(b.dataset.cmprm); if (!E.ficha && H.S.view === "comparar" && !document.getElementById("drawer").classList.contains("on")) { H.render(); return true; } if (E.ficha) paintFicha(); else if (E.cmp.length >= 2) openCompare(); else H.closeDrawer(); if (H.S.view === "screener") H.render(); return true; }
   if ((b = t.closest("[data-ncat]"))) { newsCat = b.dataset.ncat; if (E.ficha) mountNews(E.ficha.sym); return true; }
+  if ((b = t.closest("[data-gocmp]"))) { E.cmp = b.dataset.gocmp.split(","); store.set("comparar", E.cmp); H.closeDrawer(); H.go("comparar"); return true; }
+  if ((b = t.closest("[data-copycmp]"))) {
+    const url = location.href.split("#")[0] + "#/comparar/" + E.cmp.join(",");
+    (navigator.clipboard?.writeText(url) || Promise.reject()).then(() => { b.textContent = "✓ Copiado"; }, () => { b.textContent = url; });
+    return true;
+  }
   if ((b = t.closest("[data-copylink]"))) {
     const url = location.href.split("#")[0] + "#/empresa/" + encodeURIComponent(b.dataset.copylink);
     (navigator.clipboard?.writeText(url) || Promise.reject()).then(() => { b.textContent = "✓ Copiado"; }, () => { b.textContent = url; });
@@ -779,6 +840,7 @@ function onClick(t, dd) {
     if (a === "more") E.limit += 50;
     if (a === "morefilters") { E.more = !E.more; store.set("mas_filtros", E.more); }
     if (a === "weights") { E.showW = !E.showW; }
+    if (a === "changes") { E.showChg = !E.showChg; }
     if (a === "ranges") { E.showRng = !E.showRng; store.set("ver_rangos", E.showRng); }
     if (a === "watchonly") E.onlyWatch = !E.onlyWatch;
     if (a === "mf") E.mf = !E.mf;
@@ -842,6 +904,74 @@ window.SCREnsureUni = () => ensure();
 window.SCROpen = (sym, tab, fromRoute) => companyDrawer(sym, tab, fromRoute);
 window.SCRFichaSym = () => E.ficha?.sym || null;
 if (window.SCRSmart) window.SCRSmart.onload = () => { if (E.ficha && E.ficha.tab === "pers") paintFicha(); };
+/* ---------- comparador y percentiles (Fase 2) ---------- */
+// medidas de «Percentiles en su sector» de la ficha: [campo, etiqueta, formato, mejor: 1 = más alto, -1 = más bajo]
+const PCT_METRICS = [
+  ["per", "PER", (v) => nf(v, 1), -1], ["ev_ebitda", "EV/EBITDA", (v) => nf(v, 1), -1], ["pb", "Precio / valor contable", (v) => nf(v, 2), -1],
+  ["div", "Dividendo", (v) => pct(v), 1], ["roe", "ROE", (v) => pct(v), 1], ["margen_op", "Margen operativo", (v) => pct(v), 1],
+  ["crec_ventas", "Crecimiento de ventas", spct, 1], ["crec_bpa", "Crecimiento del BPA", spct, 1],
+  ["deuda_neta_ebitda", "Deuda neta / EBITDA", (v) => (v == null ? "—" : nf(v, 1) + "×"), -1],
+  ["r3m", "Rentabilidad 3 meses", spct, 1], ["r1a", "Rentabilidad 1 año", spct, 1], ["vol3m", "Volatilidad", (v) => pct(v), -1],
+];
+const PCT_SORTED = new Map();
+/* percentil de un dato dentro de su sector (o de todo el universo si el sector tiene menos de 8 valores con dato) */
+function pctIn(r, k) {
+  const v = r[k]; if (v == null || !E.uni || typeof v !== "number") return null;
+  const key = k + "|" + r.sector;
+  if (!PCT_SORTED.has(key)) {
+    let xs = E.uni.filas.filter((x) => x.sector === r.sector && typeof x[k] === "number").map((x) => x[k]), scope = "sector";
+    if (xs.length < 8) { xs = E.uni.filas.filter((x) => typeof x[k] === "number").map((x) => x[k]); scope = "universo"; }
+    PCT_SORTED.set(key, { xs: xs.sort((a, b) => a - b), scope });
+  }
+  const { xs, scope } = PCT_SORTED.get(key);
+  if (xs.length < 2) return null;
+  let lo = 0, hi = 0; for (const x of xs) { if (x < v) lo++; else if (x === v) hi++; }
+  return { p: Math.round((100 * (lo + Math.max(0, hi - 1) / 2)) / (xs.length - 1)), scope, n: xs.length };
+}
+const pctPill = (q, better) => {
+  if (!q) return "";
+  const good = better === 0 ? null : better > 0 ? q.p : 100 - q.p;
+  return `<span class="pp ${good == null ? "" : good >= 67 ? "pp-g" : good <= 33 ? "pp-b" : ""}" data-tip="Percentil ${q.p} de ${q.n} valores de su ${q.scope}${better ? (better > 0 ? " · más alto es mejor" : " · más bajo es mejor") : ""}">p${q.p}</span>`;
+};
+function percentilesBox(r) {
+  const ks = PCT_METRICS.filter(([k]) => typeof r[k] === "number");
+  if (!ks.length) return "";
+  return `<div class="box"><b>Percentiles en su sector</b> <span class="hint">0 = el más bajo, 100 = el más alto · color según si es bueno</span>
+    ${ks.map(([k, t, fmt, b]) => { const q = pctIn(r, k); if (!q) return ""; const good = b > 0 ? q.p : 100 - q.p;
+      return `<div class="prob" data-tip="${esc(t)}: ${q.scope === "sector" ? "frente a " + q.n + " valores de su sector" : "frente a todo el universo (sector pequeño)"}"><span>${esc(t)} <span class="hint">${fmt(r[k], r)}</span></span><div class="track"><div class="fill" style="width:${q.p}%;background:${good >= 67 ? "var(--good)" : good <= 33 ? "var(--bad)" : "var(--faint)"}"></div></div><span class="num">p${q.p}</span></div>`; }).join("")}
+  </div>`;
+}
+if (H.S.cmp0) { E.cmp = H.S.cmp0; store.set("comparar", E.cmp); }
+window.SCRSetCmp = (list) => { E.cmp = list.slice(0, 4); store.set("comparar", E.cmp); H.render(); };
+function cmpAdd(sym) {
+  if (!sym || E.cmp.includes(sym)) return;
+  E.cmp = [...E.cmp, sym].slice(-4); store.set("comparar", E.cmp);
+}
+/* sección «Comparar» (Empresas): el comparador a pantalla completa, con enlace propio #/comparar/A,B,C */
+function renderComparar() {
+  if (!E.uni) { ensure(); return stateBox(); }
+  window.SCRSmart?.ensure(); enrichSmart();
+  const list = E.cmp.filter((s) => E.uni.filas.some((x) => x.sym === s));
+  const want = "#/comparar" + (list.length ? "/" + list.join(",") : "");
+  if (location.hash !== want && location.hash.startsWith("#/comparar")) history.replaceState(null, "", want);
+  let h = `<div class="scr-head"><div class="search-in"><svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg>
+      <input id="cmpq" type="search" list="cmp-dl" placeholder="${list.length >= 4 ? "Máximo 4: quita uno para añadir otro" : "Añade un ticker y pulsa Intro"}" autocomplete="off" aria-label="Añadir valor al comparador" ${list.length >= 4 ? "disabled" : ""}></div>
+      <datalist id="cmp-dl">${E.uni.filas.map((x) => `<option value="${esc(x.sym)}">${esc(x.nombre || "")}</option>`).join("")}</datalist>
+      ${list.length ? `<button class="chip" data-copycmp="1">🔗 Enlace</button><button class="link-btn" data-act="cmpclear">Vaciar</button>` : ""}</div>`;
+  if (list.length < 2) return h + `<div class="soon-box"><h3>Comparador</h3>${list.length ? `Tienes ${esc(list[0])}. ` : ""}Añade de 2 a 4 valores con el buscador de arriba, con la casilla ⇄ del screener o con «+ Comparar» en cada ficha. Verás sus datos lado a lado con el percentil de cada uno dentro de su sector.</div>`;
+  setTimeout(() => { const el = document.getElementById("pcmp"); if (el && window.SCRChart && !el.dataset.on) { el.dataset.on = "1"; window.SCRChart.compare(el, list); } }, 0);
+  return h + `<div class="box cmp-page">${cmpTable(list)}</div><h2 class="sec">Rentabilidad comparada</h2><div id="pcmp" class="fchart"></div>`;
+}
+
+H.modules.comparar = renderComparar;
+function cmpFromInput(inp) {
+  const v = inp.value.trim().toUpperCase(); if (!v || !E.uni) return;
+  const r = E.uni.filas.find((x) => x.sym === v) || E.uni.filas.find((x) => (x.nombre || "").toUpperCase().startsWith(v));
+  if (!r) { inp.setCustomValidity("No está en el universo"); inp.reportValidity(); return; }
+  cmpAdd(r.sym); H.render(); setTimeout(() => document.getElementById("cmpq")?.focus(), 0);
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "cmpq") { e.preventDefault(); cmpFromInput(e.target); } });
+document.addEventListener("change", (e) => { if (e.target.id === "cmpq" && E.uni?.filas.some((x) => x.sym === e.target.value.trim().toUpperCase())) cmpFromInput(e.target); });
 H.modules.sectores = renderSectores;
 H.modules.screener = renderScreener;
 H.handlers.push(onClick);
