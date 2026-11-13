@@ -41,11 +41,15 @@ jobs:
         run: python scripts/fetch_sec.py
       - name: Acciones, sectores y técnico
         continue-on-error: true
+        env:
+          TIINGO_KEY: ${{ secrets.TIINGO_KEY }}   # respaldo de precios de EE. UU. si Yahoo falla
         run: python scripts/fetch_equities.py
-      - name: Prueba del respaldo de precios con Stooq (solo al subir cambios)
+      - name: Prueba del respaldo de precios con Tiingo (solo al subir cambios)
         if: github.event_name == 'push'
         continue-on-error: true
-        run: python scripts/check_stooq.py
+        env:
+          TIINGO_KEY: ${{ secrets.TIINGO_KEY }}
+        run: python scripts/check_respaldo.py
       - name: Smart money (Dataroma y Congreso)
         continue-on-error: true
         run: |

@@ -142,8 +142,7 @@ async function mount(el, sym, opts = {}) {
   try { [LW, D] = await Promise.all([loadLib(), loadPrices(sym)]); } catch (e) {
     host.innerHTML = "";
     if (e.message === "nohist") {
-      root.innerHTML = `<div class="err-box"><b>Sin histórico diario para ${esc(sym)}.</b> Yahoo Finance no devolvió precios en la última actualización.
-        Fuente alternativa prevista: Stooq (CSV diario gratuito, sin clave), que se añadiría al proceso de GitHub como respaldo.</div>`;
+      root.innerHTML = `<div class="err-box"><b>Sin histórico diario para ${esc(sym)}.</b> Ni Yahoo Finance ni el respaldo (Tiingo, solo valores de EE. UU.) devolvieron precios en la última actualización.</div>`;
     } else {
       root.innerHTML = `<div class="err-box"><b>No se pudo cargar el gráfico interactivo.</b> ${esc(e.message)}. ${opts.fallback || ""}</div>`;
     }

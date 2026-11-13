@@ -17,6 +17,7 @@ import math
 import os
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
@@ -162,11 +163,11 @@ def drop_open_session(sym, df):
     return df
 
 
-# ------------------------------------------------------------------ respaldo de precios: Stooq
-STOOQ_SFX = {".L": ".uk", ".DE": ".de"}   # bolsas europeas que Stooq cubre con el mismo ticker; el resto no tiene respaldo
-STOOQ_USED = set()
-STOOQ_NOCSV = []   # respuestas de Stooq que no son CSV (diagnóstico)
-STOOQ_MAX = int(os.environ.get("STOOQ_MAX", "600"))   # peticiones por ejecución (Stooq limita las descargas diarias)
+# ------------------------------------------------------------------ respaldo de precios: Tiingo
+# Plan gratuito: 50 peticiones/hora, 1.000/día, 500 símbolos distintos/mes; solo bolsas de EE. UU.
+TIINGO_KEY = os.environ.get("TIINGO_KEY", "").strip()
+TIINGO_USED = set()
+TIINGO_MAX = int(os.environ.get("TIINGO_MAX", "40"))   # peticiones por ejecución (deja margen al límite horario)
 # Prueba: YAHOO_FALLO_SIMULADO=1 (todos) o lista de tickers separados por comas → Yahoo «falla» para ellos
 _SIM = os.environ.get("YAHOO_FALLO_SIMULADO", "").strip()
 
@@ -175,66 +176,70 @@ def yahoo_fails(sym):
     return bool(_SIM) and (_SIM == "1" or sym in {x.strip() for x in _SIM.split(",")})
 
 
-def stooq_symbol(sym):
-    """Ticker de Yahoo → ticker de Stooq (None si Stooq no lo cubre)."""
-    if sym.startswith("^"):
+def tiingo_symbol(sym):
+    """Ticker de Yahoo → ticker de Tiingo (None si no es de EE. UU.: el plan gratuito no cubre Europa)."""
+    if sym.startswith("^") or "." in sym:
         return None
-    if "." not in sym or sym.count(".") == 0:
-        return sym.lower() + ".us"
-    base, _, sfx = sym.rpartition(".")
-    m = STOOQ_SFX.get("." + sfx)
-    return base.lower() + m if m else None
+    return sym.lower()
 
 
-def stooq_prices(sym, years=5):
-    """OHLCV diario de Stooq (CSV público). Stooq ajusta por splits; no da dividendos."""
-    st = stooq_symbol(sym)
-    if not st:
+def tiingo_prices(sym, years=5):
+    """OHLCV diario de Tiingo. Devuelve (sin ajustar, ajustado) como Yahoo: el primero con dividendos."""
+    t = tiingo_symbol(sym)
+    if not t or not TIINGO_KEY:
         return None
-    d1 = (NOW - pd.Timedelta(days=int(365.25 * years))).strftime("%Y%m%d")
-    url = f"https://stooq.com/q/d/l/?s={st}&d1={d1}&d2={NOW.strftime('%Y%m%d')}&i=d"
-    txt = get(url, 30).decode("utf-8", "replace")
-    if "limit" in txt.lower() and "date" not in txt[:40].lower():
-        raise RuntimeError("Stooq: límite diario de descargas alcanzado")
-    if not txt.lower().startswith("date"):
-        STOOQ_NOCSV.append(f"{st}: {' '.join(txt[:160].split())}")
+    start = (NOW - pd.Timedelta(days=int(365.25 * years))).strftime("%Y-%m-%d")
+    req = urllib.request.Request(f"https://api.tiingo.com/tiingo/daily/{t}/prices?startDate={start}",
+                                 headers={**UA, "Authorization": "Token " + TIINGO_KEY, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise RuntimeError("Tiingo: límite de peticiones alcanzado") from None
+        if e.code in (401, 403):
+            raise RuntimeError(f"Tiingo: clave rechazada ({e.code})") from None
         return None
-    df = pd.read_csv(io.StringIO(txt), parse_dates=["Date"], index_col="Date")
-    df = df.rename(columns=str.title)
-    if "Close" not in df or len(df) < 30:
+    if not isinstance(data, list) or len(data) < 30:
         return None
-    if "Volume" not in df:
-        df["Volume"] = np.nan
-    return df[["Open", "High", "Low", "Close", "Volume"]].astype(float).sort_index()
+    df = pd.DataFrame(data)
+    df.index = pd.to_datetime(df["date"].str[:10])
+    raw = df[["open", "high", "low", "close", "volume", "divCash"]].astype(float)
+    raw.columns = ["Open", "High", "Low", "Close", "Volume", "Dividends"]
+    adj = df[["adjOpen", "adjHigh", "adjLow", "adjClose", "adjVolume"]].astype(float)
+    adj.columns = ["Open", "High", "Low", "Close", "Volume"]
+    return raw.sort_index(), adj.sort_index()
 
 
-def stooq_fallback(missing, frames, raw):
-    """Rellena con Stooq los valores sin precios de Yahoo. Devuelve cuántos ha recuperado."""
+def tiingo_fallback(missing, frames, raw):
+    """Rellena con Tiingo los valores sin precios de Yahoo. Devuelve cuántos ha recuperado."""
+    if not TIINGO_KEY:
+        log("Respaldo Tiingo: falta el secreto TIINGO_KEY; no se usa.")
+        return 0
     got, tried = 0, 0
     for s in missing:
-        if tried >= STOOQ_MAX:
-            log("Stooq: máximo de peticiones por ejecución alcanzado; quedan", len(missing) - tried)
-            break
-        if not stooq_symbol(s):
+        if not tiingo_symbol(s):
             continue
+        if tried >= TIINGO_MAX:
+            log("Tiingo: máximo de peticiones por ejecución alcanzado")
+            break
         tried += 1
         try:
-            df = stooq_prices(s)
+            res = tiingo_prices(s)
         except RuntimeError as e:
             log(str(e))
             break
         except Exception as e:  # noqa: BLE001
             if tried <= 3:
-                log("stooq", s, str(e)[:120])
+                log("tiingo", s, str(e)[:120])
             continue
-        if df is None:
+        if res is None:
             continue
-        df = drop_open_session(s, df)
-        raw[s] = df.assign(Dividends=0.0)
-        frames[s] = df.copy()
-        STOOQ_USED.add(s)
+        r_, a_ = res
+        raw[s] = drop_open_session(s, r_)
+        frames[s] = drop_open_session(s, a_)
+        TIINGO_USED.add(s)
         got += 1
-        time.sleep(0.25)
     return got
 
 
@@ -269,10 +274,8 @@ def prices(symbols):
                 time.sleep(10 * (attempt + 1))
     missing = [s for s in symbols if s not in frames]
     if missing:
-        n = stooq_fallback(missing, frames, raw)
-        log(f"Respaldo Stooq: {n} de {len(missing)} valores sin precios de Yahoo recuperados")
-        for x in STOOQ_NOCSV[:2]:
-            log("  Stooq no devolvió CSV →", x)
+        n = tiingo_fallback(missing, frames, raw)
+        log(f"Respaldo Tiingo: {n} de {len(missing)} valores sin precios de Yahoo recuperados (solo EE. UU.)")
     return frames, raw
 
 
@@ -627,7 +630,7 @@ def main():
         if s in frames:
             tec, s50, s200 = technical(frames[s])
             r.update(tec)
-            r["fuente_precio"] = "Stooq" if s in STOOQ_USED else "Yahoo"
+            r["fuente_precio"] = "Tiingo" if s in TIINGO_USED else "Yahoo"
             c = frames[s]["Close"]
             tail = c.iloc[-252:]
             try:
@@ -643,7 +646,7 @@ def main():
                      "o": [jnum(x, 3) for x in fr["Open"]], "h": [jnum(x, 3) for x in fr["High"]],
                      "l": [jnum(x, 3) for x in fr["Low"]], "c": [jnum(x, 3) for x in fr["Close"]],
                      "v": [int(x) if x == x else None for x in fr["Volume"]]}
-            fuente = "Stooq (respaldo: Yahoo sin datos; precios ajustados por splits)" if s in STOOQ_USED else "Yahoo Finance (precios sin ajustar, como TradingView)"
+            fuente = "Tiingo (respaldo: Yahoo sin datos; precios sin ajustar)" if s in TIINGO_USED else "Yahoo Finance (precios sin ajustar, como TradingView)"
             with open(os.path.join(DATA, "p", s.replace("/", "_") + ".json"), "w") as fh:
                 json.dump({"sym": s, "fuente": fuente, **ohlcv, "ev": ev}, fh, separators=(",", ":"))
         with open(os.path.join(DATA, "t", s.replace("/", "_") + ".json"), "w") as fh:
@@ -721,8 +724,8 @@ def main():
         ERRORS.append({"fuente": "Cálculo", "serie": "Laboratorio", "motivo": str(e)[:200]})
 
     meta = {"generado": NOW.isoformat(timespec="seconds"), "n": len(rows), "errores": ERRORS[:200], "n_errores": len(ERRORS),
-            "fuentes": ["Wikipedia (composición S&P 500 y Nasdaq-100)", "Yahoo Finance vía yfinance (precios y fundamentales)", "Stooq (respaldo de precios si Yahoo falla)"],
-            "n_stooq": len(STOOQ_USED),
+            "fuentes": ["Wikipedia (composición S&P 500 y Nasdaq-100)", "Yahoo Finance vía yfinance (precios y fundamentales)", "Tiingo (respaldo de precios de EE. UU. si Yahoo falla)"],
+            "n_respaldo": len(TIINGO_USED),
             "notas": "Fundamentales refrescados por rotación (cada valor, una vez por semana). Revisiones de beneficios: sin fuente pública fiable."}
     json.dump({**meta, "filas": rows}, open(os.path.join(DATA, "universe.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump({**meta, "stats": stats, "rrg": rot}, open(os.path.join(DATA, "sectors.json"), "w"), ensure_ascii=False, separators=(",", ":"))
