@@ -832,3 +832,21 @@ thead th{background:var(--surface-2)}
   .fbox{padding:14px;overflow-x:auto}.fbar{grid-template-columns:96px 1fr 40px}
   .fq{font-size:13px}
 }
+/* ===================== Fase 7 · Diario de decisiones y registro inmutable ===================== */
+.dform{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.dform label{font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+.dform label .hint{text-transform:none;letter-spacing:0;font-weight:400}
+.dform .seg{display:flex;flex-wrap:wrap;gap:6px}
+.dform .seg button{background:var(--surface);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;padding:8px 12px;font-size:14px;cursor:pointer}
+.dform .seg button small{color:var(--muted);font-size:11.5px;margin-left:4px}
+.dform .seg button.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.dform textarea.txt,.dform input.txt{width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:9px 11px;background:var(--surface);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;resize:vertical}
+.dec{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 8px;border-radius:5px;white-space:nowrap;background:var(--surface-3)}
+.dec-comprar{color:var(--pos);background:color-mix(in srgb,var(--pos) 12%,transparent)}
+.dec-vender{color:var(--neg);background:color-mix(in srgb,var(--neg) 12%,transparent)}
+.dec-descartar{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.dec-vigilar{color:var(--good);background:color-mix(in srgb,var(--good) 12%,transparent)}
+.dtab td{vertical-align:top}.dtab .dmot{min-width:220px;max-width:380px;white-space:normal}
+.dtab tr.anul td{opacity:.5}.dtab tr.anul .dmot{text-decoration:line-through}
+@media (max-width:640px){.dtab .dmot{min-width:160px}}
+.dform .seg{background:none;border:0;padding:0}

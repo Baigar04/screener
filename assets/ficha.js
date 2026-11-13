@@ -89,7 +89,7 @@ function head(c) {
       <div class="fp-sub">${esc(sub)}${k.tagHtml(r, 4) ? ` <span class="tgs">${k.tagHtml(r, 4)}</span>` : ""}</div></div>
     <div class="fp-act"><button class="fbtn ${w ? "on" : "pri"}" data-watch="${esc(r.sym)}">${w ? "★ En Watchlist" : "☆ Añadir a Watchlist"}</button>
       <button class="fbtn ${cm ? "on" : ""}" data-cmp-toggle="${esc(r.sym)}">${cm ? "⇄ En comparador ✓" : "⇄ Comparar"}</button>
-      <button class="fbtn" data-fsec="invest">✎ Registrar decisión</button>
+      <button class="fbtn" data-dnew="${esc(r.sym)}">✎ Registrar decisión</button>
       <button class="fbtn ic" data-copylink="${esc(r.sym)}" title="Copiar el enlace directo a esta ficha" aria-label="Copiar enlace">🔗</button></div></div>`;
 }
 
@@ -243,8 +243,7 @@ function eventsBox(c) {
   return box("Próximos eventos", rows.join("") + `<h2 class="fsub">Tu investigación</h2>${myResearch(c)}`);
 }
 function myResearch(c) {
-  return `<div class="fq"><span>Última decisión</span><span class="fq-v">${dot("na")}Sin decisiones registradas</span></div>
-    <div class="hint">El diario de decisiones (qué decides, por qué y a qué precio, medido a 1, 3 y 6 meses) se activa con la próxima actualización de la web.</div>`;
+  return window.SCRDiario ? window.SCRDiario.fichaBlock(c.r.sym) : '<div class="hint">Cargando el diario…</div>';
 }
 
 /* ---------- lectura analítica (reglas, sin IA) ---------- */

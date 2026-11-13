@@ -290,7 +290,7 @@ function renderSaved() {
       ${v.items.map((x) => `<tr data-sym="${esc(x.sym)}"><td><b>${esc(x.sym)}</b></td><td class="num">${pct(x.w * 100)}</td><td class="num">${pct(x.wcur * 100)}</td><td class="num ${Math.abs(x.drift) > 5 ? "stale-txt" : ""}">${sgn(x.drift, 1)} pp</td>
         <td class="num">${nf(x.p0, 2)}</td><td class="num">${nf(x.now, 2)}</td><td class="num chg ${cls(x.now && x.p0 ? x.now / x.p0 - 1 : null)}">${x.now && x.p0 ? spct((x.now / x.p0 - 1) * 100) : "—"}</td></tr>`).join("")}</tbody></table>
       ${C.riskSaved[p.id] === "busy" ? '<div class="skel" style="height:200px;margin-top:12px"></div>' : C.riskSaved[p.id]?.err ? `<div class="err-box" style="margin-top:12px">${esc(C.riskSaved[p.id].err)}</div>` : riskHtml(C.riskSaved[p.id])}
-      <h2 class="sec">Diario de decisiones</h2>
+      <h2 class="sec">Notas de la cartera <span class="hint">También aparecen en Investigación › Diario de decisiones, junto a tus decisiones por valor</span></h2>
       ${(p.notas || []).slice().reverse().map((n) => `<div class="note"><span class="hint">${fmtDate(n.f.slice(0, 10))}</span> ${esc(n.t)}</div>`).join("") || '<div class="hint">Sin notas.</div>'}
       <div class="bar" style="margin-top:8px"><input id="cnote" class="txt" placeholder="Por qué compras, vendes o rebalanceas" aria-label="Nueva nota"><button class="icon-btn" data-cnote="${p.id}">Añadir nota</button>
       <span style="flex:1"></span><button class="icon-btn" data-ccsvp="${p.id}">Exportar CSV</button><button class="icon-btn" data-cdel="${p.id}">Eliminar cartera</button></div></div>`;

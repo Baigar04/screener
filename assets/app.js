@@ -13,13 +13,14 @@ const NAV = [
   ["carteras", "Carteras", true],
   ["adelantarse", "Adelantarse", true],
   ["laboratorio", "Laboratorio", true],
+  ["diario", "Diario de decisiones", true],
 ];
 /* 4 áreas en la barra lateral (o inferior en móvil); dentro de cada área, sus secciones en una barra superior */
 const AREAS = [
   ["mercado", "Mercado", ["hoy", "pulso", "sectores", "adelantarse"]],
   ["screener", "Screener", ["screener", "comparar", "smart"]],
   ["watchlists", "Watchlists", ["seguimiento", "carteras"]],
-  ["investigacion", "Investigación", ["laboratorio"]],
+  ["investigacion", "Investigación", ["diario", "laboratorio"]],
 ];
 const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
 /* Ficha de empresa (página propia, Fase 6): 9 apartados en la barra lateral */
@@ -159,6 +160,7 @@ const ICONS = {
 };
 ICONS.mercado = ICONS.pulso; ICONS.watchlists = "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"; ICONS.seguimiento = ICONS.watchlists;
 ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4";
+ICONS.diario = "M6 3h10l3 3v15H6zM9 8h7M9 12h7M9 16h4";
 Object.assign(ICONS, { resumen: "M4 6h16M4 12h16M4 18h10", grafico: "M3 3v18h18M7 15l4-4 3 3 5-6", fund: "M5 21V10M10 21V4M15 21v-7M20 21v-11",
   valoracion: "M3 6h18v12H3zM3 10h18M7 14h4", factores: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4",
   resultados: "M4 5h16v15H4zM4 9h16M9 3v4M15 3v4", comparables: "M4 6h16M4 12h16M4 18h16", smartm: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5",
@@ -189,7 +191,7 @@ function renderTop() {
   const tn = $("#themeName"); if (tn) tn.textContent = document.documentElement.dataset.theme === "light" ? "Claro" : "Oscuro";
   $("#level").innerHTML = MODES.map(([k, t, tip]) => `<button role="radio" aria-checked="${S.mode === k}" data-mode="${k}" class="${S.mode === k ? "on" : ""}" title="${tip}">${t}</button>`).join("");
   const st = $("#status");
-  const fnote = F ? window.SCRFicha?.note?.(F.sym) || "" : "";
+  const fnote = F ? window.SCRFicha?.note?.(F.sym) || "" : window.SCR?.notes?.[S.view]?.() || "";
   if (fnote) { st.innerHTML = fnote; return; }
   if (!S.data) { st.innerHTML = `<span><span class="dot err"></span> ${esc(S.error || "Cargando…")}</span>`; return; }
   const ser = Object.values(S.data.series);

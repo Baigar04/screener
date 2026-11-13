@@ -24,6 +24,7 @@ RESULTS = []
 
 
 def check(name, ok, detail=""):
+    ok = bool(ok)
     RESULTS.append(ok)
     print(f"{'OK   ' if ok else 'FALLA'} {name}{' · ' + detail if detail else ''}", flush=True)
 
@@ -60,7 +61,7 @@ def fichas(pg, base):
 
 AREAS = {"hoy": "mercado", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado",
          "screener": "screener", "comparar": "screener", "smart": "screener",
-         "seguimiento": "watchlists", "carteras": "watchlists", "laboratorio": "investigacion"}
+         "seguimiento": "watchlists", "carteras": "watchlists", "laboratorio": "investigacion", "diario": "investigacion"}
 
 
 def navegacion(pg, base):
@@ -225,6 +226,41 @@ def fase6(pg, base):
     pg.set_viewport_size({"width": 1366, "height": 900})
 
 
+def fase7(pg, base):
+    """Fase 7: diario de decisiones (registrar desde la ficha, medir, anular) y registro inmutable. Usa un navegador limpio."""
+    pg.set_viewport_size({"width": 1366, "height": 900})
+    pg.goto(base + "#/diario")
+    pg.evaluate("localStorage.removeItem('diario')")
+    pg.goto(base + "#/empresa/MSFT")
+    pg.wait_for_selector("#view .fp-act [data-dnew]", timeout=60000)
+    pg.click("#view .fp-act [data-dnew]")
+    pg.wait_for_selector("#drawer [data-ddec=comprar]", timeout=10000)
+    pg.click("#drawer [data-dsave]")
+    check("diario: no guarda sin decisión ni motivo", "Elige la decisión" in pg.text_content("#dmsg"))
+    pg.click("#drawer [data-ddec=comprar]")
+    pg.click("#drawer [data-dhz=medio]")
+    pg.fill("#dmot", "Prueba automática de la interfaz")
+    pg.click("#drawer [data-dsave]")
+    pg.wait_for_timeout(800)
+    saved = pg.evaluate("JSON.parse(localStorage.getItem('diario') || '[]')")
+    ok = len(saved) == 1 and saved[0]["sym"] == "MSFT" and saved[0]["p0"] and saved[0]["fp"]
+    check("diario: decisión guardada con precio y cierre del día", ok, f"{saved[0]['dec']} a {saved[0]['p0']} ({saved[0]['fp']})" if saved else "nada")
+    check("ficha: «Tu investigación» muestra la decisión", "Última decisión" in pg.text_content("#view") and "Comprar" in pg.text_content("#view"))
+    pg.goto(base + "#/diario")
+    pg.wait_for_selector("table.dtab", timeout=30000)
+    pg.wait_for_timeout(2000)
+    t = pg.text_content("#view")
+    check("diario: sección en Investigación con tabla y KPIs", "Decisiones registradas" in t and "Acierto a 3 meses" in t and pg.get_attribute("#nav .on", "data-area") == "investigacion")
+    check("diario: notas de carteras integradas", "Notas de tus carteras" in t)
+    check("registro inmutable visible", "Registro inmutable" in pg.text_content("#status") and ("íntegra" in t or "próxima actualización" in t), pg.text_content("#status").strip()[:80])
+    pg.click("[data-danul]")
+    pg.click("[data-danul]")
+    pg.wait_for_timeout(500)
+    an = pg.evaluate("JSON.parse(localStorage.getItem('diario'))[0].anulada")
+    check("diario: anular deja la decisión a la vista", bool(an) and pg.locator("tr.anul").count() == 1)
+    pg.evaluate("localStorage.removeItem('diario')")
+
+
 def main():
     base = serve(SITE)
     with sync_playwright() as p:
@@ -233,7 +269,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

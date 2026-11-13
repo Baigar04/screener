@@ -81,6 +81,19 @@ jobs:
           head -c 5000 data/universe.json > /tmp/u && mv /tmp/u data/universe.json
       - name: Validar antes de publicar (si un fichero no pasa, se publica la última versión válida)
         run: python scripts/validate.py
+      - name: Registro inmutable de la nota (una foto por sesión, encadenada; rama copia-datos)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          rm -rf /tmp/reg && mkdir -p /tmp/reg && cd /tmp/reg
+          git init -q && git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth=1 origin copia-datos 2>/dev/null; then git checkout -q -b copia-datos FETCH_HEAD; else git checkout -q --orphan copia-datos; fi
+          python "$GITHUB_WORKSPACE/scripts/registro.py" "$GITHUB_WORKSPACE/data/score.json" registro "$GITHUB_WORKSPACE/data/registro.json" || echo "::warning::El registro inmutable no está íntegro: revisar"
+          git add registro
+          git -c user.name="github-actions[bot]" -c user.email="41898729+github-actions[bot]@users.noreply.github.com" commit -q -m "Registro $(date -u +%F)" || { echo "Sin sesión nueva"; exit 0; }
+          git push -q origin copia-datos
       - name: Copia de seguridad del historial (rama copia-datos; los viernes y al subir cambios)
         continue-on-error: true
         env:
@@ -95,7 +108,7 @@ jobs:
           for f in score_hist.json score_diario.json insiders.json smart_cache.json lab.json validacion.json; do
             [ -f "$GITHUB_WORKSPACE/data/$f" ] && cp "$GITHUB_WORKSPACE/data/$f" data/
           done
-          printf "# Copia de seguridad del historial del screener\n\nLo que no se puede volver a descargar: registro semanal y diario de la nota, formularios 4 ya leídos, PDF del Congreso ya leídos y laboratorio.\nLa genera el workflow los viernes y al subir cambios. Si la web pierde un fichero, el workflow lo recupera de aquí.\n" > LEEME.md
+          printf "# Copia de seguridad del historial del screener\n\nLo que no se puede volver a descargar: registro semanal y diario de la nota, formularios 4 ya leídos, PDF del Congreso ya leídos y laboratorio. En registro/ está el registro inmutable: una foto de la nota por sesión, encadenada con huellas SHA-256 (cadena.json).\nLa genera el workflow los viernes y al subir cambios. Si la web pierde un fichero, el workflow lo recupera de aquí.\n" > LEEME.md
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898729+github-actions[bot]@users.noreply.github.com" commit -q -m "Copia de seguridad $(date -u +%F)" || { echo "Sin cambios"; exit 0; }
           git push -q origin copia-datos
