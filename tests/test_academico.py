@@ -70,7 +70,8 @@ def test_trimestres_desde_xbrl_y_cuarto_deducido():
     facts = {"facts": {"us-gaap": {"Revenues": {"units": {"USD": rev}}, "NetIncomeLoss": {"units": {"USD": rev}},
                                     "Assets": {"units": {"USD": [fact(1000, "2025-12-31", "2026-02-15", "10-K")]}}}}}
     q4 = fetch_sec.quarterly(facts, "ventas")
-    assert q4["2025-03-31"] == (100, "2025-05-01") and q4["2025-12-31"] == (150, "2026-02-15")
+    assert q4["2025-03-31"][:2] == (100, "2025-05-01") and q4["2025-12-31"][:2] == (150, "2026-02-15")
+    assert q4["2025-12-31"][3:] == ("Q4", "10-K")
     rows = fetch_sec.parse_q(facts)
     assert [r[0] for r in rows] == ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"] and rows[-1][6] == 1000
 

@@ -185,7 +185,7 @@ document.addEventListener("input", (e) => {
   qt = setTimeout(() => { S.q = e.target.value; S.limit = 100; const p = e.target.selectionStart; H.render(); const n = document.getElementById("smq"); if (n) { n.focus(); n.setSelectionRange(p, p); } }, 200);
 });
 
-window.SCRSmart = { ensure, persTab, data: () => S.d, onload: null };
+window.SCRSmart = { ensure, persTab, data: () => S.d, ins: () => I.d, ensureIns, onload: null };
 H.modules.smart = render;
 H.handlers.unshift(onClick);
 })();

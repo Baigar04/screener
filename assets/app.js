@@ -22,6 +22,12 @@ const AREAS = [
   ["investigacion", "Investigación", ["laboratorio"]],
 ];
 const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
+/* Ficha de empresa (página propia, Fase 6): 9 apartados en la barra lateral */
+const FSECS = [["resumen", "Resumen"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["valoracion", "Valoración"], ["factores", "Factores"],
+  ["resultados", "Resultados"], ["comparables", "Comparables"], ["smartm", "Smart money"], ["invest", "Investigación"]];
+/* enlaces antiguos de pestañas → apartado nuevo */
+const FSEC_OLD = { tesis: "valoracion", noticias: "resultados", pers: "smartm", comparar: "comparables" };
+const fsec = (t) => (FSECS.some((x) => x[0] === t) ? t : FSEC_OLD[t] || "resumen");
 /* 2 modos en lugar de 4 niveles: los dos muestran todos los datos; «Explicado» añade las explicaciones */
 const MODES = [["c", "Compacto", "Todos los datos, sin textos de ayuda"], ["x", "Explicado", "Todos los datos con explicaciones de cada bloque"]];
 const REGIONS = [["US", "EE. UU."], ["EZ", "Zona euro"], ["GL", "Global"]];
@@ -152,7 +158,11 @@ const ICONS = {
   laboratorio: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9",
 };
 ICONS.mercado = ICONS.pulso; ICONS.watchlists = "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"; ICONS.seguimiento = ICONS.watchlists;
-ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4"; ICONS.empresas = "M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h3a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M3 21h18";
+ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4";
+Object.assign(ICONS, { resumen: "M4 6h16M4 12h16M4 18h10", grafico: "M3 3v18h18M7 15l4-4 3 3 5-6", fund: "M5 21V10M10 21V4M15 21v-7M20 21v-11",
+  valoracion: "M3 6h18v12H3zM3 10h18M7 14h4", factores: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4",
+  resultados: "M4 5h16v15H4zM4 9h16M9 3v4M15 3v4", comparables: "M4 6h16M4 12h16M4 18h16", smartm: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5",
+  invest: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4" }); ICONS.empresas = "M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h3a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M3 21h18";
 function subnav() {
   const [, , secs] = areaOf(S.view);
   if (secs.length < 2) return "";
@@ -160,20 +170,27 @@ function subnav() {
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg>${NAV.find((x) => x[0] === k)[1]}</button>`).join("")}</nav>`;
 }
 function renderTop() {
-  const [cur, curName, secs] = areaOf(S.view);
+  const F = S.ficha;
+  const [cur, curName, secs] = F ? AREAS[1] : areaOf(S.view);
   const vname = NAV.find((x) => x[0] === S.view)[1];
   /* cabecera: las 4 áreas (en móvil, barra inferior) */
   $("#nav").innerHTML = AREAS.map(([k, n, ss]) => `<button data-area="${k}" class="${cur === k ? "on" : ""}" title="${n}: ${ss.map((s) => NAV.find((x) => x[0] === s)[1]).join(", ")}" aria-current="${cur === k ? "page" : "false"}">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span></button>`).join("");
-  /* barra lateral: las secciones del área (en móvil, fila deslizable) */
-  $("#side").innerHTML = secs.map((k) => `<button data-sub="${k}" class="${S.view === k ? "on" : ""}" aria-current="${S.view === k ? "page" : "false"}">
+  /* barra lateral: las secciones del área (en móvil, fila deslizable); en una ficha, sus 9 apartados */
+  if (F) $("#side").innerHTML = FSECS.map(([k, t]) => `<button data-fsec="${k}" class="${F.tab === k ? "on" : ""}" aria-current="${F.tab === k ? "page" : "false"}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span>${t}</span></button>`).join("");
+  else $("#side").innerHTML = secs.map((k) => `<button data-sub="${k}" class="${S.view === k ? "on" : ""}" aria-current="${S.view === k ? "page" : "false"}">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span>${NAV.find((x) => x[0] === k)[1]}</span></button>`).join("");
   /* migas de pan */
   $("#crumbs").innerHTML = `<button class="crumb-home" data-sub="hoy" aria-label="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></button><span class="c-sep">›</span>
-    <button data-area="${cur}" class="crumb">${esc(curName)}</button><span class="c-sep">/</span><b>${esc(vname)}</b>`;
+    <button data-area="${cur}" class="crumb">${esc(curName)}</button><span class="c-sep">/</span>${F
+      ? `<button data-sub="screener" class="crumb">Empresas</button><span class="c-sep">/</span><b>${esc(window.SCRFicha?.title?.(F.sym) || F.sym)}</b>`
+      : `<b>${esc(vname)}</b>`}`;
   const tn = $("#themeName"); if (tn) tn.textContent = document.documentElement.dataset.theme === "light" ? "Claro" : "Oscuro";
   $("#level").innerHTML = MODES.map(([k, t, tip]) => `<button role="radio" aria-checked="${S.mode === k}" data-mode="${k}" class="${S.mode === k ? "on" : ""}" title="${tip}">${t}</button>`).join("");
   const st = $("#status");
+  const fnote = F ? window.SCRFicha?.note?.(F.sym) || "" : "";
+  if (fnote) { st.innerHTML = fnote; return; }
   if (!S.data) { st.innerHTML = `<span><span class="dot err"></span> ${esc(S.error || "Cargando…")}</span>`; return; }
   const ser = Object.values(S.data.series);
   const ok = ser.filter((s) => s.estado === "ok").length;
@@ -333,6 +350,13 @@ function render() {
   renderTop();
   S.explain = S.mode === "x";
   document.documentElement.dataset.mode = S.mode;
+  document.body.classList.toggle("in-ficha", !!S.ficha);
+  if (S.ficha) {
+    $("#view").innerHTML = window.SCRFicha ? window.SCRFicha.render(S.ficha) : renderSoon("screener");
+    document.title = (window.SCRFicha?.title?.(S.ficha.sym) || S.ficha.sym) + " · Screener";
+    window.SCRFicha?.after?.(S.ficha);
+    return;
+  }
   $("#view").innerHTML = S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view);
   document.title = NAV.find((x) => x[0] === S.view)[1] + " · Screener";
 }
@@ -406,6 +430,7 @@ document.addEventListener("click", (e) => {
   if (!t.closest("#settings")) $("#settings")?.classList.remove("open");
   if ((b = t.closest("[data-area]"))) { const a = AREAS.find((x) => x[0] === b.dataset.area); go(a[2].includes(S.view) ? S.view : store.get("area_" + a[0], a[2][0])); return; }
   if ((b = t.closest("[data-sub]"))) { go(b.dataset.sub); return; }
+  if ((b = t.closest("[data-fsec]")) && S.ficha) { openFicha(S.ficha.sym, b.dataset.fsec); return; }
   if ((b = t.closest("[data-ampreg]"))) { S.ampRegion = b.dataset.ampreg; render(); return; }
   if ((b = t.closest("#level button[data-mode]"))) { S.mode = b.dataset.mode; store.set("modo", S.mode); render(); return; }
   if ((b = t.closest("[data-r]"))) {
@@ -444,10 +469,9 @@ const MODULES = {}, HANDLERS = [];
 /* ---------- rutas: enlaces directos #/<sección> y #/empresa/<SYM>[/<pestaña>]; «atrás» del navegador ---------- */
 const VIEWS = NAV.map((x) => x[0]);
 const FICHA_RE = /^#\/empresa\//;
-let fichaPushed = false;   // la ficha abierta tiene su propia entrada en el historial (se abrió desde la web)
 function parseHash() {
   const p = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/");
-  if (p[0] === "empresa" && p[1]) return { sym: p[1].toUpperCase(), tab: p[2] || null };
+  if (p[0] === "empresa" && p[1]) return { sym: p[1].toUpperCase(), tab: fsec(p[2]) };
   if (p[0] === "comparar" && p[1]) return { view: "comparar", cmp: p[1].toUpperCase().split(",").filter(Boolean).slice(0, 4) };
   return VIEWS.includes(p[0]) ? { view: p[0] } : {};
 }
@@ -455,35 +479,33 @@ function setHash(h, replace) {
   if (location.hash === h) return;
   if (replace) history.replaceState(null, "", h); else history.pushState(null, "", h);
 }
-function go(v) { fichaPushed = false; S.view = v; store.set("area_" + areaOf(v)[0], v); setHash("#/" + v, FICHA_RE.test(location.hash)); render(); window.scrollTo(0, 0); }
-function routeFicha(sym) {           /* la ficha se ha abierto desde la web: nueva entrada en el historial */
-  const h = "#/empresa/" + encodeURIComponent(sym);
-  if (location.hash === h) return;
-  const replace = FICHA_RE.test(location.hash);   // de una ficha a otra (comparables): sin acumular entradas
-  setHash(h, replace); if (!replace) fichaPushed = true;
+function go(v) { S.ficha = null; S.view = v; store.set("area_" + areaOf(v)[0], v); setHash("#/" + v, false); render(); window.scrollTo(0, 0); }
+/* la ficha es una página: #/empresa/SYM/<apartado>. Cambiar de apartado no añade entradas al historial;
+   abrir otra empresa desde una ficha tampoco (así «atrás» vuelve siempre a la sección de origen) */
+function openFicha(sym, tab) {
+  sym = String(sym).toUpperCase(); tab = fsec(tab || (S.ficha?.sym === sym ? S.ficha.tab : "resumen"));
+  const same = S.ficha?.sym === sym, inFicha = FICHA_RE.test(location.hash);
+  S.ficha = { sym, tab };
+  setHash("#/empresa/" + encodeURIComponent(sym) + (tab === "resumen" ? "" : "/" + tab), inFicha);
+  closeDrawer(); render(); if (!same) window.scrollTo(0, 0); else document.getElementById("view")?.scrollIntoView?.({ block: "start" });
 }
-function userClose() {               /* cierre por la X, el fondo o Escape */
-  const was = FICHA_RE.test(location.hash);
-  window.SCR.closeDrawer();
-  if (!was) return;
-  if (fichaPushed) { fichaPushed = false; history.back(); } else setHash("#/" + S.view, true);
-}
+function userClose() { window.SCR.closeDrawer(); }   /* cierre del panel lateral por la X, el fondo o Escape */
 function route() {
   const r = parseHash();
   if (r.sym) {
-    if (window.SCRFichaSym?.() !== r.sym) window.SCROpen?.(r.sym, r.tab, true);
+    if (S.ficha?.sym !== r.sym || S.ficha?.tab !== r.tab) { S.ficha = { sym: r.sym, tab: r.tab }; closeDrawer(); render(); window.scrollTo(0, 0); }
     return;
   }
-  fichaPushed = false;
+  const was = !!S.ficha; S.ficha = null;
   if ($("#drawer").classList.contains("on")) window.SCR.closeDrawer();
   if (r.cmp) window.SCRSetCmp?.(r.cmp);
-  if (r.view && r.view !== S.view) { S.view = r.view; render(); window.scrollTo(0, 0); }
+  if ((r.view && r.view !== S.view) || was) { if (r.view) S.view = r.view; render(); window.scrollTo(0, 0); }
 }
 window.addEventListener("hashchange", route);
-window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, seriesDrawer, routeFicha, modules: MODULES, handlers: HANDLERS };
-{ const r0 = parseHash(); if (r0.view) S.view = r0.view; else if (r0.sym) S.view = "screener"; else setHash("#/" + S.view, true); if (r0.cmp) S.cmp0 = r0.cmp; }
+window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, openFicha, seriesDrawer, modules: MODULES, handlers: HANDLERS };
+{ const r0 = parseHash(); if (r0.view) S.view = r0.view; else if (r0.sym) { S.view = "screener"; S.ficha = { sym: r0.sym, tab: r0.tab }; } else setHash("#/" + S.view, true); if (r0.cmp) S.cmp0 = r0.cmp; }
 render();
 load();
 /* los módulos (equities.js…) se cargan después: la ficha de un enlace directo se abre cuando ya existen */
-document.addEventListener("DOMContentLoaded", () => { if (parseHash().sym) route(); });
+document.addEventListener("DOMContentLoaded", () => { if (S.ficha) render(); });
 })();

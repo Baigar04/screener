@@ -510,67 +510,22 @@ function exportCsv() {
   a.download = `screener_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
 }
 
-/* ---------- FICHA DE EMPRESA (pantalla completa con pestañas) ---------- */
-const TABS = [["resumen", "Resumen"], ["tesis", "Tesis"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["noticias", "Noticias y eventos"], ["pers", "Personalidades"], ["comparar", "Comparar"]];
-async function companyDrawer(sym, tab, fromRoute) {
-  if (!fromRoute) H.routeFicha(sym);
-  if (!E.uni) await ensure();
-  const r = E.uni?.filas.find((x) => x.sym === sym);
-  if (!r) {
-    if (fromRoute) H.openDrawer(`<h3>${esc(sym)}</h3><div class="box"><b>Valor no encontrado</b>${E.uni ? `${esc(sym)} no está en el universo del screener (${E.uni.filas.length} valores).` : "No se pudieron cargar los datos de acciones."} Busca otro ticker con el buscador de arriba.</div>`);
-    return;
-  }
-  if (tab && !TABS.some(([k]) => k === tab)) tab = null;
-  E.ficha = { sym, tab: tab || store.get("ficha_tab", "resumen"), d: null };
-  document.getElementById("drawer").classList.add("full");
-  paintFicha();
-  try { E.ficha.d = await fetch(`data/t/${encodeURIComponent(sym)}.json`).then((x) => (x.ok ? x.json() : {})); } catch (e) { E.ficha.d = {}; }
-  if (E.ficha?.sym === sym) paintFicha();
-}
-/* cabecera ejecutiva: lo esencial de un vistazo, con enlace directo a la ficha */
-function execHeader(r) {
-  const days = r.resultados ? Math.round((new Date(r.resultados + "T00:00:00Z") - Date.now()) / 864e5) : null;
-  const tv = r.veredicto;
-  const items = [
-    [scoreName().replace("Puntuación", "Nota"), r.score == null ? "—" : scoreBadge(r.score), "Nota con tus pesos; percentil frente a su sector"],
-    ["Técnico 1-3 m", `<span class="chg ${tv === "Alcista" ? "p" : tv === "Bajista" ? "n" : "z"}">${esc(tv || "—")}</span>`, r.motivo_tec || ""],
-    ["PER frente a su sector", r.per_vs_sector == null ? "—" : `<span class="chg ${cls(r.per_vs_sector == null ? null : -r.per_vs_sector)}">${spct(r.per_vs_sector, 0)}</span>`, "Negativo = más barato que la mediana de su sector"],
-    ["Rentabilidad 1 año", `<span class="chg ${cls(r.r1a)}">${spct(r.r1a)}</span>`, ""],
-    ["Capitalización", big(r.mcap, r.moneda), ""],
-    ["Próximos resultados", r.resultados ? `${fmtDate(r.resultados)}${days != null && days >= 0 && days <= 30 ? ` <span class="hint">en ${days} d</span>` : ""}` : "—", ""],
-    ["Superinversores", r.n_smart ? String(r.n_smart) : "—", "Gestores de Dataroma que lo tienen en su último 13F"],
-  ];
-  return `<div class="f-exec">${items.map(([k, v, tp]) => `<div class="f-exec-i"${tp ? ` data-tip="${esc(tp)}"` : ""}><span>${esc(k)}</span><b class="num">${v}</b></div>`).join("")}
-    <button class="chip f-link" data-copylink="${esc(r.sym)}" title="Copiar el enlace directo a esta ficha">🔗 Enlace</button></div>`;
-}
-function paintFicha() {
-  const { sym, tab, d } = E.ficha, r = E.uni.filas.find((x) => x.sym === sym);
-  if (E.chartApi) { E.chartApi.destroy(); E.chartApi = null; }
-  const tv = r.veredicto;
-  H.openDrawer(`<div class="f-head"><div><div class="f-sym">${logo(r, true)}${star(sym)}<b>${esc(sym)}</b> <span class="badge ${tv === "Alcista" ? "Favorable" : tv === "Bajista" ? "Defensivo" : "Neutral"}">${esc(tv || "—")}</span></div>
-      <h3>${esc(r.nombre || sym)}</h3>${tagHtml(r, 5) ? `<div class="tgs" style="margin:2px 0 4px">${tagHtml(r, 5)}</div>` : ""}<div class="reg">${esc(sn(r.sector))} · ${esc(r.industria || "—")} · ${esc(r.pais || "—")} · ${esc((r.indices || []).join(", "))}</div></div>
-      <div class="f-px"><div class="bigv num">${nf(r.precio, 2)} <small>${esc(r.moneda || "")}</small></div>
-      <div class="num"><span class="chg ${cls(r.r1d)}">${spct(r.r1d, 2)}</span> <span class="hint">cierre ${fmtDate(r.fecha_precio)}</span></div>
-      <button class="chip ${isC(sym) ? "on" : ""}" data-cmp-toggle="${esc(sym)}">${isC(sym) ? "En comparador ✓" : "+ Comparar"}</button></div></div>
-    ${execHeader(r)}
-    <div class="tabs" role="tablist">${TABS.map(([k, t]) => `<button role="tab" aria-selected="${tab === k}" class="${tab === k ? "on" : ""}" data-ftab="${k}">${t}</button>`).join("")}</div>
-    <div class="f-body" id="fbody">${fichaTab(tab, r, d)}</div>`);
-  if (tab === "grafico") mountChart(sym);
-  if (tab === "comparar") mountCompare(sym);
-  if (tab === "noticias") mountNews(sym);
-  if (tab === "tesis" && d && window.SCRTesis) { const el = document.getElementById("ftesis"); if (el) window.SCRTesis.mount(el, r, d, { uni: E.uni.filas, fact: E.sc?.factores?.[sym] }); }
-}
+/* ---------- FICHA DE EMPRESA: página propia (assets/ficha.js, Fase 6) ---------- */
+function companyDrawer(sym, tab) { H.openFicha(sym, tab); }
+const cur = () => H.S.ficha;
+const paintFicha = () => { if (H.S.ficha) H.render(); };
 function mountChart(sym) {
   const el = document.getElementById("fchart");
   if (!el || !window.SCRChart) return;
-  window.SCRChart.mount(el, sym, { fallback: "Se muestra el gráfico simplificado en la pestaña Resumen." }).then((api) => { if (E.ficha?.sym === sym) E.chartApi = api; });
+  if (E.chartApi) { E.chartApi.destroy(); E.chartApi = null; }
+  window.SCRChart.mount(el, sym, { fallback: "Se muestra el gráfico simplificado en el Resumen." }).then((api) => { if (cur()?.sym === sym && document.body.contains(el)) E.chartApi = api; else api?.destroy?.(); });
 }
 const NEWS_LAB = { legal: "Legal", producto: "Producto", expansion: "Expansión", resultados: "Resultados", analistas: "Analistas", directivos: "Directivos", otras: "Otras" };
 let newsCat = "relevantes";
 async function mountNews(sym) {
   const el = document.getElementById("fnews"); if (!el) return;
   let d; try { d = await window.SCRChart.loadPrices(sym); } catch (e) { el.innerHTML = `<div class="err-box">No se pudieron cargar los eventos de ${esc(sym)}.</div>`; return; }
-  if (E.ficha?.sym !== sym) return;
+  if (cur()?.sym !== sym || !document.body.contains(el)) return;
   const ev = d.ev || {}, r = E.uni.filas.find((x) => x.sym === sym);
   const ern = ev.ern || [], next = ern.find((x) => x[2] == null && x[0] >= new Date().toISOString().slice(0, 10)), past = ern.filter((x) => x[2] != null).reverse();
   const divs = (ev.div || []).slice().reverse(), y1 = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
@@ -591,53 +546,6 @@ async function mountNews(sym) {
 function mountCompare(sym) {
   const el = document.getElementById("fcmp"); const list = [sym, ...E.cmp.filter((s) => s !== sym)].slice(0, 4);
   if (el && window.SCRChart && list.length > 1) window.SCRChart.compare(el, list);
-}
-function fichaTab(tab, r, d) {
-  const lv = H.S.level;
-  if (!d) return `<div class="skel" style="height:220px"></div>`;
-  if (tab === "grafico") return `<div id="fchart" class="fchart"></div>`;
-  if (tab === "tesis") return window.SCRTesis ? `<div id="ftesis"></div>` : `<div class="err-box">Módulo de tesis no disponible.</div>`;
-  if (tab === "noticias") return `<div id="fnews"><div class="skel" style="height:220px"></div></div>`;
-  if (tab === "pers") return window.SCRSmart ? window.SCRSmart.persTab(r.sym) : `<div class="err-box">Módulo de smart money no disponible.</div>`;
-  if (tab === "comparar") {
-    const list = [r.sym, ...E.cmp.filter((s) => s !== r.sym)].slice(0, 4);
-    return list.length < 2 ? `<div class="soon-box">Añade otros valores al comparador desde el screener (casilla ⇄) o con «+ Comparar» en su ficha. Máximo 4.</div>`
-      : `${cmpTable(list)}<div class="bar"><button class="chip" data-gocmp="${esc(list.join(","))}">Abrir el comparador a pantalla completa →</button></div><h2 class="sec">Rentabilidad comparada</h2><div id="fcmp"></div>`;
-  }
-  if (tab === "fund") {
-    const years = Object.keys(d.anual || {});
-    const fl = [["ventas", "Ventas"], ["ebitda", "EBITDA"], ["beneficio_neto", "Beneficio neto"], ["bpa", "BPA"], ["fcf", "Flujo de caja libre"], ["deuda_total", "Deuda total"], ["patrimonio", "Patrimonio neto"]];
-    return `${years.length ? `<div class="box"><b>Cuentas anuales (${esc(r.moneda || "")}) · Yahoo Finance</b><div style="overflow-x:auto"><table><thead><tr><th></th>${years.map((y) => `<th>${y}</th>`).join("")}</tr></thead><tbody>
-      ${fl.map(([k, t]) => `<tr><td>${t}</td>${years.map((y) => `<td class="num">${k === "bpa" ? nf(d.anual[y][k], 2) : big(d.anual[y][k])}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>` : `<div class="err-box">Sin cuentas anuales en la fuente para este valor.</div>`}
-      <div class="kv-grid">${[["per", "PER", (v) => nf(v, 1)], ["per_fwd", "PER previsto", (v) => nf(v, 1)], ["ev_ebitda", "EV/EBITDA", (v) => nf(v, 1)], ["pb", "P/VC", (v) => nf(v, 2)], ["ps", "P/V", (v) => nf(v, 2)],
-        ["div", "Dividendo", pct], ["payout", "Pay-out", pct], ["roe", "ROE", pct], ["roa", "ROA", pct], ["margen_op", "Margen operativo", pct], ["margen_neto", "Margen neto", pct],
-        ["crec_ventas", "Crec. ventas", spct], ["crec_bpa", "Crec. BPA", spct], ["deuda_neta_ebitda", "Deuda neta/EBITDA", (v) => (v == null ? "—" : nf(v, 1) + "×")],
-        ["deuda_patrimonio", "Deuda/patrimonio", (v) => nf(v, 2)], ["beta", "Beta", (v) => nf(v, 2)], ["roic", "ROIC", () => "sin fuente"]]
-        .map(([k, t, f]) => `<div class="kvc"><span${tip(k)}>${t}</span><b class="num">${f(r[k])}</b></div>`).join("")}</div>
-      <div class="method">Fundamentales a ${fmtDate(r.fecha_fund)}. Cuatro ejercicios: es lo que publica la fuente.</div>
-      ${academicBox(r)}`;
-  }
-  /* resumen */
-  const st = E.sec.stats.Todos, sS = st.sector[r.sector] || {}, sI = st.industria[r.industria] || {};
-  const vs = (k, lab, v, ms, mi, f) => `<tr><td${tip(k)}>${lab}</td><td class="num">${nf(v, 1)}</td><td class="num">${nf(ms, 1)}</td><td class="num">${nf(mi, 1)}</td><td class="num chg ${cls(f == null ? null : -f)}">${spct(f, 0)}</td></tr>`;
-  const up = r.precio_objetivo && r.precio ? (r.precio_objetivo / r.precio - 1) * 100 : null, tv = r.veredicto;
-  return `<div class="f-grid"><div>${miniChart(d.diario)}
-      <div class="box"><b>Técnico · ${esc(r.horizonte_tec || "1-3 meses")}</b> ${H.evid("h", "r")}<span class="badge ${tv === "Alcista" ? "Favorable" : tv === "Bajista" ? "Defensivo" : "Neutral"}">${esc(tv || "Sin datos")}</span>
-        <div style="margin-top:6px">${esc(r.motivo_tec || "")}.</div>
-        ${r.invalidacion ? `<div style="margin-top:4px">Se invalida si cierra ${tv === "Alcista" ? "por debajo" : "por encima"} de <b class="num">${nf(r.invalidacion, 2)}</b>.</div>` : ""}
-        ${lv >= 1 ? `<div class="kv-grid sm">${[["MM50 / MM200", `${nf(r.sma50, 2)} / ${nf(r.sma200, 2)}`], ["RSI (14)", nf(r.rsi, 0), "rsi"], ["MACD (hist.)", sgn(r.macd_hist, 3)],
-          ["Soporte / resistencia", `${nf(r.soporte, 2)} / ${nf(r.resistencia, 2)}`], ["ATR (14)", pct(r.atr_pct, 2), "atr_pct"], ["Volumen relativo", nf(r.vol_rel, 2) + "×", "vol_rel"]]
-          .map(([t, v, k]) => `<div class="kvc"><span${k ? tip(k) : ""}>${t}</span><b class="num">${v}</b></div>`).join("")}</div>` : ""}
-        <button class="link-btn" data-ftab="grafico">Abrir gráfico interactivo →</button></div></div>
-    <div>${scoreBox(r)}${percentilesBox(r)}<div class="box"><b>Valoración frente a su sector e industria</b><table><thead><tr><th></th><th>Empresa</th><th>Sector</th><th>Industria</th><th>Dif. sector</th></tr></thead><tbody>
-      ${vs("per", "PER", r.per, sS.per, sI.per, r.per_vs_sector)}${vs("ev_ebitda", "EV/EBITDA", r.ev_ebitda, sS.ev_ebitda, sI.ev_ebitda, r.ev_ebitda_vs_sector)}${vs("pb", "P/VC", r.pb, sS.pb, sI.pb, r.pb_vs_sector)}
-      </tbody></table><div class="method">Medianas de su sector (${sS.n || "—"} valores) y de su industria (${sI.n || "—"}). Verde = cotiza con descuento.</div></div>
-      <div class="kv-grid">${[["mcap", "Capitalización", big(r.mcap, r.moneda)], ["div", "Dividendo", pct(r.div)], ["roe", "ROE", pct(r.roe)], ["margen_op", "Margen op.", pct(r.margen_op)],
-        ["crec_ventas", "Crec. ventas", spct(r.crec_ventas)], ["deuda_neta_ebitda", "DN/EBITDA", r.deuda_neta_ebitda == null ? "—" : nf(r.deuda_neta_ebitda, 1) + "×"],
-        ["r1a", "Rent. 1 año", spct(r.r1a)], ["resultados", "Resultados", r.resultados ? fmtDate(r.resultados) : "—"]]
-        .map(([k, t, v]) => `<div class="kvc"><span${tip(k)}>${t}</span><b class="num">${v}</b></div>`).join("")}</div>
-      ${lv >= 2 && r.precio_objetivo ? `<div class="method">Precio objetivo medio: ${nf(r.precio_objetivo, 2)} (${spct(up)}; ${r.n_analistas || "?"} analistas).</div>` : ""}
-      <div class="method">Fuente: <a href="https://finance.yahoo.com/quote/${encodeURIComponent(r.sym)}" target="_blank" rel="noopener">Yahoo Finance</a> · fundamentales a ${fmtDate(r.fecha_fund)}</div></div></div>`;
 }
 function scoreBox(r) {
   const f = E.sc?.factores?.[r.sym]; if (!f) return "";
@@ -704,7 +612,6 @@ function cmpTable(list) {
 function openCompare() {
   if (E.cmp.length < 2) return;
   if (H.modules.comparar) { H.closeDrawer(); history.replaceState(null, "", location.hash); H.go("comparar"); return; }
-  E.ficha = null;
   document.getElementById("drawer").classList.add("full");
   H.openDrawer(`<h3>Comparador</h3><div class="reg">${E.cmp.length} valores · máximo 4</div>${cmpTable(E.cmp)}<h2 class="sec">Rentabilidad comparada</h2><div id="fcmp"></div>`);
   const el = document.getElementById("fcmp"); if (el && window.SCRChart) window.SCRChart.compare(el, E.cmp);
@@ -795,13 +702,13 @@ function onClick(t, dd) {
   if ((b = t.closest("[data-gsym]"))) { const s = b.dataset.gsym; const i = document.getElementById("gq"); if (i) { i.value = ""; paintSearch(); } companyDrawer(s); return true; }
   if ((b = t.closest("[data-watch]"))) {
     const s = b.dataset.watch; E.watch = isW(s) ? E.watch.filter((x) => x !== s) : [...E.watch, s]; store.set("seguimiento", E.watch);
-    if (E.ficha) paintFicha(); if (H.S.view === "screener") H.render(); return true;
+    H.render(); return true;
   }
-  if ((b = t.closest("[data-cmp-toggle]"))) { toggleCmp(b.dataset.cmpToggle); paintFicha(); if (H.S.view === "screener") H.render(); return true; }
+  if ((b = t.closest("[data-cmp-toggle]"))) { toggleCmp(b.dataset.cmpToggle); H.render(); return true; }
   if (t.closest("[data-cmp]")) { toggleCmp(t.closest("[data-cmp]").dataset.cmp); H.render(); return true; }
   if (t.closest(".c-x")) return true;
-  if ((b = t.closest("[data-cmprm]"))) { toggleCmp(b.dataset.cmprm); if (!E.ficha && H.S.view === "comparar" && !document.getElementById("drawer").classList.contains("on")) { H.render(); return true; } if (E.ficha) paintFicha(); else if (E.cmp.length >= 2) openCompare(); else H.closeDrawer(); if (H.S.view === "screener") H.render(); return true; }
-  if ((b = t.closest("[data-ncat]"))) { newsCat = b.dataset.ncat; if (E.ficha) mountNews(E.ficha.sym); return true; }
+  if ((b = t.closest("[data-cmprm]"))) { toggleCmp(b.dataset.cmprm); if (!document.getElementById("drawer").classList.contains("on")) { H.render(); return true; } if (E.cmp.length >= 2) openCompare(); else H.closeDrawer(); H.render(); return true; }
+  if ((b = t.closest("[data-ncat]"))) { newsCat = b.dataset.ncat; if (cur()) mountNews(cur().sym); return true; }
   if ((b = t.closest("[data-gocmp]"))) { E.cmp = b.dataset.gocmp.split(","); store.set("comparar", E.cmp); H.closeDrawer(); H.go("comparar"); return true; }
   if ((b = t.closest("[data-copycmp]"))) {
     const url = location.href.split("#")[0] + "#/comparar/" + E.cmp.join(",");
@@ -813,7 +720,7 @@ function onClick(t, dd) {
     (navigator.clipboard?.writeText(url) || Promise.reject()).then(() => { b.textContent = "✓ Copiado"; }, () => { b.textContent = url; });
     return true;
   }
-  if ((b = t.closest("[data-ftab]"))) { if (E.ficha) { E.ficha.tab = b.dataset.ftab; store.set("ficha_tab", ["grafico", "resumen", "tesis"].includes(E.ficha.tab) ? E.ficha.tab : "resumen"); paintFicha(); } return true; }
+  if ((b = t.closest("[data-ftab]"))) { if (cur()) H.openFicha(cur().sym, b.dataset.ftab); return true; }
   if ((b = t.closest("[data-eqr]"))) { E.region = b.dataset.eqr; store.set("eq_region", E.region); H.render(); return true; }
   if ((b = t.closest("[data-secsort]"))) { const k = b.dataset.secsort; if (SEC_COLS.find((c) => c[0] === k)[2] != null) { E.secMetric = k; store.set("sec_metric", k); H.render(); } return true; }
   if ((b = t.closest("[data-rrgh]"))) { E.rrgH = b.dataset.rrgh; store.set("rrg_h", E.rrgH); H.render(); return true; }
@@ -896,19 +803,21 @@ document.addEventListener("change", (e) => {
   }
 });
 
-/* cerrar ficha: liberar el gráfico */
+/* el panel a pantalla completa (comparador sin módulo) vuelve a su tamaño al cerrarse */
 const _close = H.closeDrawer;
-H.closeDrawer = () => { if (E.chartApi) { E.chartApi.destroy(); E.chartApi = null; } E.ficha = null; document.getElementById("drawer").classList.remove("full"); _close(); };
-document.addEventListener("click", (e) => { if (e.target.closest("#drawerClose") || e.target.id === "overlay") { if (E.chartApi) { E.chartApi.destroy(); E.chartApi = null; } E.ficha = null; document.getElementById("drawer").classList.remove("full"); } }, true);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.fullscreenElement) { E.ficha = null; document.getElementById("drawer").classList.remove("full"); } });
+H.closeDrawer = () => { document.getElementById("drawer").classList.remove("full"); _close(); };
+document.addEventListener("click", (e) => { if (e.target.closest("#drawerClose") || e.target.id === "overlay") document.getElementById("drawer").classList.remove("full"); }, true);
 
 window.SCRUni = () => (E.uni ? E.uni.filas : []);
 window.SCREq = { sc: () => E.sc, changeOf: (s) => changeOf(s), watch: () => E.watch, scoreBadge: (v) => scoreBadge(v) };
 window.SCRFiltered = () => (E.uni ? filtered() : []);
 window.SCREnsureUni = () => ensure();
-window.SCROpen = (sym, tab, fromRoute) => companyDrawer(sym, tab, fromRoute);
-window.SCRFichaSym = () => E.ficha?.sym || null;
-if (window.SCRSmart) window.SCRSmart.onload = () => { if (E.ficha && E.ficha.tab === "pers") paintFicha(); };
+window.SCROpen = (sym, tab) => companyDrawer(sym, tab);
+window.SCRFichaSym = () => (H.S.ficha && document.querySelector("#view .fp") ? H.S.ficha.sym : null);
+if (window.SCRSmart) window.SCRSmart.onload = () => paintFicha();
+/* piezas que usa la ficha (assets/ficha.js) */
+window.SCRKit = { E, ensure, logo, star, tagHtml: (r, n) => tagHtml(r, n), sn, tip, isC, isW, scoreName, scoreBadge: (v) => scoreBadge(v), explain, contributions, changeOf,
+  scoreBox, percentilesBox, academicBox, cmpTable, miniChart, mountChart, mountNews, pctIn, FACT, FACT_TIP, TIPS, pct, spct, big, cls };
 /* ---------- comparador y percentiles (Fase 2) ---------- */
 // medidas de «Percentiles en su sector» de la ficha: [campo, etiqueta, formato, mejor: 1 = más alto, -1 = más bajo]
 const PCT_METRICS = [
@@ -949,7 +858,7 @@ const ACAD = [
 ];
 function academicBox(r) {
   const ks = ACAD.filter(([k]) => typeof r[k] === "number");
-  if (!ks.length) return "." in r.sym ? "" : `<div class="box"><b>Factores académicos</b><div class="hint">Sin cuentas de la SEC para este valor todavía.</div></div>`;
+  if (!ks.length) return r.sym.includes(".") ? "" : `<div class="box"><b>Factores académicos</b><div class="hint">Sin cuentas de la SEC para este valor todavía.</div></div>`;
   return `<div class="box"><b>Factores académicos · SEC</b> ${H.evid("e")} <span class="hint">cuentas a ${fmtDate(r.f_fecha)}</span>
     <table><tbody>${ks.map(([k, t, fmt, b, tip]) => `<tr><td data-tip="${esc(tip)}">${esc(t)}</td><td class="num">${fmt(r[k])}${pctPill(pctIn(r, k), b)}</td></tr>`).join("")}</tbody></table>
     <div class="method">El Laboratorio mide si cada uno ha predicho la rentabilidad con datos «a fecha»; no están en la nota.</div></div>`;

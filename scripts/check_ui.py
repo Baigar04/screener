@@ -41,9 +41,8 @@ def serve(folder):
 def fichas(pg, base):
     pg.goto(base + "#/empresa/NVDA")
     pg.wait_for_function("window.SCRFichaSym && window.SCRFichaSym() === 'NVDA'", timeout=60000)
-    full = pg.evaluate("(() => { const d = document.getElementById('drawer'); return d.classList.contains('full') && d.getBoundingClientRect().width >= innerWidth - 1; })()")
-    check("#/empresa/NVDA abre la ficha a pantalla completa", full, pg.inner_text("#drawerBody h3")[:60])
-    check("cabecera ejecutiva visible", pg.locator("#drawerBody .f-exec").count() == 1)
+    page = pg.evaluate("!document.getElementById('drawer').classList.contains('on') && !!document.querySelector('#view .fp-head h1')")
+    check("#/empresa/NVDA abre la ficha como página", page, pg.inner_text("#view .fp-head h1")[:60])
     # navegación interna: sección → ficha → atrás
     pg.goto(base + "#/screener")
     pg.wait_for_selector("[data-sym]", timeout=60000)
@@ -53,8 +52,7 @@ def fichas(pg, base):
     check("clic en una fila → enlace propio", pg.url.endswith("#/empresa/" + sym), pg.url.split("#")[1])
     pg.go_back()
     pg.wait_for_timeout(800)
-    closed = pg.evaluate("!document.getElementById('drawer').classList.contains('on')")
-    check("«atrás» cierra la ficha y vuelve al screener", closed and pg.url.endswith("#/screener"), pg.url.split("#")[1])
+    check("«atrás» vuelve al screener", pg.url.endswith("#/screener") and pg.evaluate("!window.SCR.S.ficha"), pg.url.split("#")[1])
     pg.go_forward()
     pg.wait_for_function(f"window.SCRFichaSym() === {sym!r}", timeout=30000)
     check("«adelante» la vuelve a abrir", True)
@@ -123,8 +121,10 @@ def fase2(pg, base):
     pg.goto(base + "#/empresa/MSFT")
     pg.wait_for_function("window.SCRFichaSym && window.SCRFichaSym() === 'MSFT'", timeout=60000)
     pg.wait_for_timeout(2500)
-    check("ficha: «por qué esta nota»", pg.locator("#drawerBody .sc-why .why-row").count() >= 4)
-    check("ficha: percentiles en su sector", "Percentiles en su sector" in pg.text_content("#drawerBody"))
+    pg.click("#side [data-fsec=factores]")
+    pg.wait_for_timeout(1500)
+    check("ficha: «por qué esta nota»", pg.locator("#view .sc-why .why-row").count() >= 4)
+    check("ficha: percentiles en su sector", "Percentiles en su sector" in pg.text_content("#view"))
     pg.goto(base + "#/screener")
     pg.wait_for_selector("[data-act=changes]", timeout=30000)
     pg.click("[data-act=changes]")
@@ -159,7 +159,9 @@ def tanda2(pg, base):
     pg.goto(base + "#/empresa/AAPL/fund")
     pg.wait_for_function("window.SCRFichaSym && window.SCRFichaSym() === 'AAPL'", timeout=60000)
     pg.wait_for_timeout(2500)
-    check("ficha: factores académicos (SEC)", "Factores académicos" in pg.text_content("#drawerBody"), "con datos" if "F-score" in pg.text_content("#drawerBody") else "sin datos SEC aún")
+    pg.click("#side [data-fsec=factores]")
+    pg.wait_for_timeout(1500)
+    check("ficha: factores académicos (SEC)", "Factores académicos" in pg.text_content("#view"), "con datos" if "F-score" in pg.text_content("#view") else "sin datos SEC aún")
 
 
 def fase5(pg, base):
@@ -180,6 +182,49 @@ def fase5(pg, base):
     check("tema oscuro por defecto", pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(10, 20, 36)")
 
 
+FSECS = ["resumen", "grafico", "fund", "valoracion", "factores", "resultados", "comparables", "smartm", "invest"]
+
+
+def fase6(pg, base):
+    """Fase 6: ficha 2.0 con 9 apartados, tarjetas con fuente y fecha, migas «Screener / Empresas / X»."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    for sym in ("AAPL", "SAN.MC"):
+        pg.goto(base + "#/empresa/" + sym)
+        pg.wait_for_selector("#view .fks .fk", timeout=60000)
+        pg.wait_for_timeout(1500)
+        side = [b.get_attribute("data-fsec") for b in pg.locator("#side button").all()]
+        crumbs = pg.text_content("#crumbs")
+        check(f"{sym}: barra lateral con los 9 apartados", side == FSECS, " · ".join(x or "?" for x in side))
+        check(f"{sym}: migas Screener / Empresas / empresa y área Screener", "Empresas" in crumbs and pg.get_attribute("#nav .on", "data-area") == "screener", crumbs.strip()[:80])
+        srcs = [x.text_content() for x in pg.locator("#view .fk .fk-s").all()]
+        check(f"{sym}: 5 tarjetas con fuente y fecha", len(srcs) == 5 and all(any(m in t for m in ("SEC", "Yahoo", "cierre")) for t in srcs), srcs[0][:70] if srcs else "")
+        t = pg.text_content("#view")
+        check(f"{sym}: crecimiento, márgenes, calidad, factores, eventos y lectura", all(x in t for x in ("Crecimiento reciente", "Márgenes", "Calidad y trazabilidad", "Factores y scoring", "Próximos eventos", "Lectura analítica")))
+        if sym == "AAPL":
+            sec = "Último 10-Q presentado" in pg.text_content("#status") or "Último 10-K presentado" in pg.text_content("#status")
+            check("AAPL: trimestres SEC en la ficha", sec, pg.text_content("#status").strip()[:80] if sec else "sin trimestres SEC aún (llegan con la caché v3)")
+        bad = []
+        for k in FSECS[1:]:
+            pg.click(f"#side [data-fsec={k}]")
+            pg.wait_for_timeout(1200)
+            if not pg.url.endswith(f"/{k}") or "No se pudo dibujar" in pg.text_content("#view"):
+                bad.append(k)
+        check(f"{sym}: los 9 apartados abren sin error", not bad, ", ".join(bad))
+    pg.goto(base + "#/empresa/AAPL/tesis")
+    pg.wait_for_timeout(1500)
+    check("enlace antiguo #/empresa/X/tesis → Valoración", pg.evaluate("window.SCR.S.ficha && window.SCR.S.ficha.tab") == "valoracion")
+    pg.set_viewport_size({"width": 390, "height": 844})
+    bad = []
+    for k in ("resumen", "fund", "comparables", "resultados"):
+        pg.goto(base + f"#/empresa/AAPL/{k}")
+        pg.wait_for_timeout(2500)
+        sw = pg.evaluate("document.documentElement.scrollWidth")
+        if sw > 391:
+            bad.append(f"{k} ({sw} px)")
+    check("ficha sin desbordes a 390 px", not bad, ", ".join(bad))
+    pg.set_viewport_size({"width": 1366, "height": 900})
+
+
 def main():
     base = serve(SITE)
     with sync_playwright() as p:
@@ -188,7 +233,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

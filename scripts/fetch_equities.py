@@ -383,8 +383,16 @@ def fundamentals(sym):
     nd = None
     if info.get("totalDebt") is not None and info.get("totalCash") is not None and info.get("ebitda"):
         nd = (info["totalDebt"] - info["totalCash"]) / info["ebitda"]
+    exd = info.get("exDividendDate")
+    desc = (info.get("longBusinessSummary") or "").strip()
+    if len(desc) > 700:   # primeras frases: lo que hace la empresa (la ficha no necesita el texto entero)
+        cut = desc[:700].rfind(". ")
+        desc = desc[: cut + 1] if cut > 200 else desc[:700] + "…"
     return {
         "nombre": info.get("longName") or info.get("shortName"), "pais": info.get("country"), "web": info.get("website"),
+        "bolsa": info.get("fullExchangeName") or info.get("exchange"), "desc": desc or None,
+        "exdiv": datetime.fromtimestamp(exd, timezone.utc).strftime("%Y-%m-%d") if isinstance(exd, (int, float)) and exd > 0 else None,
+        "margen_bruto": jnum(_pct(info.get("grossMargins")), 1), "empleados": info.get("fullTimeEmployees"),
         "sector": info.get("sector"), "industria": info.get("industry"), "moneda": info.get("currency"),
         "mcap": jnum(info.get("marketCap"), 0), "per": jnum(info.get("trailingPE"), 2),
         "per_fwd": jnum(info.get("forwardPE"), 2), "ev_ebitda": jnum(info.get("enterpriseToEbitda"), 2),
@@ -653,17 +661,26 @@ def main():
             log("  fund", n, "/", len(todo))
         time.sleep(0.4)
 
+    try:
+        SECD = json.load(open(os.path.join(DATA, "sec_cache.json"))).get("sim", {})
+    except Exception as e:  # noqa: BLE001
+        SECD = {}
+        log("Ficha: sin cuentas SEC", e)
     rows = []
     for s in syms:
         f = cache.get(s, {})
         if s not in frames and not f:
             continue
         r = {"sym": s, "indices": U[s].get("indices", [])}
-        r.update({k: v for k, v in f.items() if k not in ("anual", "ern", "web")})
+        r.update({k: v for k, v in f.items() if k not in ("anual", "ern", "web", "desc")})
         if not r.get("sector") and U[s].get("gics_sector"):
             r["sector"] = U[s]["gics_sector"]
         r["region"] = "EE. UU." if (r.get("pais") == "United States" or "." not in s) else "Europa"
-        detail = {"sym": s, "anual": f.get("anual", {})}
+        detail = {"sym": s, "anual": f.get("anual", {}), "desc": f.get("desc"), "web": f.get("web")}
+        if s in SECD:   # cuentas de la SEC para la ficha (EE. UU.): 12 trimestres y 6 ejercicios con su fecha de presentación
+            e = SECD[s]
+            detail["sec"] = {"cik": e.get("cik"), "act": e.get("act"), "v": e.get("v"), "nq": len(e.get("q") or []), "nfy": len(e.get("fy") or []),
+                             "q": (e.get("q") or [])[-12:], "fy": (e.get("fy") or [])[-6:]}
         if s in frames:
             tec, s50, s200 = technical(frames[s])
             r.update(tec)
@@ -695,7 +712,7 @@ def main():
     # factores académicos con las cuentas de la SEC (solo EE. UU.)
     try:
         import academic
-        secd = json.load(open(os.path.join(DATA, "sec_cache.json"))).get("sim", {})
+        secd = SECD
         n_ac = 0
         for r in rows:
             e = secd.get(r["sym"])

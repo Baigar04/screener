@@ -32,7 +32,8 @@ def test_etiquetas_en_cada_lectura():
     req = {
         "assets/app.js": ['Régimen macro · EE. UU. ${evid("h")}', 'Visión por horizonte ${evid("h")}'],
         "assets/adelantarse.js": ['Escenarios a 6-12 meses ${H.evid("h")}', 'horizontes cerrados</b> ${H.evid("h", "r")}', 'registrada a diario</b> ${H.evid("e", "r")}'],
-        "assets/equities.js": ['${esc(profileName())}</b> ${H.evid("e", "r")}', '</b> ${H.evid("h", "r")}<span class="badge'],
+        "assets/equities.js": ['${esc(profileName())}</b> ${H.evid("e", "r")}'],
+        "assets/ficha.js": ['${esc(tv || "—")}</span> ${H.evid("h", "r")}', 'Factores y scoring ${H.evid("e", "r")}', 'Lectura analítica ${H.evid("h")}'],
         "assets/smart.js": ['${H.evid("h")} ${esc(SMART_TIP)}'],
         "assets/chart.js": ['k === "konkorde" ? " " + window.SCR.evid("h")'],
     }
