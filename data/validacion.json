@@ -1,0 +1,67 @@
+{
+ "generado": "2026-11-13T12:58:08+00:00",
+ "ficheros": {
+  "macro.json": {
+   "estado": "ok",
+   "detalle": "29/29 series al día"
+  },
+  "universe.json": {
+   "estado": "ok",
+   "detalle": "1511 valores · 1509/1509 precios al día"
+  },
+  "sectors.json": {
+   "estado": "ok",
+   "detalle": "12 sectores"
+  },
+  "score.json": {
+   "estado": "ok",
+   "detalle": "1511 valores puntuados"
+  },
+  "score_hist.json": {
+   "estado": "ok",
+   "detalle": "2 semanas"
+  },
+  "score_diario.json": {
+   "estado": "ok",
+   "detalle": "1 fotos diarias"
+  },
+  "amplitud.json": {
+   "estado": "ok",
+   "detalle": "EE. UU.: 66.0 % > SMA50, Europa: 72.3 % > SMA50"
+  },
+  "insiders.json": {
+   "estado": "ok",
+   "detalle": "1893 operaciones · 7 días · pendientes 57"
+  },
+  "smart.json": {
+   "estado": "ok",
+   "detalle": "82 gestores · 1991 valores"
+  },
+  "lab.json": {
+   "estado": "ok",
+   "detalle": "veredicto «ordenación» · 107 meses"
+  },
+  "fund_cache.json": {
+   "estado": "ok",
+   "detalle": "1513 entradas"
+  },
+  "news_cache.json": {
+   "estado": "ok",
+   "detalle": "1513 entradas"
+  },
+  "sec_cache.json": {
+   "estado": "ok",
+   "detalle": "1072 entradas"
+  },
+  "smart_cache.json": {
+   "estado": "ok",
+   "detalle": "2 entradas"
+  },
+  "lab_extra.json": {
+   "estado": "ok",
+   "detalle": "2 entradas"
+  }
+ },
+ "recuperados": [],
+ "sin_recuperar": []
+}
