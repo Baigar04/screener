@@ -23,6 +23,8 @@ from statistics import NormalDist
 import numpy as np
 import pandas as pd
 
+import academic
+
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 H = 21                      # sesiones hasta el siguiente rebalanceo (≈ 1 mes)
 HZ = {"1m": 21, "3m": 63, "6m": 126, "12m": 252}   # horizontes evaluados
@@ -45,10 +47,19 @@ FACT = [
     ("fy", "Rentabilidad por flujo de caja libre", "valor", "aproximada", "Flujo de caja libre entre capitalización. No está en la puntuación."),
     ("cv", "Crecimiento de ventas", "crecimiento", "aproximada", "Ventas del último ejercicio frente al anterior."),
     ("cb", "Crecimiento del beneficio", "crecimiento", "aproximada", "Beneficio neto del último ejercicio frente al anterior (si el anterior fue positivo)."),
+    # factores académicos: solo con cuentas de la SEC «a fecha» (EE. UU.); no están en la puntuación
+    ("gp", "Rentabilidad bruta (Novy-Marx)", "extra", "sec_us", "Beneficio bruto entre activos. No está en la puntuación."),
+    ("ag", "Crecimiento de activos (menor)", "extra", "sec_us", "Las empresas que menos engordan su balance han rendido más (Cooper y otros). No está en la puntuación."),
+    ("acr", "Devengos (menores)", "extra", "sec_us", "Beneficio que no se convierte en caja, entre activos (Sloan). Menos es mejor. No está en la puntuación."),
+    ("nsi", "Emisión neta de acciones (menor)", "extra", "sec_us", "Variación anual de acciones en circulación: recomprar es mejor que emitir. No está en la puntuación."),
+    ("fs", "F-score de Piotroski", "extra", "sec_us", "9 señales contables de solidez (0-9). No está en la puntuación."),
+    ("sue", "Sorpresa de beneficios trimestral", "extra", "sec_us", "Beneficio del último trimestre frente al del año anterior, en desviaciones típicas. No está en la puntuación."),
 ]
 CATS = {"calidad": ["roe", "mg", "dp"], "valor": ["ep", "bp"], "crecimiento": ["cv", "cb"], "momentum": ["r3", "r6", "tr"]}
 CAT_NAME = {"calidad": "Calidad", "valor": "Valor", "crecimiento": "Crecimiento", "momentum": "Momentum"}
-SECTOR_WISE = {"roe", "mg", "dp", "ep", "bp", "fy", "cv", "cb"}
+SECTOR_WISE = {"roe", "mg", "dp", "ep", "bp", "fy", "cv", "cb", "gp", "ag", "acr", "nsi", "fs"}
+ACAD = ("gp", "ag", "acr", "nsi", "fs", "sue")
+ACAD_SIGN = {"gp": 1, "ag": -1, "acr": -1, "nsi": -1, "fs": 1, "sue": 1}
 
 
 def _f(x):
@@ -361,16 +372,23 @@ def run(frames, rows, cache, default_w):
         "m12": (P.shift(21) / P.shift(252) - 1).loc[D], "lv": -vol63.loc[D], "rv": -(P / P.shift(21) - 1).loc[D],
     }
     # fundamentales «a fecha»
-    fund = {k: pd.DataFrame(index=D, columns=P.columns, dtype=float) for k in ("roe", "mg", "dp", "ep", "bp", "fy", "cv", "cb")}
+    fund = {k: pd.DataFrame(index=D, columns=P.columns, dtype=float) for k in ("roe", "mg", "dp", "ep", "bp", "fy", "cv", "cb") + ACAD}
     n_sec = 0
     for s in P.columns:
         fy = (sec.get(s) or {}).get("fy") or []
+        qq = (sec.get(s) or {}).get("q") or []
         if len(fy) >= 2 and mcap_now.get(s):
             n_sec += 1
             for d in D:
                 cur, prev = sec_at(fy, d)
                 if not cur:
                     continue
+                af = academic.annual_factors(cur, prev)
+                if qq:
+                    af["sue"] = academic.sue(academic.q_known(qq, (d - pd.Timedelta(days=1)).strftime("%Y-%m-%d")))
+                for k in ACAD:
+                    if af.get(k) is not None:
+                        fund[k].at[d, s] = ACAD_SIGN[k] * af[k]
                 px = P.at[d, s]
                 if not (px == px):
                     continue

@@ -60,7 +60,7 @@ def fichas(pg, base):
     check("«adelante» la vuelve a abrir", True)
 
 
-AREAS = {"pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "screener": "empresas", "smart": "empresas", "comparar": "empresas",
+AREAS = {"hoy": "mercado", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "screener": "empresas", "smart": "empresas", "comparar": "empresas",
          "carteras": "carteras", "laboratorio": "laboratorio"}
 
 
@@ -133,6 +133,31 @@ def fase2(pg, base):
     check("comparador por enlace con percentiles", pg.locator("table.cmp thead th a").count() == 3 and pills > 20, f"{pills} percentiles")
 
 
+def tanda2(pg, base):
+    """Fase 2 (2.ª tanda): «Hoy», directivos, fechas del smart money y factores académicos."""
+    pg.goto(base + "#/hoy")
+    pg.wait_for_timeout(4000)
+    t = pg.inner_text("#view")
+    check("«Hoy»: secciones", all(x in t for x in ("Tu seguimiento", "Mayores cambios de nota", "Resultados en los próximos 7 días", "Compras de directivos", "Copia de seguridad")))
+    check("«Hoy»: estado de los datos", "validación" in t or "no pasaron" in t, t.split("\n")[0][:80])
+    with pg.expect_download(timeout=10000) as dl:
+        pg.click("[data-bk=down]")
+    check("copia de seguridad descargable", dl.value.suggested_filename.startswith("screener-copia-"), dl.value.suggested_filename)
+    pg.goto(base + "#/smart")
+    pg.wait_for_selector("[data-smtab=directivos]", timeout=30000)
+    pg.click("[data-smtab=gestores]")
+    pg.wait_for_timeout(800)
+    check("smart money: fechas de cartera y publicación", "Cartera a" in pg.inner_text("#view") and "Desfase" in pg.inner_text("#view"))
+    pg.click("[data-smtab=directivos]")
+    pg.wait_for_timeout(2500)
+    n = pg.locator("#view table tbody tr").count()
+    check("smart money: directivos (formulario 4)", n >= 1, f"{n} filas")
+    pg.goto(base + "#/empresa/AAPL/fund")
+    pg.wait_for_function("window.SCRFichaSym && window.SCRFichaSym() === 'AAPL'", timeout=60000)
+    pg.wait_for_timeout(2500)
+    check("ficha: factores académicos (SEC)", "Factores académicos" in pg.inner_text("#drawerBody"), "con datos" if "F-score" in pg.inner_text("#drawerBody") else "sin datos SEC aún")
+
+
 def main():
     base = serve(SITE)
     with sync_playwright() as p:
@@ -141,12 +166,12 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2):
+        for fn in (fichas, navegacion, movil, fase2, tanda2):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001
                 check(fn.__name__, False, str(e)[:200])
-        for v in ("pulso", "sectores", "adelantarse", "screener", "smart", "comparar", "carteras", "laboratorio"):
+        for v in ("hoy", "pulso", "sectores", "adelantarse", "screener", "smart", "comparar", "carteras", "laboratorio"):
             where[0] = v
             pg.goto(base + "#/" + v)
             pg.wait_for_timeout(2500)

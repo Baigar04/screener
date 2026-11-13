@@ -353,6 +353,7 @@ const RANGES = [
   ["roe", "ROE", -20, 60, 1, " %"], ["margen_op", "Margen operativo", -10, 60, 1, " %"], ["crec_ventas", "Crecimiento ventas", -30, 60, 1, " %"],
   ["r3m", "Rentabilidad 3 meses", -40, 60, 1, " %"], ["r1a", "Rentabilidad 1 año", -60, 150, 5, " %"], ["vol3m", "Volatilidad", 0, 80, 1, " %"],
   ["rsi", "RSI", 0, 100, 1, ""], ["deuda_neta_ebitda", "Deuda neta/EBITDA", -3, 8, 0.25, "×"], ["score", "Puntuación", 0, 100, 5, ""],
+  ["f_fs", "F-score (Piotroski)", 0, 9, 1, ""], ["f_gp", "Rentabilidad bruta", -10, 80, 1, " %"], ["f_sue", "Sorpresa de beneficios", -5, 5, 0.5, ""],
 ];
 const TEMPLATES = {
   "Valor": { per: "<15", per_vs_sector: "-15", deuda: "<3" }, "Calidad": { roe: ">15", margen_op: ">20", deuda: "<2" },
@@ -378,6 +379,8 @@ const COLS = [
   ["veredicto", "Técnico", 0, (v) => (v ? `<span class="badge ${v === "Alcista" ? "Favorable" : v === "Bajista" ? "Defensivo" : "Neutral"}">${v}</span>` : "—")],
   ["resultados", "Resultados", 1, (v) => (v ? fmtDate(v) : "—")],
   ["n_smart", "Superinv.", 1, (v) => (v == null ? "—" : v || "·")],
+  ["f_fs", "F-score", 9, (v) => (v == null ? "—" : nf(v, 1))], ["f_gp", "Rent. bruta", 9, (v) => pct(v)], ["f_ag", "Crec. activos", 9, spct],
+  ["f_acr", "Devengos", 9, spct], ["f_nsi", "Emisión acciones", 9, spct], ["f_sue", "Sorpresa BN", 9, (v) => (v == null ? "—" : sgn(v, 1))],
   ["score", "Puntuación", 0, scoreBadge],
 ];
 const colsFor = (lv) => (E.cols && E.cols.length ? E.cols : COLS.filter((c) => c[2] <= lv).map((c) => c[0]));
@@ -611,7 +614,8 @@ function fichaTab(tab, r, d) {
         ["crec_ventas", "Crec. ventas", spct], ["crec_bpa", "Crec. BPA", spct], ["deuda_neta_ebitda", "Deuda neta/EBITDA", (v) => (v == null ? "—" : nf(v, 1) + "×")],
         ["deuda_patrimonio", "Deuda/patrimonio", (v) => nf(v, 2)], ["beta", "Beta", (v) => nf(v, 2)], ["roic", "ROIC", () => "sin fuente"]]
         .map(([k, t, f]) => `<div class="kvc"><span${tip(k)}>${t}</span><b class="num">${f(r[k])}</b></div>`).join("")}</div>
-      <div class="method">Fundamentales a ${fmtDate(r.fecha_fund)}. Cuatro ejercicios: es lo que publica la fuente.</div>`;
+      <div class="method">Fundamentales a ${fmtDate(r.fecha_fund)}. Cuatro ejercicios: es lo que publica la fuente.</div>
+      ${academicBox(r)}`;
   }
   /* resumen */
   const st = E.sec.stats.Todos, sS = st.sector[r.sector] || {}, sI = st.industria[r.industria] || {};
@@ -899,6 +903,7 @@ document.addEventListener("click", (e) => { if (e.target.closest("#drawerClose")
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.fullscreenElement) { E.ficha = null; document.getElementById("drawer").classList.remove("full"); } });
 
 window.SCRUni = () => (E.uni ? E.uni.filas : []);
+window.SCREq = { sc: () => E.sc, changeOf: (s) => changeOf(s), watch: () => E.watch, scoreBadge: (v) => scoreBadge(v) };
 window.SCRFiltered = () => (E.uni ? filtered() : []);
 window.SCREnsureUni = () => ensure();
 window.SCROpen = (sym, tab, fromRoute) => companyDrawer(sym, tab, fromRoute);
@@ -933,6 +938,22 @@ const pctPill = (q, better) => {
   const good = better === 0 ? null : better > 0 ? q.p : 100 - q.p;
   return `<span class="pp ${good == null ? "" : good >= 67 ? "pp-g" : good <= 33 ? "pp-b" : ""}" data-tip="Percentil ${q.p} de ${q.n} valores de su ${q.scope}${better ? (better > 0 ? " · más alto es mejor" : " · más bajo es mejor") : ""}">p${q.p}</span>`;
 };
+/* factores académicos (SEC, solo EE. UU.): valor, percentil en su sector y referencia */
+const ACAD = [
+  ["f_fs", "F-score de Piotroski", (v) => nf(v, 1) + " / 9", 1, "9 señales contables de solidez (rentabilidad, caja, deuda, liquidez, dilución, margen y rotación). Piotroski (2000)."],
+  ["f_gp", "Rentabilidad bruta", (v) => pct(v), 1, "Beneficio bruto entre activos: las empresas más rentables en bruto han rendido más. Novy-Marx (2013)."],
+  ["f_ag", "Crecimiento de activos", spct, -1, "Las empresas que más engordan su balance han rendido menos después. Cooper, Gulen y Schill (2008)."],
+  ["f_acr", "Devengos", spct, -1, "Beneficio que no llega a caja, sobre activos: mucho devengo anticipa peor rentabilidad. Sloan (1996)."],
+  ["f_nsi", "Emisión neta de acciones", spct, -1, "Variación de acciones en un año: emitir suele preceder a peor rentabilidad; recomprar, a mejor. Pontiff y Woodgate (2008)."],
+  ["f_sue", "Sorpresa de beneficios (SUE)", (v) => sgn(v, 1) + " σ", 1, "Beneficio del último trimestre frente al mismo del año anterior, en desviaciones típicas: tras sorpresas positivas el precio suele seguir subiendo. Foster, Olsen y Shevlin (1984)."],
+];
+function academicBox(r) {
+  const ks = ACAD.filter(([k]) => typeof r[k] === "number");
+  if (!ks.length) return "." in r.sym ? "" : `<div class="box"><b>Factores académicos</b><div class="hint">Sin cuentas de la SEC para este valor todavía.</div></div>`;
+  return `<div class="box"><b>Factores académicos · SEC</b> ${H.evid("e")} <span class="hint">cuentas a ${fmtDate(r.f_fecha)}</span>
+    <table><tbody>${ks.map(([k, t, fmt, b, tip]) => `<tr><td data-tip="${esc(tip)}">${esc(t)}</td><td class="num">${fmt(r[k])}${pctPill(pctIn(r, k), b)}</td></tr>`).join("")}</tbody></table>
+    <div class="method">El Laboratorio mide si cada uno ha predicho la rentabilidad con datos «a fecha»; no están en la nota.</div></div>`;
+}
 function percentilesBox(r) {
   const ks = PCT_METRICS.filter(([k]) => typeof r[k] === "number");
   if (!ks.length) return "";

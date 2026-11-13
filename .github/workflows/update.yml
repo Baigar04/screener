@@ -21,6 +21,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    permissions:
+      contents: write   # solo para la copia de seguridad del historial en la rama copia-datos
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,6 +43,12 @@ jobs:
           # Nombre y correo de contacto que exige la SEC: secreto de Actions (Settings → Secrets and variables → Actions → SEC_UA)
           SEC_UA: ${{ secrets.SEC_UA }}
         run: python scripts/fetch_sec.py
+      - name: Compras y ventas de directivos (formulario 4 de la SEC)
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          SEC_UA: ${{ secrets.SEC_UA }}
+        run: python scripts/fetch_insiders.py
       - name: Acciones, sectores y técnico
         continue-on-error: true
         env:
@@ -60,8 +70,9 @@ jobs:
         run: python scripts/score.py
       - name: Si falla alguna fuente, conservar los datos publicados
         run: |
-          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json score_diario.json amplitud.json news_cache.json lab.json sec_cache.json lab_extra.json; do
-            if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; fi
+          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json score_diario.json amplitud.json insiders.json news_cache.json lab.json sec_cache.json lab_extra.json; do
+            if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" \
+              || curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/copia-datos/data/$f" -o "data/$f" || true; fi
           done
       - name: Prueba de la validación (solo si existe tests/INYECTAR_CORRUPTO)
         if: hashFiles('tests/INYECTAR_CORRUPTO') != ''
@@ -70,6 +81,25 @@ jobs:
           head -c 5000 data/universe.json > /tmp/u && mv /tmp/u data/universe.json
       - name: Validar antes de publicar (si un fichero no pasa, se publica la última versión válida)
         run: python scripts/validate.py
+      - name: Copia de seguridad del historial (rama copia-datos; los viernes y al subir cambios)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "push" ] && [ "$(date -u +%u)" != "5" ]; then echo "Hoy no toca copia"; exit 0; fi
+          set -e
+          rm -rf /tmp/copia && mkdir -p /tmp/copia && cd /tmp/copia
+          git init -q && git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth=1 origin copia-datos 2>/dev/null; then git checkout -q -b copia-datos FETCH_HEAD; else git checkout -q --orphan copia-datos; fi
+          mkdir -p data
+          for f in score_hist.json score_diario.json insiders.json smart_cache.json lab.json validacion.json; do
+            [ -f "$GITHUB_WORKSPACE/data/$f" ] && cp "$GITHUB_WORKSPACE/data/$f" data/
+          done
+          printf "# Copia de seguridad del historial del screener\n\nLo que no se puede volver a descargar: registro semanal y diario de la nota, formularios 4 ya leídos, PDF del Congreso ya leídos y laboratorio.\nLa genera el workflow los viernes y al subir cambios. Si la web pierde un fichero, el workflow lo recupera de aquí.\n" > LEEME.md
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898729+github-actions[bot]@users.noreply.github.com" commit -q -m "Copia de seguridad $(date -u +%F)" || { echo "Sin cambios"; exit 0; }
+          git push -q origin copia-datos
+          echo "Copia de seguridad: $(ls data | wc -l) ficheros, $(du -sh data | cut -f1)"
       - name: Preparar sitio
         run: |
           mkdir -p _site

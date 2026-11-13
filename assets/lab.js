@@ -22,6 +22,7 @@ function verdict(x) {
 }
 const badge = (x) => { const [c, t] = verdict(x); return `<span class="lab-v lab-${c}">${t}</span>`; };
 const fia = (f) => f === "completa" ? `<span class="lab-fia c" data-tip="Solo usa precios conocidos en cada fecha">Fiabilidad completa</span>`
+  : f === "sec_us" ? `<span class="lab-fia c" data-tip="10-K y 10-Q originales de la SEC con su fecha real de presentación. Solo valores de EE. UU.">Solo EE. UU.: SEC a fecha</span>`
   : f === "sec" ? `<span class="lab-fia c" data-tip="EE. UU.: 10-K original de la SEC con su fecha real de presentación. Europa: cuentas anuales de Yahoo aproximadas">EE. UU.: SEC a fecha · Europa: aproximada</span>`
   : `<span class="lab-fia a" data-tip="Cuentas anuales supuestas publicadas el 1 de abril siguiente; cobertura más corta">Fiabilidad aproximada</span>`;
 

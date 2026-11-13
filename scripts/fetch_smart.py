@@ -58,6 +58,16 @@ def num(s):
         return None
 
 
+def iso_day(s):
+    """«14 Nov 2025» (Dataroma) → 2025-11-14; None si no se reconoce."""
+    for fmt in ("%d %b %Y", "%d %B %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime((s or "").strip(), fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
 def ysym(s):
     """Ticker de Dataroma o del Congreso al formato de Yahoo (BRK.B → BRK-B)."""
     return s.strip().upper().replace(".", "-")
@@ -250,7 +260,7 @@ def main():
     cons.sort(key=lambda x: (-x[2], -x[3]))
     out = {
         "generado": NOW.isoformat(timespec="seconds"),
-        "gestores": [{k: m.get(k) for k in ("code", "nombre", "actualizado", "trimestre")} | {"n": len(m.get("pos", [])), "pos": m.get("pos", [])} for m in managers],
+        "gestores": [{k: m.get(k) for k in ("code", "nombre", "actualizado", "trimestre")} | {"actualizado_iso": iso_day(m.get("actualizado")), "n": len(m.get("pos", [])), "pos": m.get("pos", [])} for m in managers],
         "actividad": act, "consenso": cons[:300], "congreso": trades, "por_valor": por,
         "errores": ERRORS[:100], "n_errores": len(ERRORS),
         "fuentes": ["Dataroma (carteras 13F de superinversores)", "Cámara de Representantes de EE. UU. (informes PTR oficiales)"],

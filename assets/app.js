@@ -3,6 +3,7 @@
 "use strict";
 
 const NAV = [
+  ["hoy", "Hoy", true],
   ["pulso", "Pulso del mercado", true],
   ["sectores", "Sectores", true],
   ["screener", "Screener", true],
@@ -14,7 +15,7 @@ const NAV = [
 ];
 /* 4 áreas en la barra lateral (o inferior en móvil); dentro de cada área, sus secciones en una barra superior */
 const AREAS = [
-  ["mercado", "Mercado", ["pulso", "sectores", "adelantarse"]],
+  ["mercado", "Mercado", ["hoy", "pulso", "sectores", "adelantarse"]],
   ["empresas", "Empresas", ["screener", "smart", "comparar"]],
   ["carteras", "Carteras", ["carteras"]],
   ["laboratorio", "Laboratorio", ["laboratorio"]],
@@ -56,7 +57,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sin almacenamiento */ } },
 };
 const S = {
-  view: "pulso",
+  view: "hoy",
   mode: store.get("modo", store.get("nivel", 1) <= 1 ? "x" : "c"),
   level: 3,         /* todos los datos en los dos modos (antes dependían del nivel) */
   explain: true,
@@ -143,6 +144,7 @@ const ICONS = {
   sectores: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   screener: "M3 5h18l-7 8v6l-4 2v-8z",
   comparar: "M8 3v18M16 3v18M3 8h5M16 16h5M3 16h5M16 8h5",
+  hoy: "M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
   smart: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5",
   carteras: "M3 7h18v13H3zM8 7V4h8v3M3 12h18",
   adelantarse: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z",
@@ -314,6 +316,7 @@ function countriesTable(P, lv) {
 
 function renderSoon(k) {
   const n = NAV.find((x) => x[0] === k)[1];
+  if (!SOON[k]) return `<div class="skel-wrap"><div class="skel" style="height:34px;width:40%"></div>${'<div class="skel" style="height:90px"></div>'.repeat(3)}</div>`;   /* el módulo aún se está cargando */
   return `<div class="soon-box"><h3>${n} · próximamente</h3>Este módulo llega en una fase posterior. Incluirá:<ul>${SOON[k].map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
 }
 

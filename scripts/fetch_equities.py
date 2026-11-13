@@ -692,6 +692,24 @@ def main():
         if detail.get("val_hist"):
             NVH[0] += 1
 
+    # factores académicos con las cuentas de la SEC (solo EE. UU.)
+    try:
+        import academic
+        secd = json.load(open(os.path.join(DATA, "sec_cache.json"))).get("sim", {})
+        n_ac = 0
+        for r in rows:
+            e = secd.get(r["sym"])
+            if not e:
+                continue
+            f = academic.current(e)
+            pc = lambda x: None if x is None else round(100 * x, 2)  # noqa: E731
+            r.update({"f_gp": pc(f["gp"]), "f_ag": pc(f["ag"]), "f_acr": pc(f["acr"]), "f_nsi": pc(f["nsi"]), "f_fs": f["fs"],
+                      "f_sue": None if f["sue"] is None else round(f["sue"], 2), "f_fecha": f["fecha"]})
+            n_ac += any(f[k] is not None for k in ("gp", "ag", "acr", "nsi", "fs", "sue"))
+        log("Factores académicos (SEC):", n_ac, "valores")
+    except Exception as e:  # noqa: BLE001
+        log("Factores académicos: sin datos SEC", e)
+
     # capitalización en dólares para comparar valores de distintas monedas (filtros, orden y comparables)
     curs = sorted({(r.get("moneda") or "USD") for r in rows} - {"USD"})
     fx = {"USD": 1.0}

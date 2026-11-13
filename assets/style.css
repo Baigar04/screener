@@ -655,3 +655,11 @@ html[data-mode="c"] h2.sec > .hint,html[data-mode="c"] .method:not(.keep),html[d
 .cmp-sep th{padding-top:14px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 .cmp-chart{width:100%;height:auto;display:block}
 .cmp-page .tbl-wrap{max-height:none}
+/* pantalla «Hoy» (Fase 2) */
+.hoy-status{font-size:12.5px;color:var(--muted);margin:-4px 0 6px}
+.hoy-kpis{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.hoy-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.hoy-grid>.box{margin:0;min-width:0}
+.hoy-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:13px}
+.hoy-list.cols{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px}
+@media (max-width:900px){.hoy-grid,.hoy-list.cols{grid-template-columns:1fr}}

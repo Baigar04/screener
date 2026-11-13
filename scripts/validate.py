@@ -190,6 +190,19 @@ def v_amplitud(d, prev):
     return ", ".join(f"{k}: {a.get('sobre_sma50')} % > SMA50" for k, a in R.items())
 
 
+def v_insiders(d, prev):
+    check_generado(d, "insiders.json")
+    O, P = d.get("ops"), d.get("por_valor")
+    check(isinstance(O, list) and isinstance(P, dict), "insiders.json: estructura incompleta")
+    if prev:
+        check(len(d.get("dias") or []) >= 0.9 * len(prev.get("dias") or []), "insiders.json: ha perdido días procesados")
+    for o in O[:5000]:
+        check(o.get("codigo") in ("P", "S") and isinstance(o.get("sym"), str), "insiders.json: operación no válida")
+        check_date(o.get("fecha_op"), "insiders.json: fecha de operación", now())
+        check(num_or_none(o.get("importe")) and (o.get("importe") is None or o["importe"] >= 0), f"insiders.json: importe no válido en {o.get('sym')}")
+    return f"{len(O)} operaciones · {len(d.get('dias') or [])} días · pendientes {d.get('pendientes')}"
+
+
 def v_smart(d, prev):
     check_generado(d, "smart.json")
     G, P = d.get("gestores"), d.get("por_valor")
@@ -230,6 +243,7 @@ RULES = {
     "score_hist.json": v_score_hist,
     "score_diario.json": v_score_daily,
     "amplitud.json": v_amplitud,
+    "insiders.json": v_insiders,
     "smart.json": v_smart,
     "lab.json": v_lab,
     "fund_cache.json": v_dict("fund_cache.json"),

@@ -3,7 +3,9 @@
 Por cada empresa guarda, ejercicio a ejercicio, las cifras del 10-K ORIGINAL con su fecha real de presentación
 (sin reexpresiones posteriores): así el laboratorio solo usa lo que se sabía en cada fecha.
 
-Salida: data/sec_cache.json  {"generado", "n", "sim": {SYM: {"cik", "act", "fy": [[fin, presentado, ventas, bn, ebit, patrimonio, deuda, cfo, capex, acciones], ...]}}}
+Salida: data/sec_cache.json  {"generado", "n", "sim": {SYM: {"cik", "act", "v",
+    "fy": [[fin, presentado, ventas, bn, ebit, patrimonio, deuda, cfo, capex, acciones, activos, bruto, activo_corriente, pasivo_corriente], ...],
+    "q":  [[fin, presentado, ventas_3m, bn_3m, ebit_3m, bruto_3m, activos, patrimonio], ...]}}}   (trimestres: 10-Q y 4.º trimestre deducido del 10-K)
 Requiere la variable SEC_UA ("nombre correo"), como exige la SEC para el acceso automatizado.
 """
 import json
@@ -11,13 +13,14 @@ import os
 import sys
 import time
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 SITE = os.environ.get("SITE_URL", "https://baigar04.github.io/screener/")
 UA = os.environ.get("SEC_UA", "").strip()
 NOW = datetime.now(timezone.utc)
 REFRESH_DAYS = 30      # se vuelve a pedir una empresa como muy pronto cada 30 días…
+VERSION = 2            # al cambiar el formato se vuelven a pedir todas
 MAX_PER_RUN = 1200     # …y nunca más de estas por ejecución (límite de la SEC: 10 peticiones/s)
 
 TAGS = {
@@ -30,8 +33,14 @@ TAGS = {
     "deuda_cp": ["DebtCurrent", "LongTermDebtCurrent", "ShortTermBorrowings"],
     "cfo": ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
     "capex": ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"],
+    "activos": ["Assets"],
+    "bruto": ["GrossProfit"],
+    "coste_ventas": ["CostOfRevenue", "CostOfGoodsAndServicesSold", "CostOfGoodsSold"],
+    "ac": ["AssetsCurrent"],
+    "pc": ["LiabilitiesCurrent"],
 }
-FLOW = {"ventas", "bn", "ebit", "cfo", "capex"}
+FLOW = {"ventas", "bn", "ebit", "cfo", "capex", "bruto", "coste_ventas"}
+QFLOW = ("ventas", "bn", "ebit", "bruto", "coste_ventas")
 
 
 def log(*a):
@@ -70,6 +79,53 @@ def annual(facts, key):
     return {}
 
 
+def quarterly(facts, key):
+    """{fin_de_trimestre: (valor_3_meses, fecha_presentación)} de los 10-Q originales; el 4.º trimestre se deduce
+    del ejercicio del 10-K menos los tres trimestres anteriores (si están los tres)."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    for tag in TAGS[key]:
+        units = gaap.get(tag, {}).get("units", {}).get("USD")
+        if not units:
+            continue
+        q, fy = {}, {}
+        for f in units:
+            form, fl, e, s = str(f.get("form", "")), f.get("filed"), f.get("end"), f.get("start")
+            if not fl or not e or not s:
+                continue
+            dur = days(s, e)
+            if form.startswith("10-Q") and 80 <= dur <= 100:
+                if e not in q or fl < q[e][1]:
+                    q[e] = (f["val"], fl)
+            elif form.startswith("10-K") and 330 <= dur <= 400:
+                if e not in fy or fl < fy[e][1]:
+                    fy[e] = (f["val"], fl, s)
+        for e, (v, fl, s) in fy.items():
+            prior = [k for k in q if s < k < e and days(s, k) < 300]
+            if len(prior) == 3 and e not in q:
+                q[e] = (v - sum(q[k][0] for k in prior), fl)
+        if len(q) >= 4:
+            return q
+    return {}
+
+
+def instant(facts, key, forms=("10-Q", "10-K")):
+    """{fecha: (valor, presentado)} de un dato de balance en 10-Q y 10-K originales."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    for tag in TAGS[key]:
+        units = gaap.get(tag, {}).get("units", {}).get("USD")
+        if not units:
+            continue
+        out = {}
+        for f in units:
+            if not str(f.get("form", "")).startswith(forms) or not f.get("filed") or not f.get("end") or f.get("start"):
+                continue
+            if f["end"] not in out or f["filed"] < out[f["end"]][1]:
+                out[f["end"]] = (f["val"], f["filed"])
+        if out:
+            return out
+    return {}
+
+
 def shares(facts):
     """{fecha_presentación: acciones en circulación} de la portada de cada 10-K."""
     u = facts.get("facts", {}).get("dei", {}).get("EntityCommonStockSharesOutstanding", {}).get("units", {}).get("shares") or []
@@ -78,6 +134,9 @@ def shares(facts):
 
 def parse(facts):
     cols = {k: annual(facts, k) for k in TAGS}
+    for k in ("activos", "patrimonio", "ac", "pc"):   # balances: dato «instantáneo» del 10-K (sin duración)
+        if not cols[k]:
+            cols[k] = {e: v for e, v in instant(facts, k, ("10-K",)).items()}
     sh = shares(facts)
     ends = sorted(set(cols["ventas"]) | set(cols["bn"]))
     rows = []
@@ -87,8 +146,26 @@ def parse(facts):
             continue
         v = lambda k: cols[k][e][0] if e in cols[k] else None  # noqa: E731
         debt = None if v("deuda") is None and v("deuda_cp") is None else (v("deuda") or 0) + (v("deuda_cp") or 0)
-        rows.append([e, filed, v("ventas"), v("bn"), v("ebit"), v("patrimonio"), debt, v("cfo"), v("capex"), sh.get(filed)])
+        gross = v("bruto") if v("bruto") is not None else (v("ventas") - v("coste_ventas") if v("ventas") is not None and v("coste_ventas") is not None else None)
+        rows.append([e, filed, v("ventas"), v("bn"), v("ebit"), v("patrimonio"), debt, v("cfo"), v("capex"), sh.get(filed),
+                     v("activos"), gross, v("ac"), v("pc")])
     return rows
+
+
+def parse_q(facts):
+    """Trimestres desde 2015: flujos de 3 meses y balance al cierre, con la fecha real de presentación."""
+    cols = {k: quarterly(facts, k) for k in QFLOW}
+    bal = {k: instant(facts, k) for k in ("activos", "patrimonio")}
+    out = []
+    for e in sorted(set(cols["ventas"]) | set(cols["bn"])):
+        if e < "2015-01-01":
+            continue
+        filed = min((cols[k][e][1] for k in ("ventas", "bn") if e in cols[k]), default=None)
+        v = lambda k: cols[k][e][0] if e in cols[k] else None  # noqa: E731
+        b = lambda k: bal[k][e][0] if e in bal[k] else None  # noqa: E731
+        gross = v("bruto") if v("bruto") is not None else (v("ventas") - v("coste_ventas") if v("ventas") is not None and v("coste_ventas") is not None else None)
+        out.append([e, filed, v("ventas"), v("bn"), v("ebit"), gross, b("activos"), b("patrimonio")])
+    return out
 
 
 def main():
@@ -124,7 +201,8 @@ def main():
 
     def stale(s):
         x = sim.get(s)
-        return not x or (NOW - datetime.fromisoformat(x["act"])).days >= REFRESH_DAYS
+        # «act» es una fecha sin hora: se compara con la fecha de hoy (antes fallaba al restar con zona horaria)
+        return not x or x.get("v") != VERSION or (NOW.date() - date.fromisoformat(x["act"][:10])).days >= REFRESH_DAYS
     todo = [s for s in want if s in cik and stale(s)]
     todo.sort(key=lambda s: s in sim)  # primero los que no están
     todo = todo[:MAX_PER_RUN]
@@ -133,7 +211,7 @@ def main():
     for i, s in enumerate(todo):
         try:
             facts = json.loads(get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik[s]:010d}.json"))
-            sim[s] = {"cik": cik[s], "act": NOW.date().isoformat(), "fy": parse(facts)}
+            sim[s] = {"cik": cik[s], "act": NOW.date().isoformat(), "v": VERSION, "fy": parse(facts), "q": parse_q(facts)}
             ok += 1
         except Exception as e:  # noqa: BLE001
             err += 1
@@ -148,7 +226,8 @@ def main():
     out = {"generado": NOW.isoformat(timespec="seconds"), "n": len(sim), "sim": sim}
     json.dump(out, open(os.path.join(DATA, "sec_cache.json"), "w"), separators=(",", ":"))
     with_data = sum(1 for x in sim.values() if len(x["fy"]) >= 3)
-    log(f"SEC: pedidas {ok} (errores {err}) · en caché {len(sim)} · con ≥3 ejercicios {with_data}")
+    with_q = sum(1 for x in sim.values() if len(x.get("q") or []) >= 8)
+    log(f"SEC: pedidas {ok} (errores {err}) · en caché {len(sim)} · con ≥3 ejercicios {with_data} · con ≥8 trimestres {with_q} · formato v{VERSION}: {sum(1 for x in sim.values() if x.get('v') == VERSION)}")
     return 0
 
 
