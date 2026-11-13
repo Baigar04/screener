@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-13T16:08:46+00:00",
+ "generado": "2026-11-13T17:33:53+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -27,15 +27,15 @@
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 66.0 % > SMA50, Europa: 72.3 % > SMA50"
+   "detalle": "EE. UU.: 66.6 % > SMA50, Europa: 71.0 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
-   "detalle": "2252 operaciones · 11 días · pendientes 53"
+   "detalle": "3390 operaciones · 21 días · pendientes 43"
   },
   "smart.json": {
    "estado": "ok",
-   "detalle": "82 gestores · 1988 valores"
+   "detalle": "83 gestores · 1988 valores"
   },
   "lab.json": {
    "estado": "ok",
