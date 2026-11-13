@@ -730,7 +730,7 @@ function paintSearch() {
 function setupSearch() {
   const top = document.querySelector(".top"); if (!top || document.getElementById("gq")) return;
   const w = document.createElement("div"); w.className = "gsearch";
-  w.innerHTML = `<svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg><input id="gq" type="search" placeholder="Buscar ticker o empresa" autocomplete="off" aria-label="Buscar ticker o empresa"><kbd>/</kbd><div id="gres" class="gres" role="listbox"></div>`;
+  w.innerHTML = `<svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg><input id="gq" type="search" placeholder="Buscar empresa, ticker o palabra clave…" autocomplete="off" aria-label="Buscar ticker o empresa"><kbd>/</kbd><div id="gres" class="gres" role="listbox"></div>`;
   top.insertBefore(w, top.querySelector(".top-right"));
   const inp = w.querySelector("#gq");
   inp.addEventListener("focus", () => { ensure(); paintSearch(); });

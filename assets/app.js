@@ -9,6 +9,7 @@ const NAV = [
   ["screener", "Screener", true],
   ["smart", "Smart money", true],
   ["comparar", "Comparar", true],
+  ["seguimiento", "Seguimiento", true],
   ["carteras", "Carteras", true],
   ["adelantarse", "Adelantarse", true],
   ["laboratorio", "Laboratorio", true],
@@ -16,9 +17,9 @@ const NAV = [
 /* 4 áreas en la barra lateral (o inferior en móvil); dentro de cada área, sus secciones en una barra superior */
 const AREAS = [
   ["mercado", "Mercado", ["hoy", "pulso", "sectores", "adelantarse"]],
-  ["empresas", "Empresas", ["screener", "smart", "comparar"]],
-  ["carteras", "Carteras", ["carteras"]],
-  ["laboratorio", "Laboratorio", ["laboratorio"]],
+  ["screener", "Screener", ["screener", "comparar", "smart"]],
+  ["watchlists", "Watchlists", ["seguimiento", "carteras"]],
+  ["investigacion", "Investigación", ["laboratorio"]],
 ];
 const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
 /* 2 modos en lugar de 4 niveles: los dos muestran todos los datos; «Explicado» añade las explicaciones */
@@ -150,7 +151,8 @@ const ICONS = {
   adelantarse: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z",
   laboratorio: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9",
 };
-ICONS.mercado = ICONS.pulso; ICONS.empresas = "M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h3a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M3 21h18";
+ICONS.mercado = ICONS.pulso; ICONS.watchlists = "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"; ICONS.seguimiento = ICONS.watchlists;
+ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4"; ICONS.empresas = "M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h3a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M3 21h18";
 function subnav() {
   const [, , secs] = areaOf(S.view);
   if (secs.length < 2) return "";
@@ -158,10 +160,18 @@ function subnav() {
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg>${NAV.find((x) => x[0] === k)[1]}</button>`).join("")}</nav>`;
 }
 function renderTop() {
-  const cur = areaOf(S.view)[0];
-  $("#nav").innerHTML = AREAS.map(([k, n, secs]) => `<button data-area="${k}" class="${cur === k ? "on" : ""}" title="${n}: ${secs.map((s) => NAV.find((x) => x[0] === s)[1]).join(", ")}" aria-current="${cur === k ? "page" : "false"}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span><span class="lbl-s">${n}</span></button>`).join("");
-  const pt = $("#pageTitle"); if (pt) pt.textContent = NAV.find((x) => x[0] === S.view)[1];
+  const [cur, curName, secs] = areaOf(S.view);
+  const vname = NAV.find((x) => x[0] === S.view)[1];
+  /* cabecera: las 4 áreas (en móvil, barra inferior) */
+  $("#nav").innerHTML = AREAS.map(([k, n, ss]) => `<button data-area="${k}" class="${cur === k ? "on" : ""}" title="${n}: ${ss.map((s) => NAV.find((x) => x[0] === s)[1]).join(", ")}" aria-current="${cur === k ? "page" : "false"}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span class="lbl">${n}</span></button>`).join("");
+  /* barra lateral: las secciones del área (en móvil, fila deslizable) */
+  $("#side").innerHTML = secs.map((k) => `<button data-sub="${k}" class="${S.view === k ? "on" : ""}" aria-current="${S.view === k ? "page" : "false"}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span>${NAV.find((x) => x[0] === k)[1]}</span></button>`).join("");
+  /* migas de pan */
+  $("#crumbs").innerHTML = `<button class="crumb-home" data-sub="hoy" aria-label="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></button><span class="c-sep">›</span>
+    <button data-area="${cur}" class="crumb">${esc(curName)}</button><span class="c-sep">/</span><b>${esc(vname)}</b>`;
+  const tn = $("#themeName"); if (tn) tn.textContent = document.documentElement.dataset.theme === "light" ? "Claro" : "Oscuro";
   $("#level").innerHTML = MODES.map(([k, t, tip]) => `<button role="radio" aria-checked="${S.mode === k}" data-mode="${k}" class="${S.mode === k ? "on" : ""}" title="${tip}">${t}</button>`).join("");
   const st = $("#status");
   if (!S.data) { st.innerHTML = `<span><span class="dot err"></span> ${esc(S.error || "Cargando…")}</span>`; return; }
@@ -169,9 +179,8 @@ function renderTop() {
   const ok = ser.filter((s) => s.estado === "ok").length;
   const h = Math.round((Date.now() - new Date(S.data.generado)) / 36e5);
   st.innerHTML = `<span><span class="dot ${h > 80 ? "stale" : "ok"}"></span> Datos: ${fmtDateTime(S.data.generado)} · hace ${h} h</span>
-    <span class="sep">·</span><span>${ok}/${ser.length} series macro al día</span><span class="sep">·</span>
-    ${S.data.errores?.length ? `<button id="showErr">${S.data.errores.length} fuente(s) con error</button>` : "<span>Sin errores de fuente</span>"}
-    <span class="sep hide-s">·</span><span class="hide-s">Actualización: L-V tras el cierre de EE. UU.</span>`;
+    <span class="sep hide-s">·</span><span class="hide-s">${ok}/${ser.length} series macro al día</span>
+    ${S.data.errores?.length ? `<span class="sep">·</span><button id="showErr">${S.data.errores.length} fuente(s) con error</button>` : ""}`;
 }
 
 function renderPulso() {
@@ -324,7 +333,7 @@ function render() {
   renderTop();
   S.explain = S.mode === "x";
   document.documentElement.dataset.mode = S.mode;
-  $("#view").innerHTML = subnav() + (S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view));
+  $("#view").innerHTML = S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view);
   document.title = NAV.find((x) => x[0] === S.view)[1] + " · Screener";
 }
 
@@ -393,7 +402,9 @@ document.addEventListener("click", (e) => {
     render(); return;
   }
   let b;
-  if ((b = t.closest("#nav button[data-area]"))) { const a = AREAS.find((x) => x[0] === b.dataset.area); go(a[2].includes(S.view) ? S.view : store.get("area_" + a[0], a[2][0])); return; }
+  if (t.closest("#gear")) { const d = $("#settings"); d.classList.toggle("open"); $("#gear").setAttribute("aria-expanded", d.classList.contains("open")); return; }
+  if (!t.closest("#settings")) $("#settings")?.classList.remove("open");
+  if ((b = t.closest("[data-area]"))) { const a = AREAS.find((x) => x[0] === b.dataset.area); go(a[2].includes(S.view) ? S.view : store.get("area_" + a[0], a[2][0])); return; }
   if ((b = t.closest("[data-sub]"))) { go(b.dataset.sub); return; }
   if ((b = t.closest("[data-ampreg]"))) { S.ampRegion = b.dataset.ampreg; render(); return; }
   if ((b = t.closest("#level button[data-mode]"))) { S.mode = b.dataset.mode; store.set("modo", S.mode); render(); return; }
@@ -421,12 +432,12 @@ document.addEventListener("click", (e) => {
   }
   if (t.closest("#theme")) {
     const root = document.documentElement;
-    const dark = root.dataset.theme ? root.dataset.theme === "dark" : !matchMedia("(prefers-color-scheme: light)").matches;
-    root.dataset.theme = dark ? "light" : "dark";
+    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";   /* oscuro por defecto */
     try { localStorage.setItem("tema", root.dataset.theme); } catch (er) { /* */ }
+    const tn = $("#themeName"); if (tn) tn.textContent = root.dataset.theme === "light" ? "Claro" : "Oscuro";
   }
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("#drawer").classList.contains("on")) userClose(); document.querySelectorAll(".dd.open").forEach((x) => x.classList.remove("open")); } });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if ($("#drawer").classList.contains("on")) userClose(); $("#settings")?.classList.remove("open"); document.querySelectorAll(".dd.open").forEach((x) => x.classList.remove("open")); } });
 
 const MODULES = {}, HANDLERS = [];
 

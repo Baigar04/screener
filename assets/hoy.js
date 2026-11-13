@@ -167,4 +167,15 @@ document.addEventListener("change", (e) => {
 });
 document.addEventListener("click", (e) => { if (onClick(e.target)) { e.preventDefault(); e.stopPropagation(); } }, true);
 H.modules.hoy = render;
+/* Watchlists › Seguimiento: tus valores marcados con ★, con lo que ha cambiado y lo que viene */
+H.modules.seguimiento = () => {
+  ensure();
+  window.SCREnsureUni?.();
+  const uni = window.SCRUni?.() || [], Q = window.SCREq;
+  if (!uni.length || !Q) return `<div class="skel" style="height:240px"></div>`;
+  const n = Q.watch().length;
+  return `<h2 class="sec">Seguimiento <span class="hint">${n} ${n === 1 ? "valor" : "valores"} · cambios desde la sesión anterior</span></h2>
+    <div class="box">${watchlist(uni, Q)}</div>
+    <div class="method">Añade o quita valores con ★ en el screener o en su ficha. Se guardan en este navegador y entran en la copia de seguridad (Mercado › Hoy).</div>`;
+};
 })();
