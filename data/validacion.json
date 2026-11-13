@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-13T17:33:53+00:00",
+ "generado": "2026-11-13T18:30:28+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -31,7 +31,7 @@
   },
   "insiders.json": {
    "estado": "ok",
-   "detalle": "3390 operaciones · 21 días · pendientes 43"
+   "detalle": "3828 operaciones · 26 días · pendientes 38"
   },
   "smart.json": {
    "estado": "ok",
