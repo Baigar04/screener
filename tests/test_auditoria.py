@@ -32,3 +32,9 @@ def test_detecta_anomalias():
     assert [x[0] for x in L["bpa_acciones"]] == ["SPLIT"]
     assert [x[0] for x in L["t4_raro"]] == ["T4"]
     assert "OK" not in {x[0] for k in L if k != "pocos_datos" for x in L[k] if isinstance(x, list)}
+
+
+def test_casos_reales_detecta_fallo():
+    sec = {"FN": {"q": [["2026-09-25", "x", 1474.459e6, 103.497e6, None, None, None, None, 2.86]], "fy": []}}
+    ok, tot, bad = au.check_reales(sec)
+    assert ok == 3 and tot == len(au.REALES) and not any(b[0] == "FN" and b[2] == "2026-09-25" for b in bad)

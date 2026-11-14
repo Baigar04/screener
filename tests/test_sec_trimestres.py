@@ -44,3 +44,22 @@ def test_trimestres_con_bpa_y_etiqueta():
 def test_etiqueta_sin_ejercicio_fiscal():
     assert fs.label(None, None, "2026-09-30") == "CY2026Q3"
     assert fs.label(2027, "Q1", "2026-09-25") == "FY2027Q1"
+
+
+def test_une_etiquetas_y_ventas_mayor():
+    """Cambio de etiqueta en 2018: antes se quedaba con la vieja y perdía las ventas recientes (487 empresas)."""
+    old = [fact("2016-01-01", "2016-12-31", 100, "2017-02-01", "10-K", 2016, "FY"), fact("2017-01-01", "2017-12-31", 110, "2018-02-01", "10-K", 2017, "FY")]
+    new = [fact("2018-01-01", "2018-12-31", 120, "2019-02-01", "10-K", 2018, "FY"), fact("2019-01-01", "2019-12-31", 130, "2020-02-01", "10-K", 2019, "FY"),
+           fact("2017-01-01", "2017-12-31", 112, "2018-02-01", "10-K", 2017, "FY")]
+    facts = {"facts": {"us-gaap": {"Revenues": {"units": {"USD": old}}, "RevenueFromContractWithCustomerExcludingAssessedTax": {"units": {"USD": new}}}}}
+    a = fs.annual(facts, "ventas")
+    assert sorted(a) == ["2016-12-31", "2017-12-31", "2018-12-31", "2019-12-31"]
+    assert a["2017-12-31"][0] == 112        # ventas: el mayor importe entre etiquetas
+    bn = {"facts": {"us-gaap": {"NetIncomeLoss": {"units": {"USD": old}}, "ProfitLoss": {"units": {"USD": new}}}}}
+    assert fs.annual(bn, "bn")["2017-12-31"][0] == 110   # resto: prioridad de la lista
+
+
+def test_descarta_t4_incoherente():
+    rows = [["2024-03-31", "", 300, 10, 1, 1, 1, 1, 0.1, "FY2024Q1", "10-Q", None], ["2024-06-30", "", 300, 10, 1, 1, 1, 1, 0.1, "FY2024Q2", "10-Q", None],
+            ["2024-09-30", "", 300, 10, 1, 1, 1, 1, 0.1, "FY2024Q3", "10-Q", None], ["2024-12-31", "", 40, -5, 1, 1, 1, 1, -0.1, "FY2024Q4", "10-K", None]]
+    assert not fs.q4_ok(rows, 3) and fs.q4_ok(rows, 2)

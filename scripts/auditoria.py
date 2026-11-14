@@ -16,6 +16,47 @@ from datetime import date
 
 DATA = sys.argv[1] if len(sys.argv) > 1 else "data"
 CASOS = ["AAPL", "MSFT", "NVDA", "JPM", "FN"]
+# Cifras publicadas por las propias empresas (notas de resultados y 10-Q/10-K), revisadas a mano el 14-nov-2026.
+# (símbolo, "q" o "fy", fecha de cierre, campo, valor real, fuente). Tolerancia: 0,5 % en importes; 0,02 $ en BPA.
+REALES = [
+    ("AAPL", "q", "2026-09-26", "ventas", 114477e6, "Apple, resultados T4 FY26 (2-nov-2026)"),
+    ("AAPL", "q", "2026-09-26", "bn", 30711e6, "Apple, resultados T4 FY26"),
+    ("AAPL", "q", "2026-09-26", "bpa", 2.10, "Apple, resultados T4 FY26 (T4 deducido: aproximado)"),
+    ("AAPL", "fy", "2026-09-26", "ventas", 478834e6, "Apple, ejercicio 2026"),
+    ("AAPL", "fy", "2026-09-26", "bn", 132175e6, "Apple, ejercicio 2026"),
+    ("AAPL", "q", "2025-09-27", "ventas", 102466e6, "Apple, T4 FY25 (comparativo)"),
+    ("MSFT", "q", "2026-09-30", "ventas", 92.3e9, "Microsoft, resultados T1 FY27 (28-oct-2026)"),
+    ("MSFT", "q", "2026-09-30", "bn", 36629e6, "Microsoft, resultados T1 FY27"),
+    ("MSFT", "q", "2026-09-30", "bpa", 4.92, "Microsoft, resultados T1 FY27"),
+    ("NVDA", "q", "2026-07-26", "ventas", 96.2e9, "NVIDIA, resultados T2 FY27"),
+    ("NVDA", "q", "2026-07-26", "bn", 59.7e9, "NVIDIA, resultados T2 FY27"),
+    ("NVDA", "q", "2026-07-26", "bpa", 2.46, "NVIDIA, resultados T2 FY27"),
+    ("JPM", "q", "2026-09-30", "bn", 15.3e9, "JPMorgan, 10-Q T3 2026"),
+    ("JPM", "q", "2026-09-30", "bpa", 5.57, "JPMorgan, 10-Q T3 2026"),
+    ("FN", "q", "2026-09-25", "ventas", 1474.5e6, "Fabrinet, resultados T1 FY27 (2-nov-2026)"),
+    ("FN", "q", "2026-09-25", "bn", 103.5e6, "Fabrinet, resultados T1 FY27"),
+    ("FN", "q", "2026-09-25", "bpa", 2.86, "Fabrinet, resultados T1 FY27"),
+    ("FN", "q", "2026-06-26", "ventas", 1316e6, "Fabrinet, resultados T4 FY26 (T4 deducido)"),
+    ("FN", "q", "2026-06-26", "bpa", 3.83, "Fabrinet, resultados T4 FY26 (T4 deducido)"),
+    ("FN", "fy", "2026-06-26", "ventas", 4.64e9, "Fabrinet, ejercicio 2026"),
+    ("FN", "fy", "2026-06-26", "bn", 473.0e6, "Fabrinet, ejercicio 2026"),
+]
+COL = {"q": {"ventas": 2, "bn": 3, "bpa": 8}, "fy": {"ventas": 2, "bn": 3}}
+
+
+def check_reales(sec):
+    """Compara la caché con las cifras reales publicadas. Devuelve (correctas, total, fallos)."""
+    bad, ok = [], 0
+    for sym, kind, end, field, real, src in REALES:
+        rows = (sec.get(sym) or {}).get(kind) or []
+        row = next((r for r in rows if r[0] == end), None)
+        got = row[COL[kind][field]] if row and len(row) > COL[kind][field] else None
+        good = got is not None and (abs(got - real) <= 0.02 if field == "bpa" else abs(got / real - 1) <= 0.005)
+        if good:
+            ok += 1
+        else:
+            bad.append([sym, kind, end, field, got, real, src])
+    return ok, len(REALES), bad
 TOP = 60
 
 
@@ -123,7 +164,11 @@ def main():
     resumen, listas = audit(sec, fund, us, today)
     casos = {s: {"fy": (sec.get(s) or {}).get("fy", [])[-4:], "q": (sec.get(s) or {}).get("q", [])[-6:],
                  "yahoo": {y: v for y, v in ((fund.get(s) or {}).get("anual") or {}).items() if y >= "2022"}} for s in CASOS}
-    out = {"generado": today, "resumen": resumen, "listas": listas, "casos": casos}
+    ok, tot, bad = check_reales(sec)
+    resumen["casos_reales_ok"] = f"{ok}/{tot}"
+    if bad:
+        print("::warning::Cifras que no cuadran con lo publicado:", json.dumps(bad, ensure_ascii=False))
+    out = {"generado": today, "resumen": resumen, "listas": listas, "casos": casos, "casos_reales_fallos": bad}
     json.dump(out, open(os.path.join(DATA, "auditoria.json"), "w"), separators=(",", ":"))
     print("Auditoría:", json.dumps(resumen, ensure_ascii=False))
 

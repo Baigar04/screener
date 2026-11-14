@@ -22,7 +22,7 @@ SITE = os.environ.get("SITE_URL", "https://baigar04.github.io/screener/")
 UA = os.environ.get("SEC_UA", "").strip()
 NOW = datetime.now(timezone.utc)
 REFRESH_DAYS = 30      # se vuelve a pedir una empresa como muy pronto cada 30 días…
-VERSION = 3            # al cambiar el formato se vuelven a pedir todas
+VERSION = 4            # al cambiar el formato se vuelven a pedir todas
 MAX_PER_RUN = 1200     # …y nunca más de estas por ejecución (límite de la SEC: 10 peticiones/s)
 
 TAGS = {
@@ -61,56 +61,88 @@ def days(a, b):
     return (datetime.fromisoformat(b) - datetime.fromisoformat(a)).days
 
 
-def annual(facts, key):
-    """{fin_de_ejercicio: (valor, fecha_presentación)} del 10-K original (el primero presentado para ese ejercicio)."""
-    gaap = facts.get("facts", {}).get("us-gaap", {})
-    for tag in TAGS[key]:
-        units = gaap.get(tag, {}).get("units", {}).get(UNIT.get(key, "USD"))
-        if not units:
+def _annual_tag(units, key):
+    out = {}
+    for f in units:
+        if not str(f.get("form", "")).startswith("10-K") or not f.get("filed") or not f.get("end"):
             continue
-        out = {}
-        for f in units:
-            if not str(f.get("form", "")).startswith("10-K") or not f.get("filed") or not f.get("end"):
+        if key in FLOW:
+            if not f.get("start") or not 330 <= days(f["start"], f["end"]) <= 400:
                 continue
-            if key in FLOW:
-                if not f.get("start") or not 330 <= days(f["start"], f["end"]) <= 400:
-                    continue
-            prev = out.get(f["end"])
-            if prev is None or f["filed"] < prev[1]:
-                out[f["end"]] = (f["val"], f["filed"])
-        if len(out) >= 2:
-            return out
-    return {}
+        prev = out.get(f["end"])
+        if prev is None or f["filed"] < prev[1]:
+            out[f["end"]] = (f["val"], f["filed"])
+    return out
+
+
+def merge_tags(per_tag, key):
+    """Une las etiquetas contables de un concepto (las empresas cambian de etiqueta con los años, p. ej. «Revenues» →
+    «RevenueFromContractWithCustomer…» en 2018). Para cada fecha: en ventas, el mayor importe entre las etiquetas
+    (la cifra total); en el resto, la primera etiqueta de la lista de prioridad que tenga esa fecha."""
+    merged = {}
+    for d in per_tag:
+        for e, v in d.items():
+            if e not in merged:
+                merged[e] = v
+            elif key == "ventas" and v[0] is not None and merged[e][0] is not None and v[0] > merged[e][0]:
+                merged[e] = v
+    return merged
+
+
+def annual(facts, key):
+    """{fin_de_ejercicio: (valor, fecha_presentación)} del 10-K original (el primero presentado para ese ejercicio),
+    uniendo todas las etiquetas del concepto."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    per_tag = [_annual_tag(gaap.get(t, {}).get("units", {}).get(UNIT.get(key, "USD")) or [], key) for t in TAGS[key]]
+    out = merge_tags(per_tag, key)
+    return out if len(out) >= 2 else {}
+
+
+def _quarterly_tag(units):
+    q, fy = {}, {}
+    for f in units:
+        form, fl, e, s = str(f.get("form", "")), f.get("filed"), f.get("end"), f.get("start")
+        if not fl or not e or not s:
+            continue
+        dur = days(s, e)
+        if form.startswith("10-Q") and 80 <= dur <= 100:
+            if e not in q or fl < q[e][1]:
+                q[e] = (f["val"], fl, f.get("fy"), f.get("fp"), "10-Q")
+        elif form.startswith("10-K") and 330 <= dur <= 400:
+            if e not in fy or fl < fy[e][1]:
+                fy[e] = (f["val"], fl, s, f.get("fy"))
+    for e, (v, fl, s, fyr) in fy.items():
+        prior = [k for k in q if s < k < e and days(s, k) < 300]
+        if len(prior) == 3 and e not in q:
+            q[e] = (v - sum(q[k][0] for k in prior), fl, fyr, "Q4", "10-K")
+    return q
 
 
 def quarterly(facts, key):
     """{fin_de_trimestre: (valor_3_meses, fecha_presentación, ejercicio_fiscal, periodo, forma)} de los 10-Q originales;
-    el 4.º trimestre se deduce del ejercicio del 10-K menos los tres trimestres anteriores (si están los tres).
+    el 4.º trimestre se deduce del ejercicio del 10-K menos los tres trimestres anteriores (si están los tres, de la
+    misma etiqueta). Se unen todas las etiquetas del concepto (ver merge_tags).
     En el BPA, el 4.º trimestre deducido es aproximado (el número de acciones cambia entre trimestres)."""
     gaap = facts.get("facts", {}).get("us-gaap", {})
-    for tag in TAGS[key]:
-        units = gaap.get(tag, {}).get("units", {}).get(UNIT.get(key, "USD"))
-        if not units:
-            continue
-        q, fy = {}, {}
-        for f in units:
-            form, fl, e, s = str(f.get("form", "")), f.get("filed"), f.get("end"), f.get("start")
-            if not fl or not e or not s:
-                continue
-            dur = days(s, e)
-            if form.startswith("10-Q") and 80 <= dur <= 100:
-                if e not in q or fl < q[e][1]:
-                    q[e] = (f["val"], fl, f.get("fy"), f.get("fp"), "10-Q")
-            elif form.startswith("10-K") and 330 <= dur <= 400:
-                if e not in fy or fl < fy[e][1]:
-                    fy[e] = (f["val"], fl, s, f.get("fy"))
-        for e, (v, fl, s, fyr) in fy.items():
-            prior = [k for k in q if s < k < e and days(s, k) < 300]
-            if len(prior) == 3 and e not in q:
-                q[e] = (v - sum(q[k][0] for k in prior), fl, fyr, "Q4", "10-K")
-        if len(q) >= 4:
-            return q
-    return {}
+    per_tag = [_quarterly_tag(gaap.get(t, {}).get("units", {}).get(UNIT.get(key, "USD")) or []) for t in TAGS[key]]
+    out = merge_tags(per_tag, key)
+    return out if len(out) >= 4 else {}
+
+
+def q4_ok(rows, i):
+    """El 4.º trimestre deducido es fiable si sus ventas no son negativas ni están fuera de 0,4-2,5 veces la media de
+    los tres trimestres anteriores. Si no, casi siempre es porque el 10-K reexpresa el ejercicio (actividades
+    interrumpidas, escisiones) y los 10-Q no: se descarta en lugar de mostrar una cifra falsa."""
+    v = rows[i][2]
+    prev = [r[2] for r in rows[max(0, i - 3):i] if r[2] is not None]
+    if v is None:
+        return True
+    if v < 0:
+        return False
+    if len(prev) < 3:
+        return True
+    m = sum(prev) / 3
+    return m <= 0 or 0.4 <= v / m <= 2.5
 
 
 def ytd_cfo(facts):
@@ -204,6 +236,11 @@ def parse_q(facts):
         eps = v("bpa")
         out.append([e, filed, v("ventas"), v("bn"), v("ebit"), gross, b("activos"), b("patrimonio"),
                     None if eps is None else round(eps, 4), label(src[2], src[3], e), src[4], cfo[e][0] if e in cfo else None])
+    for i, r in enumerate(out):   # 4.º trimestre deducido incoherente: flujos a «sin dato» (el balance sí vale)
+        if r[10] == "10-K" and not q4_ok(out, i):
+            for k in (2, 3, 4, 5, 8):
+                r[k] = None
+            r[10] = "10-K descartado"
     return out
 
 
