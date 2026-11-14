@@ -22,13 +22,17 @@ SITE = os.environ.get("SITE_URL", "https://baigar04.github.io/screener/")
 UA = os.environ.get("SEC_UA", "").strip()
 NOW = datetime.now(timezone.utc)
 REFRESH_DAYS = 30      # se vuelve a pedir una empresa como muy pronto cada 30 días…
-VERSION = 4            # al cambiar el formato se vuelven a pedir todas
+VERSION = 5            # al cambiar el formato se vuelven a pedir todas
 MAX_PER_RUN = 1200     # …y nunca más de estas por ejecución (límite de la SEC: 10 peticiones/s)
 
 TAGS = {
+    # ventas: se toma el mayor importe entre estas etiquetas para cada fecha (ver merge_tags); bancos
+    # (RevenuesNetOfInterestExpense), eléctricas (RegulatedAndUnregulatedOperatingRevenue) y SOCIMI (OperatingLeaseLeaseIncome)
     "ventas": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet",
-               "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueGoodsNet"],
-    "bn": ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"],
+               "RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueGoodsNet", "RevenuesNetOfInterestExpense",
+               "RegulatedAndUnregulatedOperatingRevenue", "OperatingLeaseLeaseIncome"],
+    # beneficio atribuible a la sociedad antes que el total con minoritarios (ProfitLoss)
+    "bn": ["NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss"],
     "ebit": ["OperatingIncomeLoss"],
     "patrimonio": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
     "deuda": ["LongTermDebt", "LongTermDebtNoncurrent", "DebtInstrumentCarryingAmount"],
