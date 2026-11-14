@@ -264,6 +264,15 @@ def split_adjust(q, splits):
                 r[14] = r[14] * f
             r[15] = f
         out.append(r)
+    # 4.º trimestre deducido (10-K) presentado tras un split cuyos tres trimestres anteriores se presentaron antes:
+    # la SEC lo dedujo restando BPA de acciones antiguas al BPA anual en acciones nuevas. Se corrige con los ajustados.
+    for i, r in enumerate(out):
+        if i < 3 or r[10] != "10-K" or r[15] is not None or r[8] is None:
+            continue
+        prior = out[i - 3:i]
+        if any(p[8] is None for p in prior) or not any(p[15] for p in prior):
+            continue
+        r[8] = round(r[8] + sum(p[8] * p[15] - p[8] for p in prior if p[15]), 4)
     return out
 
 

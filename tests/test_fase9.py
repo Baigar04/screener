@@ -41,3 +41,13 @@ def test_nsi_sin_splits():
     assert abs(academic.unsplit(4.08) - 1.02) < 1e-9     # split 4:1 con un 2 % de emisión real
     assert academic.unsplit(1.3) == 1.3                  # ampliación real
     assert abs(academic.unsplit(0.1) - 1.0) < 1e-9       # contrasplit 1:10
+
+
+def test_t4_deducido_tras_split():
+    # NVIDIA FY2025: T1 presentado antes del split 10:1 (6,04 antiguas = 0,604 nuevas); T4 deducido = 2,94 − (6,04 + 0,67 + 0,78)
+    row = lambda e, f, bpa, forma: [e, f, 0, 0, 0, 0, 0, 0, bpa, "", forma, None, None, None, None]  # noqa: E731
+    q = [row("2024-04-28", "2024-05-29", 6.04, "10-Q"), row("2024-07-28", "2024-08-28", 0.67, "10-Q"),
+         row("2024-10-27", "2024-11-20", 0.78, "10-Q"), row("2025-01-26", "2025-02-26", round(2.94 - 7.49, 4), "10-K")]
+    out = fe.split_adjust(q, [("2024-06-10", 10.0)])
+    assert out[0][8] == 0.604
+    assert abs(out[3][8] - (2.94 - 0.604 - 0.67 - 0.78)) < 1e-9
