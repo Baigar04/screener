@@ -106,6 +106,12 @@ def movil(pg, base):
         if sw > 391:
             bad.append(f"{v} ({sw} px)")
     check("sin desbordes a 390 px", not bad, ", ".join(bad) or f"{len(AREAS)} secciones")
+    for v in ("hoy", "screener", "empresa/AAPL"):
+        pg.goto(base + "#/" + v)
+        pg.wait_for_timeout(2500)
+        hit = pg.evaluate("(() => { const e = document.elementFromPoint(195, 300); return !!(e && e.closest('#view')); })()")
+        nh = pg.evaluate("document.getElementById('nav').getBoundingClientRect().height")
+        check(f"móvil: contenido visible en #/{v} (barra inferior de {nh:.0f} px)", hit and nh < 100)
     vis = pg.evaluate("[...document.querySelectorAll('#nav button')].filter(b => b.getBoundingClientRect().width > 0).length")
     check("móvil: 4-5 accesos en la barra inferior", 4 <= vis <= 5, f"{vis}")
     pg.set_viewport_size({"width": 1366, "height": 900})

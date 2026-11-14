@@ -955,7 +955,7 @@ tbody tr:hover td{background:var(--surface)}
 @media (max-width:640px){
   :root{--top:46px;--tabs:36px}
   .top{padding:0 10px}
-  .top .nav{background:var(--top-bg);border-top:1px solid var(--border)}
+  .top .nav{background:var(--top-bg);border-top:1px solid var(--border);height:calc(62px + env(safe-area-inset-bottom));top:auto}
   .top .nav button{height:auto;color:#8b919a}
   .top .nav button.on{color:var(--accent);box-shadow:none}
   .tabsbar{padding:0 6px}
@@ -1083,3 +1083,5 @@ table.scr td.tx,table.scr th.tx{text-align:left}
 @media (max-width:1100px){.q3{grid-template-columns:1fr}}
 .q3 .kvt td{white-space:normal!important;vertical-align:top}.q3 .kvt td.num{text-align:right}
 .q3 .kvt td:first-child{width:52%}
+/* móvil · tarjetas del screener sin avatar (diseño A) */
+.mcard .sc{background:none!important;padding:0}

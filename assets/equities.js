@@ -499,8 +499,8 @@ function renderScreener() {
     ${Object.values(E.f).some(Boolean) || Object.keys(E.rng).length ? `<button class="icon-btn" data-act="save">Guardar filtro</button>` : ""}
     ${E.saved.length ? H.dropdown("saved", "Mis filtros:", [["", "Elegir…"], ...E.saved.map((s, i) => [String(i), s.n])], "") : ""}
     ${colsMenu(lv)}<button class="icon-btn" data-act="csv">Exportar CSV</button></div>
-    ${window.innerWidth <= 640 ? `<div class="mcards">${rows.length ? rows.slice(0, E.limit).map((r) => `<div class="mcard" data-sym="${esc(r.sym)}">${logo(r, true)}
-      <div class="mc-mid"><div><b>${esc(r.sym)}</b> ${star(r.sym)}</div><div class="nm">${esc(r.nombre || "")}</div>${tagHtml(r, 3) ? `<div class="tgs">${tagHtml(r, 3)}</div>` : ""}</div>
+    ${window.innerWidth <= 640 ? `<div class="mcards">${rows.length ? rows.slice(0, E.limit).map((r) => `<div class="mcard" data-sym="${esc(r.sym)}">
+      <div class="mc-mid"><div><b>${esc(r.sym)}</b> ${star(r.sym)}</div><div class="nm">${esc(r.nombre || "")}</div><div class="nm">${esc(sn(r.sector || ""))}${r.veredicto ? ` · <span class="tec tec-${r.veredicto === "Alcista" ? "al" : r.veredicto === "Bajista" ? "ba" : "ne"}">${esc(r.veredicto)}</span>` : ""}</div></div>
       <div class="mc-right"><div class="mc-px num">${nf(r.precio, 2)} <small>${esc(r.moneda || "")}</small></div><span class="pill ${cls(r.r1d)}">${(r.r1d ?? 0) >= 0 ? "↑" : "↓"} ${nf(Math.abs(r.r1d ?? 0), 2)} %</span>
       ${r.score != null ? `<div class="mc-sc">${scoreBadge(r.score)}${covBadge(r.sym)}</div>` : ""}</div></div>`).join("") : `<div class="soon-box">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></div>`}</div>` : `
     <div class="tbl-wrap"><table class="scr"><thead><tr><th class="c-x" data-tip="Marca hasta 4 valores para compararlos">⇄</th>
