@@ -142,7 +142,7 @@ function render() {
   </div>`;
   const filt = `<span class="bar" style="margin:0">${[["todas", "Todas"], ["activas", "Sin anuladas"], ...DEC].map(([k, t]) => `<button class="chip ${D.ver === k ? "on" : ""}" data-dver="${k}">${t}</button>`).join("")}</span>`;
   h += `<section class="fbox"><header><h2>Decisiones</h2><span class="fbox-r">Resultado frente a su índice (S&P 500 o Euro Stoxx 50), en puntos</span></header>
-    <div class="bar" style="margin-top:0">${filt}<span style="flex:1"></span><input id="dsym" class="txt" placeholder="Ticker (AAPL, SAN.MC…)" aria-label="Ticker para registrar" style="width:170px"><button class="icon-btn primary" data-dnewin="1">✎ Registrar decisión</button><button class="icon-btn" data-dcsv="1">CSV</button></div>
+    <div class="bar" style="margin-top:0">${filt}<span style="flex:1"></span><input id="dsym" class="txt" placeholder="Ticker (AAPL, SAN.MC…)" aria-label="Ticker para registrar" style="width:170px"><button class="icon-btn primary" data-dnewin="1">Registrar decisión</button><button class="icon-btn" data-dcsv="1">CSV</button></div>
     ${shown.length ? `<div class="tbl-wrap"><table class="ft dtab"><thead><tr><th>Fecha</th><th>Valor</th><th>Decisión</th><th style="text-align:left">Motivo</th><th>Horizonte</th><th>Precio</th><th>Nota ese día</th><th>1 mes</th><th>3 meses</th><th>6 meses</th><th>Desde entonces</th><th></th></tr></thead><tbody>
       ${shown.map((e) => `<tr class="${e.anulada ? "anul" : ""}"><td class="num">${fmtDate(e.f.slice(0, 10))}</td><td><a href="#" data-sym="${esc(e.sym)}"><b>${esc(e.sym)}</b></a></td>
         <td><span class="dec dec-${e.dec}">${decName(e.dec)}</span></td><td style="text-align:left" class="dmot">${esc(e.motivo)}${e.inval ? `<div class="hint">Invalida: ${esc(e.inval)}</div>` : ""}${e.anulada ? `<div class="hint">Anulada el ${fmtDate(e.anulada.slice(0, 10))}</div>` : ""}</td>
@@ -176,12 +176,12 @@ function forSym(sym) {
 function fichaBlock(sym) {
   const L = forSym(sym), act = L.filter((e) => !e.anulada), e = act[0];
   const row = (t, v) => `<div class="fq"><span>${t}</span><span class="fq-v">${v}</span></div>`;
-  if (!e) return row("Última decisión", '<i class="dt dt-na"></i>Sin decisiones registradas') + `<div class="bar" style="margin-top:8px"><button class="chip" data-dnew="${esc(sym)}">✎ Registrar decisión</button></div>`;
+  if (!e) return row("Última decisión", '<i class="dt dt-na"></i>Sin decisiones registradas') + `<div class="bar" style="margin-top:8px"><button class="chip" data-dnew="${esc(sym)}">Registrar decisión</button></div>`;
   const p = perf(e, null);
   const res = p.loading ? "…" : p.err || p.ex == null ? (p.open ? "sin sesiones todavía" : "—") : `<span class="pl ${p.r >= 0 ? "pl-p" : "pl-n"}">${sgn(p.r, 1)} %</span> vs índice <span class="pl ${sign(e) * p.ex >= 0 ? "pl-p" : "pl-n"}">${sgn(p.ex, 1)} pp</span>`;
   return row("Última decisión", `<b>${decName(e.dec)}</b>&nbsp;· ${fmtDate(e.f.slice(0, 10))} a ${nf(e.p0, 2)} ${esc(e.mon)}`) + row("Resultado desde entonces", res)
     + (act.length > 1 ? row("Decisiones sobre este valor", String(act.length)) : "") + `<div class="hint" style="margin-top:4px">«${esc(e.motivo)}»</div>`
-    + `<div class="bar" style="margin-top:8px"><button class="chip" data-dnew="${esc(sym)}">✎ Registrar otra</button><button class="chip" data-sub="diario">Ver el diario →</button></div>`;
+    + `<div class="bar" style="margin-top:8px"><button class="chip" data-dnew="${esc(sym)}">Registrar otra</button><button class="chip" data-sub="diario">Ver el diario →</button></div>`;
 }
 
 /* ---------- eventos ---------- */

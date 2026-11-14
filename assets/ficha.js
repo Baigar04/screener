@@ -79,18 +79,106 @@ const box = (title, body, right = "", cls = "") => `<section class="fbox ${cls}"
 const PAIS = { "United States": "EE. UU.", Spain: "España", Germany: "Alemania", France: "Francia", Netherlands: "Países Bajos", Italy: "Italia", "United Kingdom": "Reino Unido",
   Switzerland: "Suiza", Belgium: "Bélgica", Sweden: "Suecia", Denmark: "Dinamarca", Finland: "Finlandia", Norway: "Noruega", Ireland: "Irlanda", Portugal: "Portugal", Austria: "Austria",
   Luxembourg: "Luxemburgo", Canada: "Canadá", Taiwan: "Taiwán", China: "China", Japan: "Japón", Israel: "Israel", Bermuda: "Bermudas", "Cayman Islands": "Islas Caimán", Thailand: "Tailandia" };
+const IC = {
+  star: "M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6z", cmp: "M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3",
+  pen: "M4 20h4L19 9l-4-4L4 16z", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" };
+const ico = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${IC[k]}"/></svg>`;
+function sparkSvg(d) {
+  const pts = (d?.diario || []).map((x) => x[1]).filter((v) => v != null).slice(-252);
+  if (pts.length < 20) return "";
+  const W = 150, Hh = 40, mn = Math.min(...pts), mx = Math.max(...pts), y = (v) => 4 + (1 - (v - mn) / (mx - mn || 1)) * (Hh - 12);
+  const p = pts.map((v, i) => `${((i / (pts.length - 1)) * W).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return `<svg class="fh-sp" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" aria-label="Precio 12 meses"><polyline fill="none" stroke="var(--good)" stroke-width="1.3" points="${p}"/><text x="${W}" y="${Hh}" text-anchor="end">12 m</text></svg>`;
+}
 function head(c) {
   const { r, d } = c, k = K();
   const desc = d?.desc ? d.desc.split(/(?<=\.)\s/)[0] : "";
-  const sub = [desc && desc.length < 220 ? desc : "", k.sn(r.sector), PAIS[r.pais] || r.pais].filter(Boolean).join(" · ");
-  const tv = r.veredicto, w = k.isW(r.sym), cm = k.isC(r.sym);
-  return `<div class="fp-head"><div class="fp-id"><div class="fp-name">${k.logo(r, true)}<h1>${esc(r.nombre || r.sym)}</h1><span class="fp-tk">${esc(ticker(r))}</span>
-      <span class="badge ${tv === "Alcista" ? "Favorable" : tv === "Bajista" ? "Defensivo" : "Neutral"}" data-tip="Veredicto técnico a 1-3 meses">${esc(tv || "—")}</span> ${H.evid("h", "r")}</div>
-      <div class="fp-sub">${esc(sub)}${k.tagHtml(r, 4) ? ` <span class="tgs">${k.tagHtml(r, 4)}</span>` : ""}</div></div>
-    <div class="fp-act"><button class="fbtn ${w ? "on" : "pri"}" data-watch="${esc(r.sym)}">${w ? "★ En Watchlist" : "☆ Añadir a Watchlist"}</button>
-      <button class="fbtn ${cm ? "on" : ""}" data-cmp-toggle="${esc(r.sym)}">${cm ? "⇄ En comparador ✓" : "⇄ Comparar"}</button>
-      <button class="fbtn" data-dnew="${esc(r.sym)}">✎ Registrar decisión</button>
-      <button class="fbtn ic" data-copylink="${esc(r.sym)}" title="Copiar el enlace directo a esta ficha" aria-label="Copiar enlace">🔗</button></div></div>`;
+  const fy = c.us && c.q.length ? (() => { const m = c.fy[c.fy.length - 1]?.[0]; return m && m.slice(5, 7) !== "12" ? `ejercicio fiscal hasta ${["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][+m.slice(5, 7)]}` : ""; })() : "";
+  const meta = [desc && desc.length < 200 ? desc : "", k.sn(r.sector), PAIS[r.pais] || r.pais, fy].filter(Boolean).join(" · ");
+  const tv = r.veredicto, w = k.isW(r.sym), cm = k.isC(r.sym), R = reading(c);
+  const tk = ticker(r).split(": ");
+  return `<div class="fp-head fh">
+    <div class="fh-id"><div class="fh-tk">${esc(tk.length > 1 ? `${tk[1]} · ${tk[0]}` : tk[0])}</div><h1>${esc(r.nombre || r.sym)}</h1>
+      <div class="fh-meta">${esc(meta)}</div>${R.head ? `<div class="fh-tesis" title="Titular generado con reglas a partir de los datos, sin IA">${esc(R.head)}</div>` : ""}</div>
+    <div class="fh-px"><div class="fh-p num">${nf(r.precio, 2)}<small>${esc(r.moneda || "")}</small></div>
+      <div class="fh-c num"><span class="${(r.r1d ?? 0) >= 0 ? "pos" : "neg"}">${sgn(r.r1d, 2)} %</span> <span class="fa">hoy · 1 año</span> <span class="${(r.r1a ?? 0) >= 0 ? "pos" : "neg"}">${r.r1a == null ? "—" : sgn(r.r1a, 1) + " %"}</span></div>
+      <div class="fh-t">Técnico <span class="${tv === "Alcista" ? "pos" : tv === "Bajista" ? "neg" : "mu"}">${esc(tv || "—")}</span> ${H.evid("h", "r")}</div></div>
+    ${sparkSvg(d)}
+    <div class="fp-act"><button class="fbtn ${w ? "on" : ""}" data-watch="${esc(r.sym)}">${ico("star")}${w ? "En Watchlist" : "Añadir a Watchlist"}</button>
+      <button class="fbtn ${cm ? "on" : ""}" data-cmp-toggle="${esc(r.sym)}">${ico("cmp")}${cm ? "En comparador" : "Comparar"}</button>
+      <button class="fbtn pri" data-dnew="${esc(r.sym)}">${ico("pen")}Registrar decisión</button>
+      <button class="fbtn ic" data-copylink="${esc(r.sym)}" title="Copiar el enlace directo a esta ficha" aria-label="Copiar enlace">${ico("link")}</button></div></div>`;
+}
+
+/* ---------- Resumen en tres columnas (diseño A) ---------- */
+const sec2 = (title, body, right = "") => `<section class="fs"><h3>${title}${right ? `<span>${right}</span>` : ""}</h3>${body}</section>`;
+const kvt = (rows) => `<table class="kvt">${rows.map(([a, b, tip]) => `<tr><td${tip ? ` data-tip="${esc(tip)}"` : ""}>${a}</td><td class="num">${b}</td></tr>`).join("")}</table>`;
+const mm = (v) => (v == null ? "—" : v < 0 ? `(${nf(-v / 1e6, 1)})` : nf(v / 1e6, 1));
+const pc = (v, d = 1) => (v == null ? "—" : v < 0 ? `<span class="neg">${sgn(v, d)} %</span>` : `${sgn(v, d)} %`);
+function keyData(c) {
+  const { r } = c, k = K(), x = (v, s = "×") => (v == null ? "—" : nf(v, 1) + s);
+  return sec2("Datos clave", kvt([
+    ["Capitalización", r.mcap ? `${nf(r.mcap / 1e6, 0)} M ${esc(r.moneda || "")}` : "—"], ["PER (12 m)", x(r.per)], ["PER previsto", x(r.per_fwd)],
+    ["EV/EBITDA", x(r.ev_ebitda)], ["P/VC", x(r.pb)],
+    ["Deuda neta/EBITDA", r.deuda_neta_ebitda == null ? "—" : r.deuda_neta_ebitda <= 0 ? '<span class="pos">caja neta</span>' : x(r.deuda_neta_ebitda)],
+    ["ROE", r.roe == null ? "—" : nf(r.roe, 1) + " %"], ["Margen operativo", r.margen_op == null ? "—" : nf(r.margen_op, 1) + " %"],
+    ["Dividendo", r.div > 0 ? nf(r.div, 2) + " %" : '<span class="mu">no reparte</span>'], ["Beta", r.beta == null ? "—" : nf(r.beta, 2)],
+    ["Precio objetivo medio", r.precio_objetivo ? `${nf(r.precio_objetivo, 2)} <span class="fa">(${r.n_analistas ?? "?"} analistas)</span>` : "—"],
+  ]), `Yahoo · ${fmtDate(r.fecha_fund)}`);
+}
+function finTable(c) {
+  const cur = esc(c.cur || "");
+  if (c.us) {
+    const q = c.q.slice(-8), off = c.q.length - q.length, cq = cfoQ(c.q).slice(-8), L = q.length - 1;
+    const yoy = (i, col) => { const j = yearAgo(c.q, off + i); return j >= 0 ? chg(q[i][col], c.q[j][col]) : null; };
+    const row = (t, f, cls = "") => `<tr class="${cls}"><td>${t}</td>${q.map((x, i) => `<td class="num${i === L ? " last" : ""}">${f(x, i)}</td>`).join("")}</tr>`;
+    return sec2("Cuenta de resultados trimestral", `<div class="tbl-wrap"><table class="fin"><thead><tr><th></th>${q.map((x, i) => `<th class="${i === L ? "last" : ""}">${qLabel(x, true)}${x[Q.forma] === "10-K" ? "*" : ""}</th>`).join("")}</tr></thead><tbody>
+      ${row("Ingresos", (x) => mm(x[Q.v]), "k")}${row("crec. interanual", (x, i) => pc(yoy(i, Q.v)), "p")}
+      ${row("Beneficio bruto", (x) => mm(x[Q.bruto]))}${row("margen bruto", (x) => (mg(x[Q.bruto], x[Q.v]) == null ? "—" : nf(mg(x[Q.bruto], x[Q.v]), 1) + " %"), "p")}
+      ${row("Resultado operativo", (x) => mm(x[Q.ebit]))}
+      ${row("Beneficio neto", (x) => mm(x[Q.bn]), "k")}${row("margen neto", (x) => (mg(x[Q.bn], x[Q.v]) == null ? "—" : nf(mg(x[Q.bn], x[Q.v]), 1) + " %"), "p")}
+      ${row(`BPA diluido (${cur})`, (x) => (x[Q.bpa] == null ? "—" : x[Q.bpa] < 0 ? `(${nf(-x[Q.bpa], 2)})` : nf(x[Q.bpa], 2)))}
+      ${row("Flujo de caja operativo", (x, i) => mm(cq[i]))}${row("caja / beneficio", (x, i) => (cq[i] == null || !x[Q.bn] ? "—" : cq[i] / x[Q.bn] < 0 ? `<span class="neg">(${nf(-cq[i] / x[Q.bn], 2)})</span>` : nf(cq[i] / x[Q.bn], 2)), "p")}
+      ${row("presentado", (x) => (x[Q.pres] ? fmtDate(x[Q.pres]).replace(/ \d{4}$/, "") : "—"), "p")}
+      </tbody></table></div><div class="fsrc">Millones de ${cur} salvo indicación · SEC 10-Q y 10-K originales · * 4.º trimestre deducido del 10-K (BPA aproximado) · negativos entre paréntesis · columna resaltada: último presentado</div>`,
+      `M ${cur} · SEC`);
+  }
+  const an = c.d?.anual || {}, ys = Object.keys(an).sort().slice(-5), L = ys.length - 1;
+  if (!ys.length) return sec2("Cuentas anuales", '<div class="nodata">Sin cuentas anuales en la fuente.</div>');
+  const row = (t, f, cls = "") => `<tr class="${cls}"><td>${t}</td>${ys.map((y, i) => `<td class="num${i === L ? " last" : ""}">${f(an[y], i)}</td>`).join("")}</tr>`;
+  const g = (i, key) => (i ? chg(an[ys[i]][key], an[ys[i - 1]][key]) : null);
+  return sec2("Cuentas anuales", `<div class="tbl-wrap"><table class="fin"><thead><tr><th></th>${ys.map((y, i) => `<th class="${i === L ? "last" : ""}">${y}</th>`).join("")}</tr></thead><tbody>
+    ${row("Ventas", (a) => mm(a.ventas), "k")}${row("crecimiento", (a, i) => pc(g(i, "ventas")), "p")}
+    ${row("EBITDA", (a) => mm(a.ebitda))}${row("margen EBITDA", (a) => (mg(a.ebitda, a.ventas) == null ? "—" : nf(mg(a.ebitda, a.ventas), 1) + " %"), "p")}
+    ${row("Beneficio neto", (a) => mm(a.beneficio_neto), "k")}${row("margen neto", (a) => (mg(a.beneficio_neto, a.ventas) == null ? "—" : nf(mg(a.beneficio_neto, a.ventas), 1) + " %"), "p")}
+    ${row(`BPA (${cur})`, (a) => (a.bpa == null ? "—" : a.bpa < 0 ? `(${nf(-a.bpa, 2)})` : nf(a.bpa, 2)))}${row("Flujo de caja libre", (a) => mm(a.fcf))}
+    </tbody></table></div><div class="fsrc">Millones de ${cur} · Yahoo Finance, cuentas anuales a ${fmtDate(c.r.fecha_fund)} · la fuente no da trimestres comparables en Europa · negativos entre paréntesis</div>`, `M ${cur} · Yahoo`);
+}
+function chartsRow(c) {
+  const strip = (h) => h.replace(/^<section class="fbox ">/, '<div class="fch">').replace(/<\/section>$/, "</div>");
+  return `<div class="fchs">${strip(growthBox(c))}${strip(marginsBox(c))}</div>`;
+}
+function scoreCol(c) {
+  const { r } = c, k = K(), f = k.E.sc?.factores?.[r.sym] || {}, U = k.E.uni.filas.filter((x) => x.score != null);
+  const sv = r.score, pctU = sv == null ? null : Math.round((100 * U.filter((x) => x.score < sv).length) / Math.max(1, U.length - 1));
+  const S = U.filter((x) => x.sector === r.sector).sort((a, b) => b.score - a.score), pos = S.findIndex((x) => x.sym === r.sym) + 1;
+  const ord = k.E.sc?.veredicto_lab?.etiqueta === "ordenación", cov = k.coverageOf(f), W = k.E.w, tw = Object.values(W).reduce((a, b) => a + (b || 0), 0) || 1;
+  return sec2(`Nota de ordenación ${H.evid("e", "r")}`, `<div class="fsc"><span class="fsc-v num">${sv ?? "s. d."}</span><span class="fsc-t">${sv == null ? "no concluyente: faltan datos" : `percentil ${pctU} del universo<br>${esc(k.sn(r.sector))}: ${pos} de ${S.length}`}</span></div>
+    ${ord ? '<div class="fwarn">Ordena empresas; el Laboratorio no ha demostrado que prediga rentabilidad.</div>' : ""}
+    <table class="fac">${k.FACT.map(([key, t]) => { const v = f[key]; return `<tr data-tip="${esc(k.FACT_TIP[key])}"><td>${t}</td><td>${v == null ? '<span class="fa">sin dato · cuenta 50</span>' : `<span class="fbr"><i style="width:${v}%;background:${v >= 67 ? "var(--good)" : v <= 33 ? "var(--bad)" : "var(--muted)"}"></i><b></b></span>`}</td><td class="num">${v == null ? "—" : "p" + Math.round(v)}</td><td class="num fa">${Math.round((100 * (W[key] || 0)) / tw)} %</td></tr>`; }).join("")}</table>
+    <div class="fsrc">Percentil dentro de su sector · línea = mediana · última columna = peso · cobertura ${cov ?? "—"} %${r.f_fs != null ? ` · F-score ${r.f_fs}/9` : ""} · <button class="link-btn" data-fsec="factores">desglose</button></div>`, `tus pesos · ${U.length} valores`);
+}
+function valCol(c) {
+  const { r } = c, k = K(), st = k.E.sec.stats.Todos, sI = st.industria[r.industria] || {}, sS = st.sector[r.sector] || {};
+  const ref = (sI.n || 0) >= 8 ? sI : sS, refN = ref === sI ? "industria" : "sector";
+  const line = (t, v, m, suf, lowGood) => { if (v == null || m == null) return [t, "—"]; const d = m ? (v / m - 1) * 100 : null;
+    return [t, `${nf(v, 1)}${suf} <span class="fa">vs ${nf(m, 1)}${suf}</span> ${d == null ? "" : `<span class="${(lowGood ? -d : d) > 0 ? "pos" : "neg"}">${sgn(d, 0)} %</span>`}`]; };
+  return sec2(`Valoración frente a su ${refN}`, kvt([line("PER", r.per, ref.per, "×", true), line("EV/EBITDA", r.ev_ebitda, ref.ev_ebitda, "×", true), line("P/VC", r.pb, ref.pb, "×", true), line("P/Ventas", r.ps, ref.ps, "×", true)]), `mediana · ${ref.n || "—"} valores`);
+}
+function secResumen(c) {
+  return `<div class="f3"><div class="f3a">${keyData(c)}${eventsBox(c)}${qualityBox(c)}</div>
+    <div class="f3b">${finTable(c)}${chartsRow(c)}</div>
+    <div class="f3c">${scoreCol(c)}${valCol(c)}</div></div>${readingBox(c)}`;
 }
 
 /* ---------- tarjetas con fuente y fecha ---------- */
@@ -209,7 +297,7 @@ function qualityBox(c) {
   add("Histórico «a fecha»", c.us ? "Fechas de presentación SEC" : "No: Yahoo no da fechas de publicación", c.us ? "ok" : "warn");
   const dsc = c.us ? discrepancy(c) : null;
   if (c.us) add("Discrepancias entre fuentes", dsc ? `Ventas ${dsc.y}: Yahoo ${sgn(dsc.d, 1)} % vs SEC` : "Sin segunda fuente comparable", dsc ? (Math.abs(dsc.d) < 1 ? "ok" : "warn") : "na");
-  return box("Calidad y trazabilidad del dato", rows.join(""));
+  return sec2("Calidad del dato", rows.join(""));
 }
 
 /* ---------- factores ---------- */
@@ -241,7 +329,7 @@ function eventsBox(c) {
   const p = sd?.por_valor?.[r.sym];
   add("Superinversores", !sd ? "cargando…" : p?.f?.length ? `${p.f.length} gestores (13F)` : "Ninguno en su último 13F", p?.f?.length ? "ok" : "na");
   add("Congreso de EE. UU.", !sd ? "cargando…" : p?.c?.length ? `${p.c.length} operaciones (12 m)` : "Sin operaciones (12 m)", p?.c?.length ? "warn" : "na");
-  return box("Próximos eventos", rows.join("") + `<h2 class="fsub">Tu investigación</h2>${myResearch(c)}`);
+  return sec2("Próximos eventos", rows.join("")) + sec2("Tu investigación", myResearch(c));
 }
 function myResearch(c) {
   return window.SCRDiario ? window.SCRDiario.fichaBlock(c.r.sym) : '<div class="hint">Cargando el diario…</div>';
@@ -249,36 +337,40 @@ function myResearch(c) {
 
 /* ---------- lectura analítica (reglas, sin IA) ---------- */
 function reading(c) {
-  const { r } = c, k = K(), f = k.E.sc?.factores?.[r.sym] || {}, txt = [], ev = [], todo = [];
+  const { r } = c, k = K(), f = k.E.sc?.factores?.[r.sym] || {}, txt = [], ev = [], todo = [], M = {};
   if (c.us && c.q.length >= 5) {
     const q = c.q, i = q.length - 1, L = q[i], j = yearAgo(q, i), g = j >= 0 ? chg(L[Q.v], q[j][Q.v]) : null;
     const gs = q.map((_, n) => { const a = yearAgo(q, n); return a >= 0 ? chg(q[n][Q.v], q[a][Q.v]) : null; }).slice(-8).filter((v) => v != null);
     if (g != null) {
       const rank = gs.length >= 4 ? (g >= Math.max(...gs) ? ", el mayor ritmo de los últimos " + gs.length + " trimestres con comparación" : g <= Math.min(...gs) ? ", el menor ritmo de los últimos " + gs.length + " trimestres con comparación" : "") : "";
       txt.push(`Los ingresos del ${qLabel(L)} ${g >= 0 ? "crecen" : "caen"} un ${nf(Math.abs(g), 1)} % interanual${rank}.`);
-      ev.push(`Ingresos ${sgn(g, 1)} % interanual (SEC ${L[Q.forma] || "10-Q"}).`);
+      ev.push(`Ingresos ${sgn(g, 1)} % interanual en el ${qLabel(L)}${rank ? rank.replace(", el", "; el") : ""}.|${L[Q.forma] || "10-Q"}`);
+      M.g = g; M.gs = gs;
     }
     const mb = q.slice(-4).map((x) => mg(x[Q.bruto], x[Q.v])), mn = q.slice(-4).map((x) => mg(x[Q.bn], x[Q.v]));
-    if (mb[3] != null && mb[0] != null) { const d = mb[3] - mb[0]; txt.push(`El margen bruto ${Math.abs(d) < 1 ? "se mantiene estable" : d > 0 ? "mejora" : "empeora"} (${nf(mb[0], 1)} % → ${nf(mb[3], 1)} % en cuatro trimestres).`); }
+    if (mb[3] != null && mb[0] != null) { const d = mb[3] - mb[0]; M.mbD = d; M.mb = mb[3];
+      ev.push(`Margen bruto ${Math.abs(d) < 1 ? "estable" : d > 0 ? "al alza" : "a la baja"}: ${nf(mb[0], 1)} % → ${nf(mb[3], 1)} % en cuatro trimestres.|10-Q`); txt.push(`El margen bruto ${Math.abs(d) < 1 ? "se mantiene estable" : d > 0 ? "mejora" : "empeora"} (${nf(mb[0], 1)} % → ${nf(mb[3], 1)} % en cuatro trimestres).`); }
     if (mn[3] != null && mn[2] != null && mn[1] != null) {
       const e = 0.15, down2 = mn[3] < mn[2] - e && mn[2] < mn[1] - e, up2 = mn[3] > mn[2] + e && mn[2] > mn[1] + e;
       const flat = Math.abs(mn[3] - mn[2]) <= e;
       txt.push(flat ? `El margen neto se mantiene en torno al ${nf(mn[3], 1)} %.`
         : `El margen neto ${down2 ? "baja por segundo trimestre consecutivo" : up2 ? "sube por segundo trimestre consecutivo" : mn[3] < mn[2] ? "baja" : "sube"}, de ${nf(mn[2], 1)} % a ${nf(mn[3], 1)} %${down2 && g > 0 ? ": el beneficio crece menos que las ventas" : ""}.`);
+      M.down2 = down2; M.up2 = up2; M.mn = [mn[2], mn[3]];
       if (down2) todo.push("Por qué cae el margen neto (impuestos, costes, mezcla de producto).");
     }
-    if (j >= 0 && L[Q.bpa] != null && q[j][Q.bpa] != null) ev.push(`BPA diluido ${sgn(chgAbs(L[Q.bpa], q[j][Q.bpa]), 1)} % interanual${L[Q.forma] === "10-K" ? " (aproximado)" : ""}.`);
+    if (j >= 0 && L[Q.bpa] != null && q[j][Q.bpa] != null) { M.gEps = chgAbs(L[Q.bpa], q[j][Q.bpa]); ev.push(`BPA diluido ${sgn(M.gEps, 1)} % interanual${L[Q.forma] === "10-K" ? " (aproximado)" : ""}.|${L[Q.forma] || "10-Q"}`); }
     const cq = cfoQ(q).slice(-4), bq = q.slice(-4).map((x) => x[Q.bn]);
     const okc = cq.filter((v) => v != null);
     if (okc.length >= 2) {
       const pos = okc.filter((v) => v > 0).length;
-      ev.push(`Flujo de caja operativo positivo en ${pos} de los ${okc.length} últimos trimestres con dato.`);
+      ev.push(`Caja operativa positiva en ${pos} de los ${okc.length} últimos trimestres con dato.|10-Q`);
       const sc = okc.reduce((a, b) => a + b, 0), sb = bq.filter((v, n) => cq[n] != null).reduce((a, b) => a + (b || 0), 0);
+      if (sb > 0) M.cr = sc / sb;
       if (sb > 0 && sc < 0.8 * sb) todo.push("Conversión del beneficio en caja: el flujo operativo está por debajo del beneficio.");
     }
   } else {
     const an = c.d?.anual || {}, ys = Object.keys(an).sort(), y = ys[ys.length - 1], y0 = ys[ys.length - 2];
-    if (y && y0 && an[y].ventas && an[y0].ventas) { const g = chg(an[y].ventas, an[y0].ventas); txt.push(`Las ventas de ${y} ${g >= 0 ? "crecen" : "caen"} un ${nf(Math.abs(g), 1)} % frente a ${y0}.`); ev.push(`Ventas ${sgn(g, 1)} % en ${y} (Yahoo, anual).`); }
+    if (y && y0 && an[y].ventas && an[y0].ventas) { const g = chg(an[y].ventas, an[y0].ventas); M.g = g; txt.push(`Las ventas de ${y} ${g >= 0 ? "crecen" : "caen"} un ${nf(Math.abs(g), 1)} % frente a ${y0}.`); ev.push(`Ventas ${sgn(g, 1)} % en ${y}.|Yahoo`); }
     if (r.margen_op != null) txt.push(`Margen operativo de los últimos 12 meses: ${nf(r.margen_op, 1)} %.`);
     todo.push("Resultados trimestrales o semestrales: la fuente gratuita solo da cuentas anuales.");
   }
@@ -287,8 +379,9 @@ function reading(c) {
     if (r.per_vs_sector > 20) todo.push("Si el crecimiento justifica la prima frente a su sector.");
   }
   const best = k.FACT.map(([key, t]) => [t, f[key]]).filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]);
-  if (best.length) ev.push(`${best[0][0]} en el percentil ${Math.round(best[0][1])} de su sector.`);
-  if (r.f_fs != null) ev.push(`F-score de Piotroski ${r.f_fs} / 9.`);
+  if (best.length) ev.push(`${best[0][0]} en el percentil ${Math.round(best[0][1])} de su sector.|nota`);
+  if (r.f_fs != null) ev.push(`F-score de Piotroski ${r.f_fs} / 9.|10-K`);
+  if (r.deuda_neta_ebitda != null && r.deuda_neta_ebitda <= 0) ev.push("Caja neta: no tiene deuda financiera neta.|Yahoo");
   const v = window.SCRSmart?.ins?.()?.por_valor?.[r.sym];
   if (v && v.n_ventas && !v.n_compras) todo.push(`Ventas de directivos (${v.n_ventas}): si son planes 10b5-1 o ventas discrecionales.`);
   if (r.deuda_neta_ebitda != null && r.deuda_neta_ebitda > 3) todo.push(`Capacidad de pago de la deuda (deuda neta/EBITDA ${nf(r.deuda_neta_ebitda, 1)}×).`);
@@ -296,20 +389,44 @@ function reading(c) {
   if (n != null && n >= 0 && n <= 30) todo.push(`Resultados el ${fmtDate(r.resultados)}: guía de la directiva y cartera de pedidos.`);
   todo.push(c.us ? "Concentración de clientes y riesgos en el último 10-K." : "Concentración de clientes y riesgos en el informe anual.");
   todo.push("Valoración frente a comparables directos (apartado Comparables).");
-  return { txt: txt.join(" "), ev, todo: todo.slice(0, 5) };
+  /* interpretación (juicio con reglas) y argumentos en contra, separados de lo observado */
+  const interp = [], contra = [], pv = r.per_vs_sector, sg = r.crec_ventas;
+  const sec = k.E.sec?.stats?.Todos?.sector?.[r.sector] || {};
+  if (M.g != null && M.mbD != null && M.g > 5 && Math.abs(M.mbD) < 1) interp.push("El crecimiento lo sostiene el volumen, no el precio: el margen bruto no se mueve.");
+  if (M.mbD != null && M.mbD >= 1) interp.push("Gana poder de precios o mejora la mezcla: el margen bruto sube.");
+  if (M.mbD != null && M.mbD <= -1) contra.push(`El margen bruto cae ${nf(Math.abs(M.mbD), 1)} puntos en cuatro trimestres.`);
+  if (M.down2 && M.g > 0) contra.push(`El margen neto baja dos trimestres seguidos (${nf(M.mn[0], 1)} % → ${nf(M.mn[1], 1)} %): el beneficio crece menos que las ventas.`);
+  if (M.up2) interp.push("El margen neto sube dos trimestres seguidos: apalancamiento operativo.");
+  if (M.cr != null) (M.cr >= 1 ? interp : contra).push(M.cr >= 1 ? `El beneficio se convierte en caja (${nf(M.cr, 2)} veces en el último año).` : `La caja operativa cubre solo ${nf(M.cr, 2)} veces el beneficio del último año.`);
+  if (pv != null) {
+    if (pv > 20 && sg != null && sec.crec_ventas != null && sg > sec.crec_ventas + 5) interp.push(`La prima frente a su sector (PER +${nf(pv, 0)} %) se apoya en un crecimiento mayor que el de su sector.`);
+    else if (pv > 20) contra.push(`PER un ${nf(pv, 0)} % por encima de la mediana de su sector sin crecer claramente más.`);
+    else if (pv < -20) interp.push(`Cotiza con descuento frente a su sector (PER ${nf(pv, 0)} %): el mercado espera menos de ella.`);
+  }
+  if (v && v.n_ventas && !v.n_compras) contra.push(`${v.n_ventas} ventas de directivos en 90 días y ninguna compra.`);
+  if (v && v.n_compras > v.n_ventas) interp.push(`Los directivos compran (${v.n_compras} compras frente a ${v.n_ventas} ventas en 90 días).`);
+  if (r.veredicto === "Bajista") contra.push("Técnico bajista: la nota se limita a 60.");
+  if (!interp.length) interp.push("Sin una lectura clara con los datos disponibles.");
+  /* titular de una línea */
+  const hp = [];
+  if (M.g != null) hp.push(`${M.g >= 0 ? "Ventas +" : "Ventas −"}${nf(Math.abs(M.g), 0)} %${M.mbD != null && Math.abs(M.mbD) < 1 ? " con margen bruto estable" : M.mbD >= 1 ? " con margen bruto al alza" : M.mbD <= -1 ? " con margen bruto a la baja" : ""}`);
+  if (M.down2) hp.push("el beneficio crece menos que las ventas");
+  else if (M.cr != null && M.cr < 0.8) hp.push("la caja no acompaña al beneficio");
+  if (pv != null && Math.abs(pv) >= 15) hp.push(`cotiza un ${nf(Math.abs(pv), 0)} % ${pv > 0 ? "por encima" : "por debajo"} de su sector`);
+  const head = hp.length ? hp[0] + (hp.length > 1 ? "; " + hp.slice(1).join("; ") : "") + "." : "";
+  return { txt: txt.join(" "), ev, todo: todo.slice(0, 5), interp, contra, head };
 }
 function readingBox(c) {
   const R = reading(c);
-  return box(`Lectura analítica ${H.evid("h")}`, `<div class="frd"><p>${esc(R.txt || "Sin datos suficientes para una lectura.")}</p>
-    <div><h3 class="frd-g">Evidencia observada</h3><ul>${R.ev.map((x) => `<li>${esc(x)}</li>`).join("") || "<li>—</li>"}</ul></div>
-    <div><h3 class="frd-w">Qué falta comprobar</h3><ul>${R.todo.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>`, "Generada con reglas a partir de los datos · sin IA", "wide");
+  const li = (x) => { const [t, src] = String(x).split("|"); return `<li>${esc(t)}${src ? `<span class="ref">${esc(src)}</span>` : ""}</li>`; };
+  const contra = [...R.contra, ...R.todo.map((x) => x)].slice(0, 6);
+  return `<section class="rd3" aria-label="Lectura analítica">
+    <div><h3><i class="pos">●</i>Observado <span class="evid-t">hechos con su fuente</span></h3><ul>${R.ev.map(li).join("") || "<li>Sin datos suficientes.</li>"}</ul></div>
+    <div><h3><i class="ac">●</i>Interpretación ${H.evid("h")} <span class="evid-t">juicio con reglas · sin IA</span></h3><ul>${R.interp.map(li).join("")}</ul></div>
+    <div><h3><i class="neg">●</i>En contra · por comprobar</h3><ul>${contra.map(li).join("")}</ul></div></section>`;
 }
 
 /* ---------- apartados ---------- */
-function secResumen(c) {
-  return `${kpis(c)}<div class="fg2">${growthBox(c)}${marginsBox(c)}</div>
-    <div class="fg3">${qualityBox(c)}${factorsBox(c)}${eventsBox(c)}</div>${readingBox(c)}`;
-}
 function secFund(c) {
   const { r, d } = c, k = K(); let h = "";
   if (c.us) {

@@ -191,16 +191,18 @@ def fase6(pg, base):
     pg.set_viewport_size({"width": 1440, "height": 900})
     for sym in ("AAPL", "SAN.MC"):
         pg.goto(base + "#/empresa/" + sym)
-        pg.wait_for_selector("#view .fks .fk", timeout=60000)
+        pg.wait_for_selector("#view .f3 .fs", timeout=60000)
         pg.wait_for_timeout(1500)
         side = [b.get_attribute("data-fsec") for b in pg.locator("#side button").all()]
         crumbs = pg.text_content("#crumbs")
         check(f"{sym}: barra lateral con los 9 apartados", side == FSECS, " · ".join(x or "?" for x in side))
         check(f"{sym}: migas Screener / Empresas / empresa y área Screener", "Empresas" in crumbs and pg.get_attribute("#nav .on", "data-area") == "screener", crumbs.strip()[:80])
-        srcs = [x.text_content() for x in pg.locator("#view .fk .fk-s").all()]
-        check(f"{sym}: 5 tarjetas con fuente y fecha", len(srcs) == 5 and all(any(m in t for m in ("SEC", "Yahoo", "cierre")) for t in srcs), srcs[0][:70] if srcs else "")
+        srcs = [x.text_content() for x in pg.locator("#view .fs > h3 > span").all()]
+        check(f"{sym}: bloques con fuente y fecha", sum(any(m in t for m in ("SEC", "Yahoo")) for t in srcs) >= 2 and pg.locator("#view .fsrc").count() >= 1, " · ".join(srcs[:3]))
         t = pg.text_content("#view")
-        check(f"{sym}: crecimiento, márgenes, calidad, factores, eventos y lectura", all(x in t for x in ("Crecimiento reciente", "Márgenes", "Calidad y trazabilidad", "Factores y scoring", "Próximos eventos", "Lectura analítica")))
+        need = ("Datos clave", "Calidad del dato", "Nota de ordenación", "Próximos eventos", "Crecimiento reciente", "Márgenes", "Observado", "Interpretación", "En contra")
+        check(f"{sym}: Resumen en tres columnas y lectura en tres partes", all(x in t for x in need) and ("Cuenta de resultados" in t or "Cuentas anuales" in t), ", ".join(x for x in need if x not in t))
+        check(f"{sym}: cabecera con precio y titular", pg.locator("#view .fh .fh-p").count() == 1, (pg.text_content("#view .fh-tesis") or "sin titular")[:80] if pg.locator("#view .fh-tesis").count() else "sin titular")
         if sym == "AAPL":
             sec = "Último 10-Q presentado" in pg.text_content("#status") or "Último 10-K presentado" in pg.text_content("#status")
             check("AAPL: trimestres SEC en la ficha", sec, pg.text_content("#status").strip()[:80] if sec else "sin trimestres SEC aún (llegan con la caché v3)")
