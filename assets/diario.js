@@ -161,6 +161,7 @@ function render() {
   h += `<section class="fbox"><header><h2>Registro inmutable de la nota</h2><span class="fbox-r">${H.evid("r")}</span></header>
     ${R ? `<div class="fq"><span>Estado</span><span class="fq-v">${R.integra ? '<i class="dt dt-ok"></i>Cadena íntegra' : `<i class="dt dt-bad"></i>Alterado: ${esc(R.motivo)}`}</span></div>
       <div class="fq"><span>Sesiones registradas</span><span class="fq-v">${R.dias} · desde ${fmtDate(R.desde)} hasta ${fmtDate(R.hasta)}</span></div>
+      ${R.metodo ? `<div class="fq"><span>Método de la nota</span><span class="fq-v" style="max-width:60%">${esc(R.metodo)}</span></div>` : ""}
       <div class="fq"><span>Fotos comprobadas en esta actualización</span><span class="fq-v">${R.fotos_comprobadas}</span></div>
       <div class="fq"><span>Última huella</span><span class="fq-v num hint" style="font-size:12px">${esc((R.ultima?.h || "").slice(0, 16))}…</span></div>`
       : `<div class="hint">${D.regErr ? "El registro empieza con la próxima actualización de datos." : "Cargando…"}</div>`}

@@ -190,9 +190,12 @@ def hz_stats(sig, sig_n, fwdH):
 
 
 def composite(cat_sig, w):
-    num = sum(cat_sig[k].fillna(0) * w[k] for k in w if w[k])
-    den = sum(cat_sig[k].notna().astype(float) * w[k] for k in w if w[k])
-    return (num / den.replace(0, np.nan))
+    """Nota compuesta como en la web (score.py, método v2): factor sin dato = neutral (50) con su peso;
+    sin dato en más de un factor, no hay nota."""
+    ks = [k for k in w if w[k]]
+    num = sum(cat_sig[k].fillna(50.0) * w[k] for k in ks)
+    have = sum(cat_sig[k].notna().astype(float) for k in ks)
+    return (num / sum(w[k] for k in ks)).where(have >= len(ks) - 1)
 
 
 def suggest(ic_by_cat, base, t_by_cat=None):

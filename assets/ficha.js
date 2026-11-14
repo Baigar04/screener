@@ -217,8 +217,9 @@ function factorsBox(c) {
   const { r } = c, k = K(), f = k.E.sc?.factores?.[r.sym] || {}, st = k.E.sec?.stats?.Todos?.sector?.[r.sector] || {};
   const ord = k.E.sc?.veredicto_lab?.etiqueta === "ordenación";
   return box(`Factores y scoring ${H.evid("e", "r")}`, `${ord ? `<div class="fwarn">ⓘ <b>Nota de ordenación</b>: el Laboratorio no ha validado que prediga rentabilidad.</div>` : ""}
-    ${k.FACT.map(([key, t]) => { const v = f[key]; return `<div class="fbar" data-tip="${esc(k.FACT_TIP[key])}"><span>${t}</span><span class="tr"><i style="width:${v ?? 0}%;background:${v == null ? "transparent" : v >= 67 ? "var(--good)" : v <= 33 ? "var(--warn)" : "var(--muted)"}"></i></span><b class="num">${v == null ? "—" : "p" + Math.round(v)}</b></div>`; }).join("")}
+    ${k.FACT.map(([key, t]) => { const v = f[key]; return `<div class="fbar" data-tip="${esc(k.FACT_TIP[key])}"><span>${t}</span><span class="tr"><i style="width:${v ?? 0}%;background:${v == null ? "transparent" : v >= 67 ? "var(--good)" : v <= 33 ? "var(--warn)" : "var(--muted)"}"></i></span><b class="num${v == null ? " hint" : ""}">${v == null ? "s. d." : "p" + Math.round(v)}</b></div>`; }).join("")}
     <div class="fq"><span>Comparación sectorial</span><span class="fq-v">${dot(st.n >= 8 ? "ok" : "warn")}${esc(k.sn(r.sector))} · ${st.n || "—"} valores</span></div>
+    <div class="fq"><span>Cobertura de la nota</span><span class="fq-v">${(() => { const cv = k.coverageOf(f); return `${dot(cv >= 100 ? "ok" : cv >= 70 ? "warn" : "bad")}${cv ?? "—"} % del peso con dato`; })()}</span></div>
     ${r.f_fs != null ? `<div class="fq"><span>F-score de Piotroski</span><span class="fq-v">${dot(r.f_fs >= 7 ? "ok" : r.f_fs <= 3 ? "bad" : "warn")}${r.f_fs} / 9</span></div>` : ""}
     <button class="link-btn" data-fsec="factores">Ver el desglose de la nota →</button>`);
 }

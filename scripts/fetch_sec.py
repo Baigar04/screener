@@ -22,7 +22,7 @@ SITE = os.environ.get("SITE_URL", "https://baigar04.github.io/screener/")
 UA = os.environ.get("SEC_UA", "").strip()
 NOW = datetime.now(timezone.utc)
 REFRESH_DAYS = 30      # se vuelve a pedir una empresa como muy pronto cada 30 días…
-VERSION = 5            # al cambiar el formato se vuelven a pedir todas
+VERSION = 6            # al cambiar el formato se vuelven a pedir todas
 MAX_PER_RUN = 1200     # …y nunca más de estas por ejecución (límite de la SEC: 10 peticiones/s)
 
 TAGS = {
@@ -248,6 +248,28 @@ def parse_q(facts):
     return out
 
 
+DIAG = {}
+
+
+def diagnose(facts, q):
+    """Empresas con el último trimestre de hace >135 días: qué hechos posteriores hay en la SEC y por qué no entran
+    (formulario, duración, etiqueta). Solo para la auditoría; no cambia los datos."""
+    last = max((r[0] for r in q if r[2] is not None or r[3] is not None), default=None)
+    if last and (NOW.date() - date.fromisoformat(last)).days <= 135:
+        return None
+    seen = []
+    for tax, tags in facts.get("facts", {}).items():
+        for tag, body in tags.items():
+            if not any(w in tag for w in ("Revenue", "NetIncome", "ProfitLoss", "EarningsPerShare")):
+                continue
+            for unit, arr in body.get("units", {}).items():
+                for f in arr:
+                    if f.get("end") and (not last or f["end"] > last) and f.get("filed", "") >= "2026-01-01":
+                        seen.append([tax + ":" + tag, unit, str(f.get("form")), f.get("start"), f["end"], f.get("filed"), f.get("fp")])
+    seen.sort(key=lambda x: (x[4], x[0]))
+    return {"ultimo": last, "hechos_posteriores": seen[-40:], "n": len(seen)}
+
+
 def main():
     os.makedirs(DATA, exist_ok=True)
     if not UA or "@" not in UA:
@@ -292,6 +314,9 @@ def main():
         try:
             facts = json.loads(get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik[s]:010d}.json"))
             sim[s] = {"cik": cik[s], "act": NOW.date().isoformat(), "v": VERSION, "fy": parse(facts), "q": parse_q(facts)}
+            d = diagnose(facts, sim[s]["q"])
+            if d:
+                DIAG[s] = d
             ok += 1
         except Exception as e:  # noqa: BLE001
             err += 1
@@ -305,6 +330,8 @@ def main():
             log("  …", i, "de", len(todo))
     out = {"generado": NOW.isoformat(timespec="seconds"), "n": len(sim), "sim": sim}
     json.dump(out, open(os.path.join(DATA, "sec_cache.json"), "w"), separators=(",", ":"))
+    json.dump({"generado": NOW.isoformat(timespec="seconds"), "empresas": DIAG}, open(os.path.join(DATA, "sec_diag.json"), "w"), separators=(",", ":"))
+    print(f"Diagnóstico: {len(DIAG)} empresas con el último trimestre de hace más de 135 días")
     with_data = sum(1 for x in sim.values() if len(x["fy"]) >= 3)
     with_q = sum(1 for x in sim.values() if len(x.get("q") or []) >= 8)
     log(f"SEC: pedidas {ok} (errores {err}) · en caché {len(sim)} · con ≥3 ejercicios {with_data} · con ≥8 trimestres {with_q} · formato v{VERSION}: {sum(1 for x in sim.values() if x.get('v') == VERSION)}")

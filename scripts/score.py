@@ -207,6 +207,29 @@ def mean(xs):
     return round(sum(xs) / len(xs), 1) if xs else None
 
 
+METODO = "v2 · 14-nov-2026 · factor sin dato = neutral (50); antes se repartía su peso entre los demás y smart money sin dato puntuaba 0 en EE. UU."
+NEUTRAL = 50.0
+BASICOS = ("calidad", "valor", "crecimiento", "momentum")
+
+
+def nota(f, w):
+    """Nota de ordenación (0-100). Un factor sin dato cuenta como neutral (50) con su peso: no se reparte en silencio
+    entre los demás. Sin al menos 3 de los 4 factores básicos no hay nota (no concluyente)."""
+    if not f or sum(f.get(k) is not None for k in BASICOS) < 3:
+        return None
+    den = sum(v for v in w.values() if v)
+    if not den:
+        return None
+    return sum(w[k] * (f[k] if f.get(k) is not None else NEUTRAL) for k in w if w[k]) / den
+
+
+def cobertura(f, w=None):
+    """Porcentaje del peso de la nota que tiene dato real (100 = todos los factores con dato)."""
+    w = w or DEFAULT_W
+    den = sum(v for v in w.values() if v)
+    return round(100 * sum(w[k] for k in w if w[k] and f.get(k) is not None) / den) if den else None
+
+
 def main():
     U = load("universe.json")
     smart = load("smart.json", False) or {}
@@ -249,26 +272,24 @@ def main():
             "valor": mean([g("per"), g("ev"), g("pb")]),
             "crecimiento": mean([g("cv"), g("cb")]),
             "momentum": mean([g("r3"), g("r6"), g("tr")]),
-            # Los 13F y el Congreso solo cubren valores de EE. UU.: en Europa el factor queda sin dato (no puntúa 0)
-            "smart": g("sm") if r["_smart"] else (None if "." in s else 0.0),
+            # Sin superinversores ni operaciones del Congreso (o fuera de EE. UU.): sin dato, que en la nota cuenta como neutral
+            "smart": g("sm") if r["_smart"] else None,
             "macro": round(sum(probs[k] / 100 * CYCLE[k].get(r.get("sector"), 50) for k in probs), 1) if probs and r.get("sector") else None,
         }
         out[s] = f
     # nota con pesos por defecto (la web la recalcula con los del usuario)
+    tot_r = {r["sym"]: r for r in rows}
+
     def total(sym, w=DEFAULT_W):
-        f, r = out[sym], next(x for x in rows if x["sym"] == sym)
-        # sin al menos 3 de los 4 factores básicos la nota no es comparable (p. ej., valores recién añadidos sin fundamentales)
-        if sum(f[k] is not None for k in ("calidad", "valor", "crecimiento", "momentum")) < 3:
+        f, r = out[sym], tot_r[sym]
+        t = nota(f, w)
+        if t is None:
             return None
-        num = sum(w[k] * f[k] for k in w if f[k] is not None)
-        den = sum(w[k] for k in w if f[k] is not None)
-        if not den:
-            return None
-        t = num / den
         if r.get("veredicto") == "Bajista":
             t = min(t, 60)
         return round(t, 1)
     tot = {s: total(s) for s in out}
+    cob = {s: cobertura(out[s]) for s in out}
     top = sorted([s for s in tot if tot[s] is not None], key=lambda s: -tot[s])[:20]
 
     # registro semanal del top 20 y su resultado posterior
@@ -310,7 +331,7 @@ def main():
         lab_v = json.load(open(os.path.join(DATA, "lab.json"))).get("veredicto")
     except Exception:  # noqa: BLE001
         lab_v = None
-    json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot, "veredicto_lab": lab_v,
+    json.dump({"generado": NOW.isoformat(timespec="seconds"), "pesos_defecto": DEFAULT_W, "factores": out, "total_defecto": tot, "cobertura_defecto": cob, "metodo": METODO, "veredicto_lab": lab_v,
                "regimen": R.get("dominante"), "ciclo": CYCLE, "historial": res, "senales": sig, "nota_registrada": nota_reg,
                "fecha_precio": fday, "veredictos": tec, "anterior": anterior,
                "metodo": "Cada factor es el percentil (0-100) del valor dentro de su sector; momentum y smart money, dentro de todo el universo. "

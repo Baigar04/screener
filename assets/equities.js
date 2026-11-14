@@ -266,22 +266,36 @@ const PROFILES = {
   "Momentum": { calidad: 10, valor: 5, crecimiento: 15, momentum: 45, smart: 15, macro: 10 },
 };
 E.w = store.get("pesos", PROFILES["Equilibrado"]);
+/* nota de ordenación (método v2, 14-nov-2026): un factor sin dato cuenta como neutral (50) con su peso, no se reparte
+   entre los demás; sin 3 de los 4 factores básicos no hay nota (no concluyente). Igual que scripts/score.py */
+const NEUTRAL = 50;
 function scoreFrom(f, tec) {
   if (!f || ["calidad", "valor", "crecimiento", "momentum"].filter((k) => f[k] != null).length < 3) return null;
   let num = 0, den = 0;
-  for (const [k] of FACT) if (f[k] != null && E.w[k] > 0) { num += E.w[k] * f[k]; den += E.w[k]; }
+  for (const [k] of FACT) if (E.w[k] > 0) { num += E.w[k] * (f[k] != null ? f[k] : NEUTRAL); den += E.w[k]; }
   if (!den) return null;
   let t = num / den; if (tec === "Bajista") t = Math.min(t, 60);
   return Math.round(t);
 }
+/* cobertura: % del peso de la nota (con tus pesos) que tiene dato real */
+function coverageOf(f) {
+  if (!f) return null;
+  let den = 0, have = 0;
+  for (const [k] of FACT) if (E.w[k] > 0) { den += E.w[k]; if (f[k] != null) have += E.w[k]; }
+  return den ? Math.round((100 * have) / den) : null;
+}
+const covBadge = (sym) => { const c = coverageOf(E.sc?.factores?.[sym]); return c == null || c >= 100 ? "" : `<sup class="cov" data-tip="Cobertura ${c} %: ${100 - c} % del peso de la nota es de factores sin dato, que cuentan como neutral (50)">${c}%</sup>`; };
 function scoreOf(r) { return scoreFrom(E.sc?.factores?.[r.sym], r.veredicto); }
 /* nota explicable: cuántos puntos aporta o resta cada factor frente a una nota neutra de 50 */
 function contributions(f, tec) {
-  const ks = FACT.filter(([k]) => f[k] != null && E.w[k] > 0);
-  const den = ks.reduce((a, [k]) => a + E.w[k], 0); if (!den) return null;
+  const all = FACT.filter(([k]) => E.w[k] > 0);
+  const den = all.reduce((a, [k]) => a + E.w[k], 0); if (!den) return null;
+  const ks = all.filter(([k]) => f[k] != null);   // sin dato: neutral (50) → aporta 0 puntos, pero su peso cuenta
   const items = ks.map(([k, t]) => ({ k, t, pct: f[k], w: Math.round((100 * E.w[k]) / den), pts: ((f[k] - 50) * E.w[k]) / den })).sort((a, b) => b.pts - a.pts);
   const raw = 50 + items.reduce((a, x) => a + x.pts, 0);
-  return { items, raw, capped: tec === "Bajista" && raw > 60, missing: FACT.filter(([k]) => f[k] == null && E.w[k] > 0).map(([, t]) => t) };
+  const missing = all.filter(([k]) => f[k] == null);
+  return { items, raw, capped: tec === "Bajista" && raw > 60, missing: missing.map(([, t]) => t), cov: coverageOf(f),
+    missingW: missing.reduce((a, [k]) => a + Math.round((100 * E.w[k]) / den), 0) };
 }
 /* qué ha cambiado desde la sesión anterior, con los pesos del usuario */
 function changeOf(sym) {
@@ -381,7 +395,7 @@ const COLS = [
   ["n_smart", "Superinv.", 1, (v) => (v == null ? "—" : v || "·")],
   ["f_fs", "F-score", 9, (v) => (v == null ? "—" : nf(v, 1))], ["f_gp", "Rent. bruta", 9, (v) => pct(v)], ["f_ag", "Crec. activos", 9, spct],
   ["f_acr", "Devengos", 9, spct], ["f_nsi", "Emisión acciones", 9, spct], ["f_sue", "Sorpresa BN", 9, (v) => (v == null ? "—" : sgn(v, 1))],
-  ["score", "Puntuación", 0, scoreBadge],
+  ["score", "Puntuación", 0, (v, r) => (v == null ? `<span class="hint" data-tip="No concluyente: faltan datos en 2 o más de los 4 factores básicos">s. d.</span>` : scoreBadge(v) + covBadge(r.sym))],
 ];
 const colsFor = (lv) => (E.cols && E.cols.length ? E.cols : COLS.filter((c) => c[2] <= lv).map((c) => c[0]));
 
@@ -475,7 +489,7 @@ function renderScreener() {
     ${window.innerWidth <= 640 ? `<div class="mcards">${rows.length ? rows.slice(0, E.limit).map((r) => `<div class="mcard" data-sym="${esc(r.sym)}">${logo(r, true)}
       <div class="mc-mid"><div><b>${esc(r.sym)}</b> ${star(r.sym)}</div><div class="nm">${esc(r.nombre || "")}</div>${tagHtml(r, 3) ? `<div class="tgs">${tagHtml(r, 3)}</div>` : ""}</div>
       <div class="mc-right"><div class="mc-px num">${nf(r.precio, 2)} <small>${esc(r.moneda || "")}</small></div><span class="pill ${cls(r.r1d)}">${(r.r1d ?? 0) >= 0 ? "↑" : "↓"} ${nf(Math.abs(r.r1d ?? 0), 2)} %</span>
-      ${r.score != null ? `<div class="mc-sc">${scoreBadge(r.score)}</div>` : ""}</div></div>`).join("") : `<div class="soon-box">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></div>`}</div>` : `
+      ${r.score != null ? `<div class="mc-sc">${scoreBadge(r.score)}${covBadge(r.sym)}</div>` : ""}</div></div>`).join("") : `<div class="soon-box">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></div>`}</div>` : `
     <div class="tbl-wrap"><table class="scr"><thead><tr><th class="c-x" data-tip="Marca hasta 4 valores para compararlos">⇄</th>
       <th data-scrsort="nombre" class="${E.sort.k === "nombre" ? "sorted" : ""}">Valor${E.sort.k === "nombre" ? (E.sort.d < 0 ? " ↓" : " ↑") : ""}</th>
       ${cols.map(([k, t]) => `<th data-scrsort="${k}"${tip(k)} class="${E.sort.k === k ? "sorted" : ""}">${t}${E.sort.k === k ? (E.sort.d < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead>
@@ -551,7 +565,7 @@ function scoreBox(r) {
   const f = E.sc?.factores?.[r.sym]; if (!f) return "";
   const ex = explain(r), lv = H.S.level;
   return `<div class="box scbox"><b>${esc(scoreName())} · perfil ${esc(profileName())}</b> ${H.evid("e", "r")}
-    <div class="sc-top">${scoreBadge(r.score)}<span class="hint">de 100 · percentil frente a su sector</span></div>
+    <div class="sc-top">${r.score == null ? '<b class="hint">No concluyente</b>' : scoreBadge(r.score)}<span class="hint">de 100 · percentil frente a su sector · cobertura ${coverageOf(f) ?? "—"} %</span></div>
     ${FACT.map(([k, t]) => `<div class="prob" data-tip="${esc(FACT_TIP[k])}"><span>${t}${E.w[k] ? "" : ' <span class="hint">(peso 0)</span>'}</span><div class="track"><div class="fill" style="width:${f[k] ?? 0}%;background:${f[k] == null ? "var(--surface-3)" : f[k] >= 70 ? "var(--good)" : f[k] >= 40 ? "var(--faint)" : "var(--bad)"}"></div></div><span class="num">${f[k] == null ? "—" : Math.round(f[k])}</span></div>`).join("")}
     ${ex ? `<div class="sc-ex"><div>${esc(ex.por)}</div>${ex.inv ? `<div>${esc(ex.inv)}</div>` : ""}<div>${esc(ex.hz)}</div></div>` : ""}
     ${(() => {
@@ -563,7 +577,7 @@ function scoreBox(r) {
           <span class="why-bar"><span class="${x.pts >= 0 ? "pos" : "neg"}" style="${x.pts >= 0 ? "left:50%" : `right:50%`};width:${(50 * Math.abs(x.pts)) / mx}%"></span></span>
           <b class="num chg ${cls(x.pts)}">${sgn(x.pts, 1)}</b></div>`).join("")}
         <div class="why-tot">50 ${C.items.map((x) => (x.pts >= 0 ? "+ " : "− ") + nf(Math.abs(x.pts), 1)).join(" ")} = <b>${nf(C.raw, 1)}</b>${C.capped ? ` → <b>60</b> <span class="hint">(técnico bajista: la nota se limita a 60)</span>` : ""}</div>
-        ${C.missing.length ? `<div class="hint">Sin dato (no cuentan): ${esc(C.missing.join(", "))}.</div>` : ""}</details>`;
+        ${C.missing.length ? `<div class="hint">Sin dato: ${esc(C.missing.join(", "))} (${C.missingW} % del peso). Cuentan como neutral (50): no suman ni restan, y su peso no se reparte entre los demás.</div>` : ""}</details>`;
     })()}
     ${(() => {
       const c = changeOf(r.sym); if (!c) return "";
@@ -605,7 +619,8 @@ function cmpTable(list) {
       const dir = good == null ? 0 : good ? 1 : -1;
       return `<tr><td${tip(k)}>${t}</td>${rs.map((r) => `<td class="num ${best != null && r[k] === best ? "best" : ""}">${f(r[k], r)}${typeof r[k] === "number" && k !== "precio" ? pctPill(pctIn(r, k), dir) : ""}</td>`).join("")}</tr>`;
     }).join("")}
-    ${E.sc ? `<tr><td>Nota (tus pesos)</td>${rs.map((r) => `<td class="num">${scoreBadge(r.score)}</td>`).join("")}</tr>
+    ${E.sc ? `<tr><td>Nota (tus pesos)</td>${rs.map((r) => `<td class="num">${scoreBadge(r.score)}${covBadge(r.sym)}</td>`).join("")}</tr>
+      ${(() => { const cv = rs.map((r) => coverageOf(E.sc.factores?.[r.sym])); return new Set(cv).size > 1 ? `<tr><td colspan="${rs.length + 1}"><div class="fwarn">ⓘ Coberturas distintas (${rs.map((r, i) => `${esc(r.sym)} ${cv[i] ?? "—"} %`).join(" · ")}): las notas no son del todo comparables; los factores sin dato cuentan como neutral (50).</div></td></tr>` : ""; })()}
       ${FACT.map(([k, t]) => `<tr><td data-tip="${esc(FACT_TIP[k])}">${t} <span class="hint">percentil</span></td>${rs.map((r) => { const v = E.sc.factores?.[r.sym]?.[k]; return `<td class="num">${v == null ? "—" : `<span class="pp ${v >= 67 ? "pp-g" : v <= 33 ? "pp-b" : ""}">p${Math.round(v)}</span>`}</td>`; }).join("")}</tr>`).join("")}` : ""}
     </tbody></table></div><div class="method">Resaltado = mejor valor de la fila (no aplica a precio, beta, RSI ni técnico). pNN = percentil dentro de su sector (o del universo si el sector tiene menos de 8 valores con dato); en azul, de lo mejor de su sector en esa medida; en naranja, de lo peor.</div>`;
 }
@@ -816,7 +831,7 @@ window.SCROpen = (sym, tab) => companyDrawer(sym, tab);
 window.SCRFichaSym = () => (H.S.ficha && document.querySelector("#view .fp") ? H.S.ficha.sym : null);
 if (window.SCRSmart) window.SCRSmart.onload = () => paintFicha();
 /* piezas que usa la ficha (assets/ficha.js) */
-window.SCRKit = { E, ensure, logo, star, tagHtml: (r, n) => tagHtml(r, n), sn, tip, isC, isW, scoreName, scoreBadge: (v) => scoreBadge(v), explain, contributions, changeOf,
+window.SCRKit = { coverageOf, E, ensure, logo, star, tagHtml: (r, n) => tagHtml(r, n), sn, tip, isC, isW, scoreName, scoreBadge: (v) => scoreBadge(v), explain, contributions, changeOf,
   scoreBox, percentilesBox, academicBox, cmpTable, miniChart, mountChart, mountNews, pctIn, FACT, FACT_TIP, TIPS, pct, spct, big, cls };
 /* ---------- comparador y percentiles (Fase 2) ---------- */
 // medidas de «Percentiles en su sector» de la ficha: [campo, etiqueta, formato, mejor: 1 = más alto, -1 = más bajo]

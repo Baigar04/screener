@@ -850,3 +850,4 @@ thead th{background:var(--surface-2)}
 .dtab tr.anul td{opacity:.5}.dtab tr.anul .dmot{text-decoration:line-through}
 @media (max-width:640px){.dtab .dmot{min-width:160px}}
 .dform .seg{background:none;border:0;padding:0}
+sup.cov{font-size:10px;color:var(--warn);margin-left:3px;font-weight:600;cursor:help}

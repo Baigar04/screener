@@ -108,7 +108,7 @@ jobs:
           git init -q && git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if git fetch -q --depth=1 origin copia-datos 2>/dev/null; then git checkout -q -b copia-datos FETCH_HEAD; else git checkout -q --orphan copia-datos; fi
           mkdir -p data
-          for f in score_hist.json score_diario.json insiders.json smart_cache.json lab.json validacion.json auditoria.json; do
+          for f in score_hist.json score_diario.json insiders.json smart_cache.json lab.json validacion.json auditoria.json sec_diag.json; do
             [ -f "$GITHUB_WORKSPACE/data/$f" ] && cp "$GITHUB_WORKSPACE/data/$f" data/
           done
           printf "# Copia de seguridad del historial del screener\n\nLo que no se puede volver a descargar: registro semanal y diario de la nota, formularios 4 ya leídos, PDF del Congreso ya leídos y laboratorio. En registro/ está el registro inmutable: una foto de la nota por sesión, encadenada con huellas SHA-256 (cadena.json).\nLa genera el workflow los viernes y al subir cambios. Si la web pierde un fichero, el workflow lo recupera de aquí.\n" > LEEME.md

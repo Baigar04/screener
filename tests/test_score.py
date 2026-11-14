@@ -39,3 +39,15 @@ def test_grupo_pequeno_por_valores_con_dato():
     p = score.by_group(rows, "sector", lambda r: r["x"])
     assert p["A6"] < 100 and p["Z"] == 100.0
     assert "A7" not in p
+
+
+def test_nota_ausencia_neutral_y_cobertura():
+    """Método v2 (14-nov-2026): sin dato = neutral (50) con su peso; no se reparte entre los demás."""
+    import score as sc
+    w = {"calidad": 20, "valor": 20, "crecimiento": 15, "momentum": 20, "smart": 15, "macro": 10}
+    f = {"calidad": 90, "valor": 90, "crecimiento": 90, "momentum": 90, "smart": None, "macro": None}
+    assert round(sc.nota(f, w), 1) == round((75 * 90 + 25 * 50) / 100, 1)   # antes: 90 (se repartía el peso)
+    assert sc.cobertura(f, w) == 75
+    assert sc.nota({**f, "valor": None, "momentum": None}, w) is None        # 2 de 4 básicos: no concluyente
+    full = {k: 60 for k in w}
+    assert sc.nota(full, w) == 60 and sc.cobertura(full, w) == 100

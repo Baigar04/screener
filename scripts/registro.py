@@ -31,7 +31,8 @@ def snapshot(score):
     nota = {s: v for s, v in (score.get("total_defecto") or {}).items() if v is not None}
     lab = score.get("veredicto_lab")
     return {"fecha": score.get("fecha_precio"), "nota": nota, "tec": score.get("veredictos") or {},
-            "pesos": score.get("pesos_defecto") or {}, "lab": lab.get("etiqueta") if isinstance(lab, dict) else lab}
+            "pesos": score.get("pesos_defecto") or {}, "lab": lab.get("etiqueta") if isinstance(lab, dict) else lab,
+            "metodo": score.get("metodo") or "v1 · hasta el 13-nov-2026 · factor sin dato: su peso se repartía entre los demás"}
 
 
 def link(prev, f, hd, n):
@@ -74,8 +75,8 @@ def main(score_path, folder, out_path):
     chain = json.load(open(cpath)).get("entradas", []) if os.path.exists(cpath) else []
     ok, why, checked = verify(chain, folder)
     nueva = None
+    snap = snapshot(json.load(open(score_path, encoding="utf-8")))
     if ok:
-        snap = snapshot(json.load(open(score_path, encoding="utf-8")))
         chain, nueva = append(chain, snap)
         if nueva:
             fp = os.path.join(folder, nueva["f"] + ".json")
@@ -87,7 +88,7 @@ def main(score_path, folder, out_path):
     pub = {"generado": datetime.now(timezone.utc).isoformat(timespec="seconds"), "integra": ok, "motivo": why,
            "dias": len(chain), "fotos_comprobadas": checked, "desde": chain[0]["f"] if chain else None,
            "hasta": chain[-1]["f"] if chain else None, "ultima": chain[-1] if chain else None,
-           "nueva": bool(nueva), "donde": "rama copia-datos del repositorio, carpeta registro/"}
+           "nueva": bool(nueva), "donde": "rama copia-datos del repositorio, carpeta registro/", "metodo": snap.get("metodo")}
     json.dump(pub, open(out_path, "w"), separators=(",", ":"))
     print(f"Registro inmutable: {'íntegro' if ok else 'ALTERADO: ' + why} · {len(chain)} sesiones · fotos comprobadas {checked}"
           f" · {'añadida ' + nueva['f'] if nueva else 'sin sesión nueva'}")
