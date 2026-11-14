@@ -297,6 +297,12 @@ def fase9(pg, base):
     n = pg.locator("#view .q3 tr").count()
     check("AAPL: bloque completo en Fundamentales", all(x in t for x in ("Calidad del beneficio", "Balance y liquidez", "Dilución", "Evolución anual")) and n >= 6, f"{n} métricas")
     check("AAPL: datos nuevos de la SEC (caja, intereses o acciones diluidas)", any(x in t for x in ("Cobertura de intereses", "Acciones diluidas, interanual", "Deuda neta")))
+    pg.goto(base + "#/empresa/NVDA/fund")
+    pg.wait_for_timeout(2500)
+    t = pg.text_content("#view") or ""
+    d = pg.evaluate("fetch('data/t/NVDA.json').then(r => r.json()).then(d => [(d.sec && d.sec.splits) || [], ((d.sec && d.sec.q) || []).map(x => [x[0], x[1], x[8], x[14], x[15]])])")
+    print("    NVDA splits y trimestres (fin, presentado, BPA, acciones, factor):", d, flush=True)
+    check("NVDA: split de 2024 detectado (BPA en la base actual)", "Splits (5 años)" in t and any(abs(sp[1] - 10) < 0.01 for sp in d[0]), str(d[0]))
     pg.goto(base + "#/empresa/SAN.MC/fund")
     pg.wait_for_timeout(2500)
     check("SAN.MC: bloque aproximado sin errores", "Calidad del beneficio y balance" in (pg.text_content("#view") or ""))
