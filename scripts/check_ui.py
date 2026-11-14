@@ -180,7 +180,7 @@ def fase5(pg, base):
     check("enlaces antiguos siguen funcionando", pg.evaluate("window.SCR.S.view") == "pulso")
     pg.goto(base)
     pg.wait_for_timeout(1500)
-    check("tema oscuro por defecto", pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(10, 20, 36)")
+    check("tema oscuro por defecto", pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(13, 15, 18)")
 
 
 FSECS = ["resumen", "grafico", "fund", "valoracion", "factores", "resultados", "comparables", "smartm", "invest"]
@@ -261,6 +261,25 @@ def fase7(pg, base):
     pg.evaluate("localStorage.removeItem('diario')")
 
 
+def diseno1(pg, base):
+    """Diseño A · entrega 1: tipografía propia, panel de trabajo, pestañas de sección y densidad."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/hoy")
+    pg.wait_for_timeout(2500)
+    pg.evaluate("document.fonts.ready")
+    check("tipografía IBM Plex cargada", pg.evaluate("document.fonts.check(\"13px 'IBM Plex Sans'\") && [...document.fonts].some(f => f.family.includes('IBM Plex Sans') && f.status === 'loaded')"))
+    wsp = pg.text_content("#wsp") or ""
+    check("panel de trabajo con la Watchlist", "Watchlist" in wsp and pg.evaluate("getComputedStyle(document.getElementById('wsp')).display") != "none")
+    tabs = [b.inner_text().strip() for b in pg.locator(".tabsbar #side button").all()]
+    check("pestañas de sección bajo la cabecera", len(tabs) >= 2 and tabs[0] == "Hoy" and tabs[1].startswith("Pulso"), " · ".join(tabs))
+    pg.click("#gear")
+    pg.click("#dens")
+    d = pg.evaluate("document.documentElement.dataset.dens")
+    pg.click("#dens")
+    check("densidad compacta/amplia", d == "amplia" and pg.evaluate("document.documentElement.dataset.dens") == "compacta")
+    pg.click("#gear")
+
+
 def main():
     base = serve(SITE)
     with sync_playwright() as p:
@@ -269,7 +288,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, diseno1):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

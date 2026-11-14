@@ -824,7 +824,8 @@ H.closeDrawer = () => { document.getElementById("drawer").classList.remove("full
 document.addEventListener("click", (e) => { if (e.target.closest("#drawerClose") || e.target.id === "overlay") document.getElementById("drawer").classList.remove("full"); }, true);
 
 window.SCRUni = () => (E.uni ? E.uni.filas : []);
-window.SCREq = { sc: () => E.sc, changeOf: (s) => changeOf(s), watch: () => E.watch, scoreBadge: (v) => scoreBadge(v) };
+window.SCREq = { sc: () => E.sc, changeOf: (s) => changeOf(s), watch: () => E.watch, scoreBadge: (v) => scoreBadge(v), cmp: () => E.cmp, saved: () => E.saved,
+  applySaved: (i) => { const x = E.saved[i]; if (!x) return; E.f = { ...x.f }; E.rng = { ...(x.r || {}) }; E.tmpl = null; persist(); H.go("screener"); } };
 window.SCRFiltered = () => (E.uni ? filtered() : []);
 window.SCREnsureUni = () => ensure();
 window.SCROpen = (sym, tab) => companyDrawer(sym, tab);

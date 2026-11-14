@@ -189,6 +189,7 @@ function renderTop() {
       ? `<button data-sub="screener" class="crumb">Empresas</button><span class="c-sep">/</span><b>${esc(window.SCRFicha?.title?.(F.sym) || F.sym)}</b>`
       : `<b>${esc(vname)}</b>`}`;
   const tn = $("#themeName"); if (tn) tn.textContent = document.documentElement.dataset.theme === "light" ? "Claro" : "Oscuro";
+  const dn = $("#densName"); if (dn) dn.textContent = document.documentElement.dataset.dens === "amplia" ? "Amplia" : "Compacta";
   $("#level").innerHTML = MODES.map(([k, t, tip]) => `<button role="radio" aria-checked="${S.mode === k}" data-mode="${k}" class="${S.mode === k ? "on" : ""}" title="${tip}">${t}</button>`).join("");
   const st = $("#status");
   const fnote = F ? window.SCRFicha?.note?.(F.sym) || "" : window.SCR?.notes?.[S.view]?.() || "";
@@ -357,11 +358,15 @@ function render() {
     $("#view").innerHTML = window.SCRFicha ? window.SCRFicha.render(S.ficha) : renderSoon("screener");
     document.title = (window.SCRFicha?.title?.(S.ficha.sym) || S.ficha.sym) + " · Screener";
     window.SCRFicha?.after?.(S.ficha);
+    AFTER.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
     return;
   }
   $("#view").innerHTML = S.view === "pulso" ? renderPulso() : MODULES[S.view] ? MODULES[S.view]() : renderSoon(S.view);
   document.title = NAV.find((x) => x[0] === S.view)[1] + " · Screener";
+  AFTER.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
 }
+/* funciones que se ejecutan tras cada render (p. ej. el panel izquierdo de trabajo) */
+const AFTER = [];
 
 /* ---------- panel lateral ---------- */
 function openDrawer(html) {
@@ -457,6 +462,12 @@ document.addEventListener("click", (e) => {
     try { localStorage.setItem("tamano", root.dataset.size); } catch (er) { /* */ }
     return;
   }
+  if (t.closest("#dens")) {
+    const root = document.documentElement; root.dataset.dens = root.dataset.dens === "amplia" ? "compacta" : "amplia";
+    store.set("densidad", root.dataset.dens);
+    const dn = $("#densName"); if (dn) dn.textContent = root.dataset.dens === "amplia" ? "Amplia" : "Compacta";
+    return;
+  }
   if (t.closest("#theme")) {
     const root = document.documentElement;
     root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";   /* oscuro por defecto */
@@ -486,6 +497,7 @@ function go(v) { S.ficha = null; S.view = v; store.set("area_" + areaOf(v)[0], v
    abrir otra empresa desde una ficha tampoco (así «atrás» vuelve siempre a la sección de origen) */
 function openFicha(sym, tab) {
   sym = String(sym).toUpperCase(); tab = fsec(tab || (S.ficha?.sym === sym ? S.ficha.tab : "resumen"));
+  store.set("recientes", [sym, ...store.get("recientes", []).filter((x) => x !== sym)].slice(0, 6));
   const same = S.ficha?.sym === sym, inFicha = FICHA_RE.test(location.hash);
   S.ficha = { sym, tab };
   setHash("#/empresa/" + encodeURIComponent(sym) + (tab === "resumen" ? "" : "/" + tab), inFicha);
@@ -504,7 +516,7 @@ function route() {
   if ((r.view && r.view !== S.view) || was) { if (r.view) S.view = r.view; render(); window.scrollTo(0, 0); }
 }
 window.addEventListener("hashchange", route);
-window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, openFicha, seriesDrawer, modules: MODULES, handlers: HANDLERS };
+window.SCR = { S, esc, nf, sgn, fmtDate, store, evid, dropdown, openDrawer, closeDrawer, render, go, openFicha, seriesDrawer, modules: MODULES, handlers: HANDLERS, after: AFTER };
 { const r0 = parseHash(); if (r0.view) S.view = r0.view; else if (r0.sym) { S.view = "screener"; S.ficha = { sym: r0.sym, tab: r0.tab }; } else setHash("#/" + S.view, true); if (r0.cmp) S.cmp0 = r0.cmp; }
 render();
 load();

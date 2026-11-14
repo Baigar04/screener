@@ -123,6 +123,15 @@ jobs:
           mkdir -p _site/assets/vendor
           curl -fsSL "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js" -o _site/assets/vendor/lightweight-charts.js \
             || echo "Aviso: no se pudo descargar Lightweight Charts; la web usará la copia de unpkg"
+          # tipografía IBM Plex (licencia OFL) alojada en la propia web; si falla, la web usa la del sistema
+          mkdir -p _site/assets/fonts
+          F=https://cdn.jsdelivr.net/npm/@fontsource
+          for x in "sans 400" "sans 500" "sans 600" "mono 400" "mono 500" "serif 600"; do
+            set -- $x
+            curl -fsSL "$F/ibm-plex-$1@5/files/ibm-plex-$1-latin-$2-normal.woff2" -o "_site/assets/fonts/plex-$1-$2.woff2" \
+              || echo "Aviso: no se pudo descargar IBM Plex $1 $2"
+          done
+          ls -la _site/assets/fonts
       - name: Prueba de interfaz con los datos reales (solo al subir cambios)
         if: github.event_name == 'push'
         continue-on-error: true

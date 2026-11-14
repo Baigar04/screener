@@ -5,18 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Screener</title>
 <meta name="description" content="Screener propio de mercados: macro, sectores, empresas y carteras con datos públicos.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/style.css?v=20261114a">
-<meta name="theme-color" content="#0a1424">
-<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.dataset.theme=t;var z=localStorage.getItem("tamano");if(z)document.documentElement.dataset.size=z;}catch(e){}</script>
+<link rel="stylesheet" href="assets/style.css?v=20261114b">
+<meta name="theme-color" content="#0d0f12">
+<script>try{var t=localStorage.getItem("tema");if(t)document.documentElement.dataset.theme=t;var z=localStorage.getItem("tamano");if(z)document.documentElement.dataset.size=z;var d=localStorage.getItem("densidad");document.documentElement.dataset.dens=d?JSON.parse(d):"compacta";}catch(e){}</script>
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-t">SCREENER</span></div>
+  <div class="brand"><span class="brand-t">SCREENER<i>.</i></span></div>
   <nav id="nav" class="nav" aria-label="Áreas"></nav>
   <div class="top-right">
+    <div class="status" id="status"></div>
     <div class="settings" id="settings">
       <button class="icon-btn gear" id="gear" aria-label="Ajustes" aria-expanded="false" title="Ajustes: modo, tema y tamaño del texto">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -24,17 +22,15 @@
       <div class="set-menu" role="dialog" aria-label="Ajustes">
         <div class="set-row"><span>Modo</span><div class="seg" id="level" role="radiogroup" aria-label="Modo"></div></div>
         <div class="set-row"><span>Tema</span><button class="icon-btn" id="theme" aria-label="Cambiar entre modo claro y oscuro"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg><span id="themeName">Oscuro</span></button></div>
+        <div class="set-row"><span>Densidad</span><button class="icon-btn" id="dens" aria-label="Densidad de la información"><span id="densName">Compacta</span></button></div>
         <div class="set-row"><span>Texto</span><button class="icon-btn" id="tsize" aria-label="Tamaño del texto"><b style="font-size:15px">A</b><b style="font-size:11px">a</b> <span>normal / grande</span></button></div>
       </div>
     </div>
   </div>
 </header>
-<div class="crumbs"><nav id="crumbs" aria-label="Estás en"></nav><div class="status" id="status"></div></div>
+<div class="tabsbar"><nav id="side" class="side-nav" aria-label="Secciones"></nav><nav id="crumbs" aria-label="Estás en"></nav></div>
 <div class="app">
-  <aside class="side" aria-label="Secciones">
-    <nav id="side" class="side-nav"></nav>
-    <div class="side-foot">Datos públicos · actualización L-V tras el cierre de EE. UU.</div>
-  </aside>
+  <aside class="wsp" id="wsp" aria-label="Tu espacio de trabajo"></aside>
   <div class="col">
     <main id="view" class="main"></main>
     <footer class="foot">
@@ -48,18 +44,19 @@
   <button class="icon-btn drawer-close" id="drawerClose" aria-label="Cerrar">✕</button>
   <div id="drawerBody"></div>
 </aside>
-<script src="assets/app.js?v=20261114a"></script>
-<script src="assets/konkorde.js?v=20261114a"></script>
-<script src="assets/draw.js?v=20261114a"></script>
-<script src="assets/chart.js?v=20261114a"></script>
-<script src="assets/tesis.js?v=20261114a"></script>
-<script src="assets/smart.js?v=20261114a"></script>
-<script src="assets/equities.js?v=20261114a"></script>
-<script src="assets/ficha.js?v=20261114a"></script>
-<script src="assets/diario.js?v=20261114a"></script>
-<script src="assets/carteras.js?v=20261114a"></script>
-<script src="assets/adelantarse.js?v=20261114a"></script>
-<script src="assets/lab.js?v=20261114a"></script>
-<script src="assets/hoy.js?v=20261114a"></script>
+<script src="assets/app.js?v=20261114b"></script>
+<script src="assets/konkorde.js?v=20261114b"></script>
+<script src="assets/draw.js?v=20261114b"></script>
+<script src="assets/chart.js?v=20261114b"></script>
+<script src="assets/tesis.js?v=20261114b"></script>
+<script src="assets/smart.js?v=20261114b"></script>
+<script src="assets/equities.js?v=20261114b"></script>
+<script src="assets/ficha.js?v=20261114b"></script>
+<script src="assets/diario.js?v=20261114b"></script>
+<script src="assets/carteras.js?v=20261114b"></script>
+<script src="assets/adelantarse.js?v=20261114b"></script>
+<script src="assets/lab.js?v=20261114b"></script>
+<script src="assets/hoy.js?v=20261114b"></script>
+<script src="assets/panel.js?v=20261114b"></script>
 </body>
 </html>
