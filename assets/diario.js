@@ -219,7 +219,7 @@ function csv() {
 }
 window.addEventListener("storage", (e) => { if (e.key === "diario") { D.list = store.get("diario", []); H.render(); } });
 
-window.SCRDiario = { openForm, forSym, fichaBlock, note: regNote, list: () => D.list };
+window.SCRDiario = { openForm, forSym, fichaBlock, note: regNote, list: () => D.list, perf, decName, reg: () => (ensureReg(), D.reg) };
 H.notes = H.notes || {}; H.notes.diario = regNote;
 H.modules.diario = render;
 H.handlers.unshift(onClick);

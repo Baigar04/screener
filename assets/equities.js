@@ -159,44 +159,52 @@ function renderSectores() {
   if (lv >= 1 && E.sec.rrg && Object.keys(E.sec.rrg).length) h += rrgChart();
   return h;
 }
-const RRG_HZ = [["corto", "Corto · 10 semanas"], ["medio", "Medio · 40 semanas"], ["largo", "Largo · 100 semanas"]];
-const RRG_PAL = ["#5aa9ff", "#36c690", "#f2b44c", "#ff6b78", "#b48cff", "#4fd1c5", "#f78fb3", "#a3e635", "#fb923c", "#94a3b8", "#e879f9", "#38bdf8"];
-E.rrgH = store.get("rrg_h", "corto"); E.rrgSel = null;
-const rrgMap = () => { const R = E.sec?.rrg || {}; return R.corto ? R[E.rrgH] || {} : R; };
+/* ---------- Rotación sectorial (RRG) · diseño A: por región, escala tipificada, cola de 8 semanas, tabla al lado ---------- */
+const RRG_HZ = [["corto", "Corto · 10 sem."], ["medio", "Medio · 26 sem."], ["largo", "Largo · 52 sem."]];
+const RRG_PAL = ["#6f9bd1", "#4cb782", "#e3a33b", "#e2625b", "#a48bd6", "#4fb3b0", "#d986a8", "#9bbf5a", "#d9894a", "#8b919a", "#c77dd6", "#5ab0d9"];
+const QCOL = { Liderando: "var(--pos)", Mejorando: "var(--good)", Debilitándose: "var(--warn)", Rezagado: "var(--neg)" };
+E.rrgH = store.get("rrg_h", "medio"); E.rrgSel = []; E.rrgReg = store.get("rrg_reg", "EE. UU.");
+const rrgRegion = () => { const R = E.sec?.rrg || {}; return R[E.rrgReg] ? E.rrgReg : R["EE. UU."] ? "EE. UU." : Object.keys(R)[0]; };
+const rrgMap = () => { const R = E.sec?.rrg || {}, g = R[rrgRegion()]; return g && g[E.rrgH] ? g[E.rrgH] : {}; };
+const SHORT = { "Technology": "Tecnología", "Healthcare": "Salud", "Financial Services": "Financiero", "Consumer Cyclical": "Consumo cícl.", "Consumer Defensive": "Consumo básico",
+  "Industrials": "Industria", "Energy": "Energía", "Utilities": "Utilities", "Real Estate": "Inmobiliario", "Basic Materials": "Materiales", "Communication Services": "Comunicación" };
+const sshort = (s) => SHORT[s] || sn(s);
 function rrgChart() {
-  const R = rrgMap(), entries = Object.entries(R);
-  if (!entries.length) return "";
-  const W = 680, Hh = 440, P = 36;
-  const all = entries.flatMap(([, r]) => r.cola);
-  const span = Math.max(1.2, ...all.map((p) => Math.abs(p[1] - 100)), ...all.map((p) => Math.abs(p[2] - 100))) * 1.12;
-  const X = (v) => P + ((v - (100 - span)) / (2 * span)) * (W - 2 * P), Y = (v) => Hh - P - ((v - (100 - span)) / (2 * span)) * (Hh - 2 * P);
-  const q = [["Mejorando", "var(--accent)", P, P], ["Liderando", "var(--pos)", X(100), P], ["Rezagado", "var(--neg)", P, Y(100)], ["Debilitándose", "var(--warn)", X(100), Y(100)]];
-  const col = Object.fromEntries(Object.keys(E.sec.rrg?.corto || R).map((k, i) => [k, RRG_PAL[i % RRG_PAL.length]]));
-  const sel = E.rrgSel && R[E.rrgSel] ? E.rrgSel : null;
-  const tails = entries.map(([s, r]) => {
-    const c = col[s] || "#94a3b8", on = !sel || sel === s, l = r.cola[r.cola.length - 1];
-    return `<g opacity="${on ? 1 : 0.15}"><polyline points="${r.cola.map((p) => `${X(p[1]).toFixed(1)},${Y(p[2]).toFixed(1)}`).join(" ")}" fill="none" stroke="${c}" stroke-width="${sel === s ? 2.2 : 1.4}" opacity=".75"/>
-      ${r.cola.slice(0, -1).map((p) => `<circle cx="${X(p[1]).toFixed(1)}" cy="${Y(p[2]).toFixed(1)}" r="${sel === s ? 2.6 : 1.8}" fill="${c}" opacity=".7"><title>${esc(sn(s))} · ${fmtDate(p[0])}</title></circle>`).join("")}
-      <circle cx="${X(l[1])}" cy="${Y(l[2])}" r="${sel === s ? 9 : 6.5}" fill="${c}" stroke="var(--surface)" stroke-width="2" data-rrgsel="${esc(s)}" style="cursor:pointer"><title>${esc(sn(s))}: ${r.cuadrante} (pulsa para ver el nombre)</title></circle></g>`;
-  }).join("");
-  let label = "";
-  if (sel) {
-    const l = R[sel].cola[R[sel].cola.length - 1], tx = X(l[1]), ty = Y(l[2]), txt = `${sn(sel)} · ${R[sel].cuadrante}`, w = txt.length * 7.2 + 18;
-    const lx = Math.min(Math.max(tx + 14, P), W - P - w), ly = Math.max(ty - 34, P + 4);
-    label = `<g data-sector="${esc(sel)}" style="cursor:pointer"><rect x="${lx}" y="${ly}" width="${w}" height="26" rx="7" fill="var(--surface)" stroke="${col[sel]}" stroke-width="1.5"/>
-      <text x="${lx + 9}" y="${ly + 17}" font-size="13" font-weight="600" fill="var(--text)">${esc(txt)}</text><title>Pulsa para ver las industrias del sector</title></g>`;
-  }
-  return `<h2 class="sec">Rotación sectorial <span class="hint">Fuerza relativa frente al universo (X) e impulso (Y). Cada punto es una semana. Pulsa el círculo grande de un sector para ver su nombre.</span></h2>
-    <div class="bar">${RRG_HZ.map(([k, t]) => `<button class="chip ${E.rrgH === k ? "on" : ""}" data-rrgh="${k}">${t}</button>`).join("")}${sel ? `<button class="link-btn" data-rrgsel="">Mostrar todos</button>` : ""}</div>
-    <div class="panel" style="overflow-x:auto"><svg viewBox="0 0 ${W} ${Hh}" style="width:100%;max-width:820px;min-width:520px;height:auto;display:block;margin:0 auto" role="img" aria-label="Rotación sectorial">
-    ${q.map(([t, c, x, y]) => `<rect x="${x}" y="${y}" width="${X(100) - P}" height="${Y(100) - P}" fill="${c}" opacity=".06"/><text x="${x + 10}" y="${y + 20}" font-size="14" fill="${c}" font-weight="600">${t}</text>`).join("")}
-    <line x1="${X(100)}" x2="${X(100)}" y1="${P}" y2="${Hh - P}" stroke="var(--border)"/><line x1="${P}" x2="${W - P}" y1="${Y(100)}" y2="${Y(100)}" stroke="var(--border)"/>
-    <text x="${W - P}" y="${Hh - 10}" font-size="12" fill="var(--muted)" text-anchor="end">Fuerza relativa →</text><text x="${P}" y="${P - 12}" font-size="12" fill="var(--muted)">↑ Impulso</text>${tails}${label}</svg>
-    <div class="rrg-leg">${entries.map(([s, r]) => `<button class="rrg-it ${sel === s ? "on" : ""}" data-rrgsel="${esc(s)}"><i style="background:${col[s]}"></i>${esc(sn(s))} <span class="hint">${r.cuadrante}</span></button>`).join("")}</div>
-    <div class="method">Lectura habitual: los sectores giran en el sentido de las agujas del reloj (Mejorando → Liderando → Debilitándose → Rezagado). Corto: fuerza relativa sobre 10 semanas; medio: 26; largo: 52. Aproximación propia al gráfico RRG, es una tendencia, no una regla.</div></div>`;
+  const R = rrgMap(), entries = Object.entries(R).sort((a, b) => a[0].localeCompare(b[0]));
+  if (!entries.length) return `<h2 class="sec">Rotación sectorial</h2><div class="nodata">La rotación sectorial nueva se calcula con la próxima actualización de datos.</div>`;
+  const W = 640, Hh = 460, P = 34, LIM = 3.2;   // ±3,2 desviaciones: lo que se sale va al borde con una marca
+  const cl = (v) => Math.max(100 - LIM, Math.min(100 + LIM, v));
+  const X = (v) => P + ((cl(v) - (100 - LIM)) / (2 * LIM)) * (W - 2 * P), Y = (v) => Hh - P - ((cl(v) - (100 - LIM)) / (2 * LIM)) * (Hh - 2 * P);
+  const col = Object.fromEntries(entries.map(([k], i) => [k, RRG_PAL[i % RRG_PAL.length]]));
+  const sel = E.rrgSel.filter((s) => R[s]);
+  const quads = [["Mejorando", P, P], ["Liderando", X(100), P], ["Rezagado", P, Y(100)], ["Debilitándose", X(100), Y(100)]];
+  const corner = { Mejorando: [P + 8, P + 16, "start"], Liderando: [W - P - 8, P + 16, "end"], Rezagado: [P + 8, Hh - P - 8, "start"], Debilitándose: [W - P - 8, Hh - P - 8, "end"] };
+  const tails = sel.map((s) => { const r = R[s], c = col[s];
+    return `<polyline points="${r.cola.map((p) => `${X(p[1]).toFixed(1)},${Y(p[2]).toFixed(1)}`).join(" ")}" fill="none" stroke="${c}" stroke-width="1.6"/>
+      ${r.cola.slice(0, -1).map((p) => `<circle cx="${X(p[1]).toFixed(1)}" cy="${Y(p[2]).toFixed(1)}" r="2.2" fill="${c}"><title>${esc(sshort(s))} · ${fmtDate(p[0])}</title></circle>`).join("")}`; }).join("");
+  const dots = entries.map(([s, r]) => { const l = r.cola[r.cola.length - 1], on = !sel.length || sel.includes(s), x = X(l[1]), y = Y(l[2]), out = Math.abs(l[1] - 100) > LIM || Math.abs(l[2] - 100) > LIM;
+    return `<g opacity="${on ? 1 : 0.35}" data-rrgsel="${esc(s)}" style="cursor:pointer"><circle cx="${x}" cy="${y}" r="5" fill="${col[s]}" stroke="var(--bg)" stroke-width="1.5"/>${out ? `<circle cx="${x}" cy="${y}" r="8.5" fill="none" stroke="${col[s]}" stroke-dasharray="2 2"><title>Fuera de escala: se muestra en el borde</title></circle>` : ""}
+      <text x="${x + 8}" y="${y + 4}" font-size="11" fill="var(--text)">${esc(sshort(s))}</text><title>${esc(sn(s))}: ${r.cuadrante} · ${r.semanas} sem.</title></g>`; }).join("");
+  const arrow = (r) => { const a = Math.atan2(r.dy, r.dx) * 180 / Math.PI; return ["→", "↗", "↑", "↖", "←", "↙", "↓", "↘"][((Math.round(a / 45) % 8) + 8) % 8]; };
+  const rows = entries.slice().sort((a, b) => ["Liderando", "Mejorando", "Debilitándose", "Rezagado"].indexOf(a[1].cuadrante) - ["Liderando", "Mejorando", "Debilitándose", "Rezagado"].indexOf(b[1].cuadrante) || b[1].cola.at(-1)[1] - a[1].cola.at(-1)[1]);
+  return `<h2 class="sec">Rotación sectorial <span class="hint">Fuerza relativa frente a su mercado (→) e impulso de esa fuerza (↑), semanal. Pulsa hasta 3 sectores para ver su recorrido de 8 semanas.</span></h2>
+    <div class="bar">${["EE. UU.", "Europa"].filter((g) => E.sec.rrg?.[g]).map((g) => `<button class="chip ${rrgRegion() === g ? "on" : ""}" data-rrgreg="${g}">${g}</button>`).join("")}<span class="hint" style="margin:0 6px">·</span>
+      ${RRG_HZ.map(([k, t]) => `<button class="chip ${E.rrgH === k ? "on" : ""}" data-rrgh="${k}">${t}</button>`).join("")}${sel.length ? `<button class="link-btn" data-rrgsel="">Quitar recorridos</button>` : ""}</div>
+    <div class="rrg2"><div class="rrg-fig"><svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Rotación sectorial">
+      ${quads.map(([t, x, y]) => `<rect x="${x}" y="${y}" width="${X(100) - P}" height="${Y(100) - P}" fill="${QCOL[t]}" opacity=".045"/>`).join("")}
+      ${Object.entries(corner).map(([t, [x, y, an]]) => `<text x="${x}" y="${y}" text-anchor="${an}" font-size="11.5" font-weight="600" fill="${QCOL[t]}" opacity=".8">${t}</text>`).join("")}
+      <line x1="${X(100)}" x2="${X(100)}" y1="${P}" y2="${Hh - P}" stroke="var(--border-strong)"/><line x1="${P}" x2="${W - P}" y1="${Y(100)}" y2="${Y(100)}" stroke="var(--border-strong)"/>
+      <text x="${W - P}" y="${Hh - 12}" font-size="11" fill="var(--faint)" text-anchor="end">fuerza relativa →</text><text x="${P}" y="${P - 12}" font-size="11" fill="var(--faint)">↑ impulso</text>
+      ${tails}${dots}</svg></div>
+    <div class="rrg-tab"><table class="rrgt"><thead><tr><th>Sector</th><th>Cuadrante</th><th>Semanas</th><th>Hace 4 sem.</th><th>Dirección</th></tr></thead><tbody>
+      ${rows.map(([s, r]) => `<tr data-rrgsel="${esc(s)}" class="${sel.includes(s) ? "on" : ""}"><td><i class="rrg-dot" style="background:${col[s]}"></i>${esc(sshort(s))} <span class="fa">${r.n}</span></td>
+        <td style="color:${QCOL[r.cuadrante]}">${r.cuadrante}</td><td class="num">${r.semanas}</td>
+        <td>${r.antes && r.antes !== r.cuadrante ? `<span style="color:${QCOL[r.antes]}">${r.antes}</span>` : '<span class="fa">igual</span>'}</td>
+        <td class="num" title="Desplazamiento de las 2 últimas semanas">${arrow(r)}</td></tr>`).join("")}</tbody></table>
+      <div class="method">Giro habitual en el sentido de las agujas del reloj: Mejorando → Liderando → Debilitándose → Rezagado. ${esc(rrgRegion())} contra su propio universo equiponderado; puntuaciones tipificadas en torno a 100 (aproximación propia al RRG). Es una tendencia, no una regla.</div></div></div>`;
 }
 function sectorDrawer(s) {
-  const st = E.sec.stats[E.region], d = st.sector[s] || {}, rr = rrgMap()[s];
+  const st = E.sec.stats[E.region], d = st.sector[s] || {}, rr = rrgMap()[s];  // rotación: región elegida en el gráfico
   const inds = Object.entries(st.industria).filter(([, x]) => x.sector === s).sort((a, b) => (b[1].r3m ?? -1e9) - (a[1].r3m ?? -1e9));
   const tops = rowsRegion().filter((r) => r.sector === s && r.r3m != null).sort((a, b) => b.r3m - a.r3m);
   H.openDrawer(`<h3>${esc(sn(s))}</h3><div class="reg">${esc(E.region)} · ${d.n} valores${rr ? ` · Rotación: <b>${rr.cuadrante}</b>` : ""}</div>
@@ -381,7 +389,9 @@ const TEMPLATE_TXT = {
 };
 /* columnas: clave, etiqueta, nivel por defecto, formato */
 const COLS = [
-  ["sector", "Sector", 1, (v) => esc(sn(v))], ["industria", "Industria", 9, (v) => esc(v || "—")], ["pais", "País", 9, (v) => esc(v || "—")],
+  ["sector", "Sector", 1, (v) => esc(sn(v))],
+  ["score", "Nota", 0, (v, r) => (v == null ? `<span class="hint" data-tip="No concluyente: faltan datos en 2 o más de los 4 factores básicos">s. d.</span>` : scoreBadge(v) + covBadge(r.sym))],
+ ["industria", "Industria", 9, (v) => esc(v || "—")], ["pais", "País", 9, (v) => esc(v || "—")],
   ["mcap", "Capitalización", 1, (v, r) => big(v, r.moneda)], ["precio", "Precio", 0, (v) => nf(v, 2)],
   ["r1d", "Día", 2, spct], ["r1m", "1 mes", 9, spct], ["r3m", "3 meses", 0, spct], ["r6m", "6 meses", 9, spct], ["r1a", "1 año", 1, spct],
   ["per", "PER", 0, (v) => nf(v, 1)], ["per_fwd", "PER prev.", 9, (v) => nf(v, 1)], ["per_vs_sector", "PER vs sector", 1, (v) => spct(v, 0)],
@@ -390,13 +400,13 @@ const COLS = [
   ["crec_ventas", "Crec. ventas", 1, spct], ["crec_bpa", "Crec. BPA", 9, spct],
   ["deuda_neta_ebitda", "DN/EBITDA", 2, (v) => (v == null ? "—" : nf(v, 1) + "×")], ["beta", "Beta", 9, (v) => nf(v, 2)],
   ["vol3m", "Volatilidad", 9, (v) => pct(v)], ["rsi", "RSI", 2, (v) => nf(v, 0)],
-  ["veredicto", "Técnico", 0, (v) => (v ? `<span class="badge ${v === "Alcista" ? "Favorable" : v === "Bajista" ? "Defensivo" : "Neutral"}">${v}</span>` : "—")],
+  ["veredicto", "Técnico", 0, (v) => (v ? `<span class="tec tec-${v === "Alcista" ? "al" : v === "Bajista" ? "ba" : "ne"}">${v}</span>` : "—")],
   ["resultados", "Resultados", 1, (v) => (v ? fmtDate(v) : "—")],
   ["n_smart", "Superinv.", 1, (v) => (v == null ? "—" : v || "·")],
   ["f_fs", "F-score", 9, (v) => (v == null ? "—" : nf(v, 1))], ["f_gp", "Rent. bruta", 9, (v) => pct(v)], ["f_ag", "Crec. activos", 9, spct],
   ["f_acr", "Devengos", 9, spct], ["f_nsi", "Emisión acciones", 9, spct], ["f_sue", "Sorpresa BN", 9, (v) => (v == null ? "—" : sgn(v, 1))],
-  ["score", "Puntuación", 0, (v, r) => (v == null ? `<span class="hint" data-tip="No concluyente: faltan datos en 2 o más de los 4 factores básicos">s. d.</span>` : scoreBadge(v) + covBadge(r.sym))],
 ];
+const TXT = new Set(["sector", "industria", "pais", "veredicto"]);
 const colsFor = (lv) => (E.cols && E.cols.length ? E.cols : COLS.filter((c) => c[2] <= lv).map((c) => c[0]));
 
 function rowsRegion() { return E.uni.filas.filter((r) => E.regions.has(r.region)); }
@@ -469,14 +479,17 @@ function renderScreener() {
   const fdefs = FILTERS.filter((f) => f[2] <= lv);
   const cols = colsFor(lv).map((k) => COLS.find((c) => c[0] === k)).filter(Boolean);
   const chips = activeChips();
-  return `<div class="scr-head"><div class="search-in"><svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg>
+  const wn = E.sc ? ` · nota de ordenación con tus pesos (${esc(profileName())})` : "";
+  return `<div class="pg-head"><h1>Screener</h1><div class="pg-sub">${nf(base.length, 0)} valores · ${[...E.regions].join(" y ") || "ninguna región"}${wn} · la cobertura en ámbar indica que falta algún factor</div></div>
+    <div class="scr-head"><div class="search-in"><svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg>
       <input id="scrq" type="search" placeholder="Filtrar por ticker o nombre" value="${esc(E.q)}" autocomplete="off" aria-label="Filtrar por ticker o nombre"></div>
     ${["EE. UU.", "Europa"].map((r) => `<button class="chip ${E.regions.has(r) ? "on" : ""}" data-scr="${r}">${r}</button>`).join("")}
     <button class="chip ${E.onlyWatch ? "on" : ""}" data-act="watchonly">★ Seguimiento (${E.watch.length})</button>
-    <button class="chip mf-btn ${E.mf ? "on" : ""}" data-act="mf">Filtros${chips.length ? ` (${chips.length})` : ""} ▾</button></div>
-    <div class="fwrap ${E.mf ? "open" : ""}"><div class="bar"><span class="hint">Plantillas:</span>${E.sc ? `<button class="chip ${E.tmpl === "Top" ? "on" : ""}" data-tmpl="Top" data-tip="Los valores con mejor puntuación según tus pesos">★ Top puntuación</button>` : ""}${Object.keys(TEMPLATES).map((t) => `<button class="chip ${E.tmpl === t ? "on" : ""}" data-tmpl="${t}" data-tip="${esc(TEMPLATE_TXT[t])}">${t}</button>`).join("")}
-    ${E.sc ? `<button class="chip ${E.showW ? "on" : ""}" data-act="weights">Pesos de la puntuación · ${profileName()}</button><button class="chip ${E.showChg ? "on" : ""}" data-act="changes">Qué ha cambiado</button>` : ""}</div>
+    <button class="chip mf-btn ${E.mf ? "on" : ""}" data-act="mf">+ Filtros y plantillas${chips.length ? ` (${chips.length})` : ""} ${E.mf ? "▴" : "▾"}</button>
+    ${E.sc ? `<button class="chip ${E.showW ? "on" : ""}" data-act="weights">Pesos · ${profileName()}</button><button class="chip ${E.showChg ? "on" : ""}" data-act="changes">Qué ha cambiado</button>` : ""}</div>
     ${E.showW && E.sc ? weightsPanel() : ""}${E.showChg && E.sc ? changesPanel() : ""}
+    <div class="fwrap ${E.mf ? "open" : ""}"><div class="bar"><span class="hint">Plantillas:</span>${E.sc ? `<button class="chip ${E.tmpl === "Top" ? "on" : ""}" data-tmpl="Top" data-tip="Los valores con mejor puntuación según tus pesos">★ Top puntuación</button>` : ""}${Object.keys(TEMPLATES).map((t) => `<button class="chip ${E.tmpl === t ? "on" : ""}" data-tmpl="${t}" data-tip="${esc(TEMPLATE_TXT[t])}">${t}</button>`).join("")}
+</div>
     <div class="bar">${fdefs.filter((f) => f[2] <= 1 || E.more || E.f[f[0]]).map(([id, lab]) => H.dropdown("f_" + id, lab + ":", [["", "Cualquiera"], ...filterOptions(id, base)], E.f[id] || "")).join("")}
     ${fdefs.some((f) => f[2] > 1) ? `<button class="chip" data-act="morefilters">${E.more ? "Menos filtros" : `Más filtros (${fdefs.filter((f) => f[2] > 1).length})`}</button>` : ""}
     ${lv >= 1 ? `<button class="chip ${E.showRng ? "on" : ""}" data-act="ranges">Rangos ⇆</button>` : ""}</div>
@@ -492,14 +505,14 @@ function renderScreener() {
       ${r.score != null ? `<div class="mc-sc">${scoreBadge(r.score)}${covBadge(r.sym)}</div>` : ""}</div></div>`).join("") : `<div class="soon-box">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></div>`}</div>` : `
     <div class="tbl-wrap"><table class="scr"><thead><tr><th class="c-x" data-tip="Marca hasta 4 valores para compararlos">⇄</th>
       <th data-scrsort="nombre" class="${E.sort.k === "nombre" ? "sorted" : ""}">Valor${E.sort.k === "nombre" ? (E.sort.d < 0 ? " ↓" : " ↑") : ""}</th>
-      ${cols.map(([k, t]) => `<th data-scrsort="${k}"${tip(k)} class="${E.sort.k === k ? "sorted" : ""}">${t}${E.sort.k === k ? (E.sort.d < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead>
-    <tbody>${rows.length ? rows.slice(0, E.limit).map((r) => `<tr data-sym="${esc(r.sym)}" class="${isC(r.sym) ? "sel" : ""}">
+      ${cols.map(([k, t]) => `<th data-scrsort="${k}"${tip(k)} class="${E.sort.k === k ? "sorted" : ""}${TXT.has(k) ? " tx" : ""}">${t}${E.sort.k === k ? (E.sort.d < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr></thead>
+    <tbody>${rows.length ? rows.slice(0, E.limit).map((r) => `<tr data-sym="${esc(r.sym)}" class="${isC(r.sym) ? "sel" : ""}${E.kf === r.sym ? " kf" : ""}">
       <td class="c-x"><input type="checkbox" data-cmp="${esc(r.sym)}" ${isC(r.sym) ? "checked" : ""} aria-label="Comparar ${esc(r.sym)}"></td>
-      <td class="c-name"><div class="nmw">${star(r.sym)}${logo(r)}<div><div><b>${esc(r.sym)}</b> <span class="nm">${esc((r.nombre || "").slice(0, 26))}</span></div>${tagHtml(r) ? `<div class="tgs">${tagHtml(r)}</div>` : ""}</div></div></td>
-      ${cols.map(([k, , , fmt]) => `<td class="num ${["r1d", "r1m", "r3m", "r6m", "r1a"].includes(k) ? "chg " + cls(r[k]) : ""}">${fmt(r[k], r)}</td>`).join("")}</tr>`).join("")
+      <td class="c-name"><div class="nmw1">${star(r.sym)}<b>${esc(r.sym)}</b> <span class="nm">${esc((r.nombre || "").slice(0, 30))}</span></div></td>
+      ${cols.map(([k, , , fmt]) => `<td class="${TXT.has(k) ? "tx" : "num"} ${["r1d", "r1m", "r3m", "r6m", "r1a"].includes(k) ? "chg " + cls(r[k]) : ""}">${fmt(r[k], r)}</td>`).join("")}</tr>`).join("")
       : `<tr><td colspan="${cols.length + 2}" class="empty">Ningún valor cumple los filtros. <button class="link-btn" data-act="clear">Limpiar filtros</button></td></tr>`}</tbody></table></div>`}
     ${rows.length > E.limit ? `<div style="text-align:center;margin-top:10px"><button class="icon-btn" data-act="more">Mostrar 50 más (${rows.length - E.limit} restantes)</button></div>` : ""}
-    <div class="method">Precios y fundamentales: Yahoo Finance, con los fundamentales refrescados por rotación semanal. Sin revisiones de beneficios ni ROIC: no hay fuente pública fiable.</div>
+    <div class="method">Nota: ordena, no predice (Laboratorio). Cobertura en ámbar = % del peso con dato; el resto cuenta como neutral. «s. d.» = no concluyente. Teclas: / buscar · J/K moverse · Intro abrir ficha · C comparar · W seguimiento. Precios y fundamentales: Yahoo Finance, con los fundamentales refrescados por rotación semanal. Sin revisiones de beneficios ni ROIC: no hay fuente pública fiable.</div>
     ${cmpBar()}`;
 }
 function colsMenu(lv) {
@@ -665,7 +678,24 @@ function setupSearch() {
     else if (e.key === "Escape") { inp.value = ""; paintSearch(); inp.blur(); }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) { e.preventDefault(); inp.focus(); }
+    if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+    if (e.key === "/") { e.preventDefault(); inp.focus(); return; }
+    /* atajos del screener: J/K moverse, Intro abrir la ficha, C comparar, W seguimiento */
+    if (H.S.view !== "screener" || H.S.ficha || document.querySelector("#drawer.on")) return;
+    const trs = [...document.querySelectorAll("#view table.scr tbody tr[data-sym]")]; if (!trs.length) return;
+    const k = e.key.toLowerCase();
+    if (k === "j" || k === "k") {
+      e.preventDefault();
+      let i = trs.findIndex((tr) => tr.dataset.sym === E.kf);
+      i = i < 0 ? 0 : Math.max(0, Math.min(trs.length - 1, i + (k === "j" ? 1 : -1)));
+      trs.forEach((tr) => tr.classList.remove("kf")); trs[i].classList.add("kf"); E.kf = trs[i].dataset.sym;
+      trs[i].scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (!E.kf || !trs.some((tr) => tr.dataset.sym === E.kf)) return;
+    if (e.key === "Enter") { e.preventDefault(); H.openFicha(E.kf); }
+    else if (k === "c") { e.preventDefault(); toggleCmp(E.kf); H.render(); }
+    else if (k === "w") { e.preventDefault(); document.querySelector(`#view tr[data-sym="${CSS.escape(E.kf)}"] [data-watch]`)?.click(); }
   });
 }
 
@@ -739,7 +769,8 @@ function onClick(t, dd) {
   if ((b = t.closest("[data-eqr]"))) { E.region = b.dataset.eqr; store.set("eq_region", E.region); H.render(); return true; }
   if ((b = t.closest("[data-secsort]"))) { const k = b.dataset.secsort; if (SEC_COLS.find((c) => c[0] === k)[2] != null) { E.secMetric = k; store.set("sec_metric", k); H.render(); } return true; }
   if ((b = t.closest("[data-rrgh]"))) { E.rrgH = b.dataset.rrgh; store.set("rrg_h", E.rrgH); H.render(); return true; }
-  if ((b = t.closest("[data-rrgsel]"))) { const v = b.dataset.rrgsel; E.rrgSel = v && E.rrgSel !== v ? v : null; H.render(); return true; }
+  if ((b = t.closest("[data-rrgsel]"))) { const v = b.dataset.rrgsel; E.rrgSel = !v ? [] : E.rrgSel.includes(v) ? E.rrgSel.filter((x) => x !== v) : [...E.rrgSel, v].slice(-3); H.render(); return true; }
+  if ((b = t.closest("[data-rrgreg]"))) { E.rrgReg = b.dataset.rrgreg; store.set("rrg_reg", E.rrgReg); E.rrgSel = []; H.render(); return true; }
   if ((b = t.closest("[data-sector]"))) { sectorDrawer(b.dataset.sector); return true; }
   if ((b = t.closest("[data-gosector]"))) { E.f = { sector: b.dataset.gosector }; E.rng = {}; E.tmpl = null; persist(); H.closeDrawer(); H.go("screener"); return true; }
   if ((b = t.closest("[data-prof]"))) { E.w = { ...PROFILES[b.dataset.prof] }; store.set("pesos", E.w); computeScores(); H.render(); return true; }

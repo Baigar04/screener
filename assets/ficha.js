@@ -409,10 +409,14 @@ function reading(c) {
   if (!interp.length) interp.push("Sin una lectura clara con los datos disponibles.");
   /* titular de una línea */
   const hp = [];
-  if (M.g != null) hp.push(`${M.g >= 0 ? "Ventas +" : "Ventas −"}${nf(Math.abs(M.g), 0)} %${M.mbD != null && Math.abs(M.mbD) < 1 ? " con margen bruto estable" : M.mbD >= 1 ? " con margen bruto al alza" : M.mbD <= -1 ? " con margen bruto a la baja" : ""}`);
+  const mbTxt = M.mbD != null && Math.abs(M.mbD) < 1 ? " con margen bruto estable" : M.mbD >= 1 ? " con margen bruto al alza" : M.mbD <= -1 ? " con margen bruto a la baja" : "";
+  if (M.g != null) hp.push(`${Math.abs(M.g) < 0.5 ? "Ventas estables" : `Ventas ${M.g > 0 ? "+" : "−"}${nf(Math.abs(M.g), 0)} %`}${mbTxt}`);
+  else if (mbTxt) hp.push("Margen bruto" + mbTxt.replace(" con margen bruto", ""));
   if (M.down2) hp.push("el beneficio crece menos que las ventas");
   else if (M.cr != null && M.cr < 0.8) hp.push("la caja no acompaña al beneficio");
+  if (v && v.n_compras > v.n_ventas) hp.push("los directivos compran");
   if (pv != null && Math.abs(pv) >= 15) hp.push(`cotiza un ${nf(Math.abs(pv), 0)} % ${pv > 0 ? "por encima" : "por debajo"} de su sector`);
+  if (r.veredicto === "Bajista" && hp.length < 3) hp.push("técnico bajista");
   const head = hp.length ? hp[0] + (hp.length > 1 ? "; " + hp.slice(1).join("; ") : "") + "." : "";
   return { txt: txt.join(" "), ev, todo: todo.slice(0, 5), interp, contra, head };
 }

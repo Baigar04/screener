@@ -142,8 +142,9 @@ def tanda2(pg, base):
     """Fase 2 (2.ª tanda): «Hoy», directivos, fechas del smart money y factores académicos."""
     pg.goto(base + "#/hoy")
     pg.wait_for_timeout(4000)
+    pg.evaluate("document.querySelector('.hoy-more').open = true")
     t = pg.text_content("#view")
-    check("«Hoy»: secciones", all(x in t for x in ("Tu seguimiento", "Mayores cambios de nota", "Resultados en los próximos 7 días", "Compras de directivos", "Copia de seguridad")))
+    check("«Hoy»: secciones", all(x in t for x in ("Pulso del mercado", "Tu Watchlist hoy", "Próximos resultados", "Movimientos de la nota", "Smart money", "Tu Diario", "Copia de seguridad")))
     check("«Hoy»: estado de los datos", "validación" in t or "no pasaron" in t, t.split("\n")[0][:80])
     with pg.expect_download(timeout=10000) as dl:
         pg.click("[data-bk=down]")
@@ -282,6 +283,40 @@ def diseno1(pg, base):
     pg.click("#gear")
 
 
+def diseno3(pg, base):
+    """Diseño A · entrega 3: Screener de una línea, «Hoy» en rejilla, rotación sectorial nueva y atajos."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/hoy")
+    pg.wait_for_timeout(3000)
+    check("«Hoy»: 6 bloques y tira de índices", pg.locator(".hgrid .hs").count() == 6 and pg.locator(".ixs > div").count() >= 1, f"{pg.locator('.ixs > div').count()} índices")
+    pg.goto(base + "#/screener")
+    pg.wait_for_selector("table.scr tbody tr[data-sym]", timeout=20000)
+    check("Screener: cabecera de página", (pg.text_content(".pg-head h1") or "").strip() == "Screener")
+    check("Screener: filas sin logotipo ni etiquetas", pg.locator("table.scr .logo, table.scr .tgs").count() == 0)
+    heads = [x.strip() for x in pg.locator("table.scr thead th").all_inner_texts()]
+    check("Screener: la nota va tras el sector", "Sector" in heads and heads.index("Sector") + 1 < len(heads) and heads[heads.index("Sector") + 1].startswith("Nota"), " · ".join(heads[:6]))
+    pg.evaluate("document.activeElement && document.activeElement.blur()")
+    pg.keyboard.press("j"); pg.keyboard.press("j"); pg.keyboard.press("k")
+    first = pg.locator("table.scr tbody tr[data-sym]").first.get_attribute("data-sym")
+    kf = pg.locator("table.scr tr.kf").get_attribute("data-sym")
+    check("atajos J/K", kf == first, f"{kf} vs {first}")
+    pg.keyboard.press("c")
+    check("atajo C añade al comparador", pg.locator(".cmp-bar").count() == 1)
+    pg.click("[data-act=cmpclear]")
+    pg.keyboard.press("Enter")
+    pg.wait_for_timeout(1500)
+    check("atajo Intro abre la ficha", f"/empresa/{first}" in pg.url, pg.url)
+    pg.goto(base + "#/sectores")
+    pg.wait_for_timeout(3000)
+    n = pg.locator(".rrg2 svg g[data-rrgsel]").count()
+    if n:
+        pg.locator(".rrgt tbody tr").first.click()
+        pg.locator(".rrgt tbody tr").nth(1).click()
+        check("rotación: etiquetas, tabla y recorridos de los elegidos", n >= 5 and pg.locator(".rrg2 svg polyline").count() == 2 and pg.locator(".rrgt tbody tr").count() == n, f"{n} sectores")
+    else:
+        check("rotación: aviso hasta el próximo cálculo", "próxima actualización" in (pg.text_content("#view") or ""))
+
+
 def main():
     base = serve(SITE)
     with sync_playwright() as p:
@@ -290,7 +325,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, diseno1):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, diseno1, diseno3):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

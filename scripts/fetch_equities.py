@@ -513,11 +513,12 @@ def group_stats(rows, key):
     return out
 
 
-RRG_H = {  # horizonte: (semanas de cola, ventana de la fuerza relativa en sesiones, retardo del impulso en sesiones)
-    "corto": (10, 50, 10),
-    "medio": (40, 130, 20),
-    "largo": (100, 260, 40),
+RRG_H = {  # horizonte: (ventana de la fuerza relativa en semanas, retardo del impulso en semanas); la cola siempre es de 8 semanas
+    "corto": (10, 4),
+    "medio": (26, 8),
+    "largo": (52, 13),
 }
+RRG_COLA = 8
 
 
 def breadth(frames, rows, days=260):
@@ -557,35 +558,64 @@ def breadth(frames, rows, days=260):
     return out
 
 
+def _quad(x, y):
+    return "Liderando" if x >= 100 and y >= 100 else "Debilitándose" if x >= 100 else "Rezagado" if y < 100 else "Mejorando"
+
+
+def rrg_series(idx, bench, win, lag):
+    """Fuerza relativa normalizada como en el RRG original (aproximación propia): RS-Ratio y RS-Momentum como
+    puntuaciones tipificadas en torno a 100 sobre la ventana elegida, con datos semanales."""
+    rs = 100 * idx / bench
+    raw = rs / rs.rolling(win).mean()
+    ratio = 100 + (raw - raw.rolling(win).mean()) / raw.rolling(win).std()
+    roc = ratio.diff(lag)
+    mom = 100 + (roc - roc.rolling(win).mean()) / roc.rolling(win).std()
+    return ratio, mom
+
+
 def rrg(frames, rows):
-    """Rotación sectorial: índice equiponderado por sector frente al universo, en tres horizontes. Aproximación propia al gráfico RRG."""
-    rets = {s: f["Close"].pct_change() for s, f in frames.items()}
-    allr = pd.DataFrame(rets).sort_index()
-    allr = allr[allr.notna().sum(axis=1) > len(rets) * 0.5]  # sesiones con datos de la mayoría
-    bench = (1 + allr.mean(axis=1).fillna(0)).cumprod()
-    sec = {}
-    for r in rows:
-        if r.get("sector") and r["sym"] in allr.columns:
-            sec.setdefault(r["sector"], []).append(r["sym"])
-    out = {h: {} for h in RRG_H}
-    for s, syms in sec.items():
-        if len(syms) < 2:
+    """Rotación sectorial por región (EE. UU. y Europa por separado, cada una contra su universo equiponderado),
+    semanal, en tres ventanas; cola fija de 8 semanas, semanas en el cuadrante y cuadrante de hace 4 semanas."""
+    reg = {r["sym"]: r.get("region") or ("Europa" if "." in r["sym"] else "EE. UU.") for r in rows}
+    sect = {r["sym"]: r.get("sector") for r in rows}
+    out = {}
+    for region in ("EE. UU.", "Europa"):
+        syms = [s for s in frames if reg.get(s) == region and sect.get(s)]
+        if len(syms) < 20:
             continue
-        idx = (1 + allr[syms].mean(axis=1).fillna(0)).cumprod()
-        rs = idx / bench
-        for h, (weeks, win, lag) in RRG_H.items():
-            ratio = 100 * rs / rs.rolling(win).mean()
-            mom = 100 * ratio / ratio.shift(lag)
-            pts = []
-            for k in range(weeks - 1, -1, -1):
-                j = len(ratio) - 1 - 5 * k
-                if j >= 0 and not math.isnan(ratio.iloc[j]) and not math.isnan(mom.iloc[j]):
-                    pts.append([ratio.index[j].strftime("%Y-%m-%d"), round(ratio.iloc[j], 2), round(mom.iloc[j], 2)])
-            if pts:
-                x, y = pts[-1][1], pts[-1][2]
-                quad = "Liderando" if x >= 100 and y >= 100 else "Debilitándose" if x >= 100 else "Rezagado" if y < 100 else "Mejorando"
-                out[h][s] = {"cola": pts, "cuadrante": quad, "n": len(syms)}
+        rets = pd.DataFrame({s: frames[s]["Close"].pct_change() for s in syms}).sort_index()
+        rets = rets[rets.notna().sum(axis=1) > len(syms) * 0.5]
+        lvl = lambda cols: (1 + rets[cols].mean(axis=1).fillna(0)).cumprod().resample("W-FRI").last()  # noqa: E731
+        bench = lvl(syms)
+        groups = {}
+        for s in syms:
+            groups.setdefault(sect[s], []).append(s)
+        out[region] = {h: {} for h in RRG_H}
+        for sector, ss in groups.items():
+            if len(ss) < 3:
+                continue
+            idx = lvl(ss)
+            for h, (win, lag) in RRG_H.items():
+                ratio, mom = rrg_series(idx, bench, win, lag)
+                df = pd.DataFrame({"x": ratio, "y": mom}).dropna()
+                if len(df) < RRG_COLA + 4:
+                    continue
+                qs = [_quad(x, y) for x, y in zip(df["x"], df["y"])]
+                cur = qs[-1]
+                weeks = 0
+                for q in reversed(qs):
+                    if q != cur:
+                        break
+                    weeks += 1
+                tail = df.iloc[-RRG_COLA:]
+                pts = [[d.strftime("%Y-%m-%d"), round(float(x), 2), round(float(y), 2)] for d, x, y in zip(tail.index, tail["x"], tail["y"])]
+                dx = round(float(df["x"].iloc[-1] - df["x"].iloc[-3]), 2)
+                dy = round(float(df["y"].iloc[-1] - df["y"].iloc[-3]), 2)
+                out[region][h][sector] = {"cola": pts, "cuadrante": cur, "n": len(ss), "semanas": weeks,
+                                          "antes": qs[-5] if len(qs) >= 5 else None, "dx": dx, "dy": dy}
     return out
+
+
 
 
 # ------------------------------------------------------------------ main

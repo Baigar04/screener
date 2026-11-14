@@ -3,13 +3,16 @@
 "use strict";
 const H = window.SCR;
 const { esc, nf, sgn, fmtDate, store } = H;
-const T = { val: undefined, ins: undefined, loading: false };
+const T = { val: undefined, ins: undefined, idx: {}, loading: false };
 
 async function ensure() {
   if (T.loading || T.val !== undefined) return;
   T.loading = true;
   const get = async (f) => { try { const r = await fetch(`data/${f}?t=${Date.now()}`, { cache: "no-store" }); return r.ok ? await r.json() : null; } catch { return null; } };
-  [T.val, T.ins] = await Promise.all([get("validacion.json"), get("insiders.json")]);
+  const ix = ["IDX_SP500", "IDX_STOXX50", "IDX_IBEX"];
+  const res = await Promise.all([get("validacion.json"), get("insiders.json"), ...ix.map((f) => get(`p/${f}.json`))]);
+  [T.val, T.ins] = res;
+  ix.forEach((f, i) => { T.idx[f] = res[2 + i]; });
   T.loading = false;
   if (H.S.view === "hoy") H.render();
 }
@@ -33,18 +36,6 @@ function dataStatus() {
   return `<div class="hoy-status">${items.join(" · ")}</div>`;
 }
 
-function market() {
-  const D = H.S.data, A = H.S.amp?.regiones || {};
-  const k = (id) => { const s = D?.series?.[id]; return s && s.estado === "ok" ? s : null; };
-  const kp = [];
-  const R = D?.regimen;
-  if (R?.estado === "ok") kp.push(`<div><span>Régimen EE. UU. ${H.evid("h")}</span><b>${esc(R.dominante)}</b><small>peso ${R.probabilidades[R.dominante]} %</small></div>`);
-  for (const [reg, a] of Object.entries(A)) kp.push(`<div><span>Amplitud ${esc(reg)}</span><b class="num">${nf(a.sobre_sma50, 0)} %</b><small>sobre su media de 50 · ${a.avances}↑ ${a.descensos}↓</small></div>`);
-  for (const id of ["vix", "us10y", "hy_oas"]) { const s = k(id); if (s) kp.push(`<div><span>${esc(s.nombre)}</span><b class="num">${nf(s.valor)}<small> ${esc(s.unidad)}</small></b><small class="num">${sgn(s.cambio_1m)} en 1 mes</small></div>`); }
-  const L = k("liq_neta"); if (L) kp.push(`<div><span>Liquidez neta Fed</span><b class="num">${nf(L.valor / 1000, 2)} bill. $</b><small class="num">${sgn(L.cambio_3m, 0)} mm $ en 3 meses</small></div>`);
-  return kp.length ? `<div class="amp-kpis hoy-kpis">${kp.join("")}</div>` : `<div class="hint">Sin datos de mercado todavía.</div>`;
-}
-
 function watchlist(uni, Q) {
   const w = Q.watch();
   if (!w.length) return `<div class="hint">No sigues ningún valor. Márcalos con ★ en el screener o en su ficha y aquí verás cada día qué ha cambiado.</div>`;
@@ -55,23 +46,6 @@ function watchlist(uni, Q) {
         <td class="num">${c?.d ? `<span class="chg ${c.d > 0 ? "p" : "n"}">${sgn(c.d, 0)}</span>` : "—"}</td>
         <td>${esc(r.veredicto || "—")}${c && c.t0 && c.t1 && c.t0 !== c.t1 ? ` <span class="hint">(antes ${esc(c.t0)})</span>` : ""}</td>
         <td>${r.resultados ? `<span class="${soon ? "stale-txt" : ""}">${fmtDate(r.resultados)}</span>` : "—"}</td></tr>`; }).join("")}</tbody></table></div>`;
-}
-
-function movers(uni, Q) {
-  if (!Q.sc()?.anterior) return `<div class="hint">Disponible desde la segunda actualización con registro de la sesión anterior.</div>`;
-  const all = uni.map((r) => ({ r, c: Q.changeOf(r.sym) })).filter((x) => x.c?.d);
-  const pick = (xs) => xs.map(({ r, c }) => `<li>${link(r.sym)} ${c.n0} → ${c.n1} <span class="chg ${c.d > 0 ? "p" : "n"}">${sgn(c.d, 0)}</span> <span class="hint">${esc(c.fx.slice(0, 1).map((x) => `${x.t} ${sgn(x.d, 0)}`).join("") || (c.t0 !== c.t1 ? "técnico " + (c.t1 || "") : ""))}</span></li>`).join("");
-  const up = all.filter((x) => x.c.d > 0).sort((a, b) => b.c.d - a.c.d).slice(0, 5), dn = all.filter((x) => x.c.d < 0).sort((a, b) => a.c.d - b.c.d).slice(0, 5);
-  return `<div class="f-grid"><div><div class="sub">Suben</div><ul class="hoy-list">${pick(up) || "<li class='hint'>Ninguno</li>"}</ul></div><div><div class="sub">Bajan</div><ul class="hoy-list">${pick(dn) || "<li class='hint'>Ninguno</li>"}</ul></div></div>
-    <div class="method">Con tus pesos, frente a la sesión del ${fmtDate(Q.sc().anterior.fecha)}. Lista completa en Screener → «Qué ha cambiado».</div>`;
-}
-
-function earnings(uni, Q) {
-  const w = new Set(Q.watch());
-  const xs = uni.filter((r) => r.resultados && r.resultados >= today() && r.resultados <= addDays(today(), 7))
-    .sort((a, b) => (w.has(b.sym) - w.has(a.sym)) || a.resultados.localeCompare(b.resultados) || (b.mcap_usd || 0) - (a.mcap_usd || 0)).slice(0, 14);
-  return xs.length ? `<ul class="hoy-list cols">${xs.map((r) => `<li>${fmtDate(r.resultados)} · ${link(r.sym)}${w.has(r.sym) ? " ★" : ""} <span class="hint">${esc((r.nombre || "").slice(0, 22))}</span></li>`).join("")}</ul>`
-    : `<div class="hint">Ningún resultado del universo en los próximos 7 días.</div>`;
 }
 
 function insiders() {
@@ -132,21 +106,112 @@ function confirmBox(n, fecha) {   // confirmación propia (sin diálogos del nav
   return false;
 }
 
+/* ---------- diseño A: tira de índices y filas «etiqueta … valor» ---------- */
+const kv = (l, v, h = "") => `<div class="hr"><span>${l}</span><span class="v">${v}${h ? ` <i>${h}</i>` : ""}</span></div>`;
+const sec = (t, hint, body) => `<section class="hs"><h3>${t}<span>${hint}</span></h3>${body}</section>`;
+function strip() {
+  const D = H.S.data, out = [];
+  for (const [f, n] of [["IDX_SP500", "S&P 500"], ["IDX_STOXX50", "Euro Stoxx 50"], ["IDX_IBEX", "IBEX 35"]]) {
+    const d = T.idx[f]; if (!d?.c?.length) continue;
+    const c = d.c.filter((x) => x != null), l = c[c.length - 1], p = c[c.length - 2];
+    out.push(`<div><span>${n}</span><b class="num">${nf(l, 1)}</b>${chg(p ? (l / p - 1) * 100 : null, 2)}</div>`);
+  }
+  const s = (id) => { const x = D?.series?.[id]; return x && x.estado === "ok" ? x : null; };
+  const y = s("us10y"); if (y) out.push(`<div><span>Bono EE. UU. 10 a</span><b class="num">${nf(y.valor, 2)} %</b><small class="num">${sgn(y.cambio_1m)} en 1 mes</small></div>`);
+  const v = s("vix"); if (v) out.push(`<div><span>VIX</span><b class="num">${nf(v.valor, 1)}</b><small class="num">${sgn(v.cambio_1m)} en 1 mes</small></div>`);
+  return out.length ? `<div class="ixs">${out.join("")}</div>` : "";
+}
+function pulse() {
+  const D = H.S.data, A = H.S.amp?.regiones || {}, rows = [];
+  for (const [reg, a] of Object.entries(A)) {
+    rows.push(kv(`Sobre su media de 200 · ${esc(reg)}`, `${nf(a.sobre_sma200, 0)} %`, a.sobre_sma200_1m != null ? `hace 1 mes ${nf(a.sobre_sma200_1m, 0)} %` : ""));
+    if (a.max52 != null) { const d = a.max52 - a.min52; rows.push(kv(`Máximos − mínimos 52 sem. · ${esc(reg)}`, `<span class="chg ${d > 0 ? "p" : d < 0 ? "n" : "z"}">${d > 0 ? "+" : ""}${d}</span>`)); }
+  }
+  const L = D?.series?.liq_neta; if (L?.estado === "ok") rows.push(kv("Liquidez neta de la Fed", `${nf(L.valor / 1000, 2)} bill. $`, `${sgn(L.cambio_3m, 0)} mm $ en 3 meses`));
+  const R = D?.regimen; if (R?.estado === "ok") rows.push(kv(`Régimen macro EE. UU. ${H.evid("h")}`, esc(R.dominante), `${R.probabilidades[R.dominante]} %`));
+  const G = window.SCRKit?.E?.sec?.rrg?.["EE. UU."]?.medio;
+  if (G) {
+    const by = (q) => Object.entries(G).filter(([, r]) => r.cuadrante === q).sort((a, b) => b[1].cola.at(-1)[1] - a[1].cola.at(-1)[1]).map(([k]) => esc(window.SCRKit.sn(k)));
+    const l = by("Liderando"), d = by("Debilitándose");
+    rows.push(kv("Sectores líderes EE. UU. (rotación)", l.slice(0, 3).join(", ") || "ninguno"));
+    if (d.length) rows.push(kv("Sectores debilitándose", d.slice(0, 3).join(", ")));
+  }
+  return rows.join("") || `<div class="hint">Sin datos de mercado todavía.</div>`;
+}
+function watchToday(uni, Q) {
+  const w = Q.watch(); if (!w.length) return `<div class="hint">No sigues ningún valor. Márcalos con ☆ en el screener o pulsa W sobre una fila.</div>`;
+  const rows = w.map((s) => uni.find((r) => r.sym === s)).filter(Boolean).map((r) => {
+    const c = Q.changeOf(r.sym), why = [];
+    if (r.resultados && r.resultados >= today() && r.resultados <= addDays(today(), 14)) why.push(`resultados el ${fmtDate(r.resultados)}`);
+    if (c?.t0 && c.t1 && c.t0 !== c.t1) why.push(`técnico pasa a ${esc(c.t1)}`);
+    if (c?.d) why.push(`nota ${c.n0} → ${c.n1}`);
+    return { r, why, k: why.length * 10 + Math.abs(r.r1d || 0) };
+  }).sort((a, b) => b.k - a.k);
+  const top = rows.filter((x) => x.why.length).slice(0, 6), rest = rows.length - top.length;
+  return top.map(({ r, why }) => kv(`${link(r.sym)} <i>· ${why.join(" · ")}</i>`, chg(r.r1d, 1))).join("")
+    + kv(top.length ? `Resto (${rest}) sin cambios relevantes` : `Sin cambios relevantes en tus ${rows.length} valores`, "");
+}
+function earn(uni, Q) {
+  const w = new Set(Q.watch()), top = new Set(uni.filter((r) => r.score != null).sort((a, b) => b.score - a.score).slice(0, 50).map((r) => r.sym));
+  const xs = uni.filter((r) => (w.has(r.sym) || top.has(r.sym)) && r.resultados && r.resultados >= today()).sort((a, b) => a.resultados.localeCompare(b.resultados)).slice(0, 7);
+  return xs.length ? xs.map((r) => kv(new Date(r.resultados + "T12:00").toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "short" }), `${link(r.sym)}${w.has(r.sym) ? " ★" : ""}`)).join("")
+    : `<div class="hint">Sin fechas de resultados próximas en tu Watchlist ni en el top 50.</div>`;
+}
+function moves(uni, Q) {
+  if (!Q.sc()?.anterior) return `<div class="hint">Disponible desde la segunda actualización con registro de la sesión anterior.</div>`;
+  const all = uni.map((r) => ({ r, c: Q.changeOf(r.sym) })).filter((x) => x.c?.d).sort((a, b) => Math.abs(b.c.d) - Math.abs(a.c.d)).slice(0, 6);
+  return all.length ? all.map(({ r, c }) => kv(`${link(r.sym)} <i>· ${esc((r.nombre || "").slice(0, 20))}</i>`, `${c.n0} → <b>${c.n1 ?? "s. d."}</b> <span class="chg ${c.d > 0 ? "p" : "n"}">${sgn(c.d, 0)}</span>`)).join("")
+    : `<div class="hint">Ningún cambio de nota desde la sesión anterior.</div>`;
+}
+function smartRows() {
+  const out = [], I = T.ins, lim = addDays(today(), -7);
+  if (I) {
+    const rac = Object.entries(I.por_valor || {}).filter(([, x]) => x.racimo).map(([s]) => s);
+    out.push(kv("Compras en racimo de directivos", rac.length ? rac.slice(0, 3).map((s) => link(s)).join(", ") : "ninguna"));
+    const buys = (I.ops || []).filter((o) => o.codigo === "P" && o.fecha_pres >= lim && (o.importe || 0) >= 50000);
+    out.push(kv("Compras de directivos ≥ 50.000 $", `${buys.length}`, "últimos 7 días"));
+  }
+  const D = window.SCRSmart?.data();
+  if (!D) window.SCRSmart?.ensure();
+  else {
+    const g = (D.gestores || []).filter((x) => x.actualizado_iso && x.actualizado_iso >= addDays(today(), -10));
+    out.push(kv("Superinversores con cartera nueva", g.length ? `${g.length}` : "ninguno", "últimos 10 días"));
+    const c = (D.congreso || []).filter((x) => x.fecha_decl >= lim);
+    out.push(kv("Congreso de EE. UU.", `${c.length} operaciones`, [...new Set(c.map((x) => x.sym))].slice(0, 3).join(", ")));
+  }
+  return out.join("") || `<div class="hint">${T.loading ? "Cargando…" : "Sin datos todavía."}</div>`;
+}
+function diaryRows() {
+  const Dd = window.SCRDiario; if (!Dd) return "";
+  const L = Dd.list().filter((e) => !e.anulada).slice(-5).reverse(), out = [];
+  for (const e of L) {
+    const p = Dd.perf(e, null);
+    const v = p.ex != null ? `<span class="chg ${p.ex > 0 ? "p" : p.ex < 0 ? "n" : "z"}">${sgn(p.ex, 1)} pp</span> <i>vs índice</i>` : p.loading ? "…" : "—";
+    out.push(kv(`${esc(Dd.decName(e.dec))} · ${link(e.sym)} <i>· ${fmtDate(e.f.slice(0, 10))}</i>`, v));
+  }
+  const R = Dd.reg();
+  out.push(kv("Registro inmutable", R ? (R.integra ? `<span class="chg p">● íntegro</span> · ${R.dias} ${R.dias === 1 ? "sesión" : "sesiones"}` : '<span class="chg n">● alterado</span>') : "comprobando…"));
+  return (L.length ? "" : `<div class="hint">Aún no has registrado decisiones. Pulsa «Registrar decisión» en una ficha.</div>`) + out.join("");
+}
+
 function render() {
   ensure();
   window.SCREnsureUni?.();
-  const uni = window.SCRUni?.() || [], Q = window.SCREq;
+  const uni = window.SCRUni?.() || [], Q = window.SCREq, ok = uni.length && Q;
   const wait = `<div class="skel" style="height:120px"></div>`;
-  return `${dataStatus()}
-    <h2 class="sec">Mercado</h2>${market()}
-    <div class="hoy-grid">
-      <div class="box"><b>Tu seguimiento</b>${uni.length && Q ? watchlist(uni, Q) : wait}</div>
-      <div class="box"><b>Mayores cambios de nota</b>${uni.length && Q ? movers(uni, Q) : wait}</div>
-      <div class="box"><b>Resultados en los próximos 7 días</b>${uni.length && Q ? earnings(uni, Q) : wait}</div>
-      <div class="box"><b>Compras de directivos</b> ${H.evid("h")}${insiders()}</div>
-      <div class="box"><b>Smart money reciente</b> ${H.evid("h")}${smart()}</div>
-      ${backupBox()}
-    </div>`;
+  const fecha = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return `<div class="pg-head"><h1>Hoy</h1><div class="pg-sub">${fecha.charAt(0).toUpperCase() + fecha.slice(1)} · ${dataStatus().replace(/<\/?div[^>]*>/g, "")}</div></div>
+    ${strip()}
+    <div class="hgrid">
+      ${sec("Pulso del mercado", "amplitud y liquidez", pulse())}
+      ${sec("Tu Watchlist hoy", ok ? `${Q.watch().length} valores` : "", ok ? watchToday(uni, Q) : wait)}
+      ${sec("Próximos resultados", "tu Watchlist y top 50 por nota", ok ? earn(uni, Q) : wait)}
+      ${sec("Movimientos de la nota", "desde la sesión anterior · tus pesos", ok ? moves(uni, Q) : wait)}
+      ${sec(`Smart money ${H.evid("h")}`, "últimos 7-10 días", smartRows())}
+      ${sec("Tu Diario", "decisiones abiertas", diaryRows())}
+    </div>
+    <details class="hoy-more"><summary>Más: detalle de directivos, superinversores y copia de seguridad</summary>
+      <div class="hoy-grid"><div class="box"><b>Compras de directivos</b>${insiders()}</div><div class="box"><b>Smart money reciente</b>${smart()}</div>${backupBox()}</div></details>`;
 }
 
 function onClick(t) {
