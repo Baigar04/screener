@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-14T15:18:12+00:00",
+ "generado": "2026-11-14T18:27:00+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -7,7 +7,7 @@
   },
   "universe.json": {
    "estado": "ok",
-   "detalle": "1511 valores · 1509/1509 precios al día"
+   "detalle": "1511 valores · 1510/1510 precios al día"
   },
   "sectors.json": {
    "estado": "ok",
@@ -47,7 +47,7 @@
   },
   "news_cache.json": {
    "estado": "ok",
-   "detalle": "1513 entradas"
+   "detalle": "1511 entradas"
   },
   "sec_cache.json": {
    "estado": "ok",
