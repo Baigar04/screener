@@ -243,6 +243,47 @@ def tiingo_fallback(missing, frames, raw):
     return got
 
 
+SPLITS = {}   # símbolo → [(fecha, proporción)] de Yahoo (5 años)
+
+
+def split_adjust(q, splits):
+    """BPA y acciones de los trimestres SEC en la base de acciones actual. Un trimestre presentado antes de un split
+    está en acciones antiguas (las empresas reexpresan solo en documentos posteriores): BPA / proporción y acciones ×
+    proporción. Columna 15 = factor aplicado (None si ninguno). El BPA original de la SEC no se pierde: es BPA × factor."""
+    out = []
+    for r in q:
+        r = list(r) + [None] * max(0, 16 - len(r))
+        f = 1.0
+        for d, n in splits:
+            if r[1] and r[1] < d and n > 0:
+                f *= n
+        if f != 1.0:
+            if r[8] is not None:
+                r[8] = round(r[8] / f, 4)
+            if r[14] is not None:
+                r[14] = r[14] * f
+            r[15] = f
+        out.append(r)
+    return out
+
+
+def split_adjust_fy(fy, splits):
+    """Acciones de los ejercicios (portada, col. 9, y diluidas medias, col. 20) en la base de acciones actual."""
+    out = []
+    for r in fy:
+        r = list(r)
+        f = 1.0
+        for d, n in splits:
+            if r[1] and r[1] < d and n > 0:
+                f *= n
+        if f != 1.0:
+            for i in (9, 20):
+                if len(r) > i and r[i] is not None:
+                    r[i] = r[i] * f
+        out.append(r)
+    return out
+
+
 def prices(symbols):
     frames, raw = {}, {}
     for i in range(0, len(symbols), 150):
@@ -257,6 +298,9 @@ def prices(symbols):
                     try:
                         sub = df[s].dropna(subset=["Close"]) if isinstance(df.columns, pd.MultiIndex) else df.dropna(subset=["Close"])
                         sub = drop_open_session(s, sub)
+                        if "Stock Splits" in sub:
+                            sp = sub["Stock Splits"].fillna(0)
+                            SPLITS[s] = [(d.strftime("%Y-%m-%d"), float(v)) for d, v in sp[sp > 0].items() if v != 1]
                         if len(sub) > 30:
                             raw[s] = sub[[c for c in ("Open", "High", "Low", "Close", "Volume", "Dividends") if c in sub]]
                             adj = sub.copy()
@@ -350,6 +394,23 @@ def _row(df, names):
         if df is not None and n in df.index:
             return df.loc[n]
     return None
+
+
+def yahoo_quarters(sym):
+    """Respaldo (fase 9) para empresas de EE. UU. sin trimestres recientes en la API de la SEC: ventas, beneficio neto
+    y BPA diluido trimestrales de Yahoo. Sin fecha de presentación: la ficha los marca como «Yahoo»."""
+    t = yf.Ticker(sym)
+    inc = t.quarterly_income_stmt
+    if inc is None or inc.empty:
+        return []
+    v, b, e = _row(inc, ["Total Revenue", "Operating Revenue"]), _row(inc, ["Net Income", "Net Income Common Stockholders"]), _row(inc, ["Diluted EPS", "Basic EPS"])
+    out = []
+    for d in sorted(inc.columns):
+        g = lambda s_: None if s_ is None else jnum(s_.get(d), 4)  # noqa: E731
+        if g(v) is None and g(b) is None:
+            continue
+        out.append([pd.Timestamp(d).strftime("%Y-%m-%d"), g(v), g(b), g(e)])
+    return out[-8:]
 
 
 def fundamentals(sym):
@@ -696,6 +757,18 @@ def main():
     except Exception as e:  # noqa: BLE001
         SECD = {}
         log("Ficha: sin cuentas SEC", e)
+    # respaldo de Yahoo para las empresas de EE. UU. cuyo último trimestre SEC tiene más de 135 días (o sin SEC)
+    YQ = {}
+    lim = (NOW - pd.Timedelta(days=135)).strftime("%Y-%m-%d")
+    stale_q = [s for s in syms if "." not in s and not s.startswith("IDX_")
+               and max((r[0] for r in (SECD.get(s, {}).get("q") or []) if r[2] is not None or r[3] is not None), default="") < lim]
+    for s in stale_q[:80]:
+        try:
+            YQ[s] = yahoo_quarters(s)
+        except Exception as e:  # noqa: BLE001
+            log("trimestres Yahoo", s, str(e)[:80])
+        time.sleep(0.3)
+    log(f"Trimestres de respaldo (Yahoo): {sum(1 for v in YQ.values() if v)} de {len(stale_q)} empresas sin trimestres SEC recientes")
     rows = []
     for s in syms:
         f = cache.get(s, {})
@@ -710,7 +783,10 @@ def main():
         if s in SECD:   # cuentas de la SEC para la ficha (EE. UU.): 12 trimestres y 6 ejercicios con su fecha de presentación
             e = SECD[s]
             detail["sec"] = {"cik": e.get("cik"), "act": e.get("act"), "v": e.get("v"), "nq": len(e.get("q") or []), "nfy": len(e.get("fy") or []),
-                             "q": (e.get("q") or [])[-12:], "fy": (e.get("fy") or [])[-6:]}
+                             "q": split_adjust((e.get("q") or [])[-12:], SPLITS.get(s, [])), "fy": split_adjust_fy((e.get("fy") or [])[-6:], SPLITS.get(s, [])),
+                             "splits": SPLITS.get(s, [])}
+        if YQ.get(s):
+            detail["yq"] = YQ[s]
         if s in frames:
             tec, s50, s200 = technical(frames[s])
             r.update(tec)

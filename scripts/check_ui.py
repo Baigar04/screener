@@ -283,6 +283,25 @@ def diseno1(pg, base):
     pg.click("#gear")
 
 
+def fase9(pg, base):
+    """Fase 9: calidad del beneficio y balance en Resumen y Fundamentales (EE. UU. con SEC; Europa aproximado)."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/empresa/AAPL/resumen")
+    pg.wait_for_selector("#view .f3 .fs", timeout=60000)
+    pg.wait_for_timeout(1000)
+    t = pg.text_content("#view .f3c") or ""
+    check("AAPL: calidad del beneficio en el Resumen", "Calidad del beneficio y balance" in t and "Conversión en caja" in t, t[-120:].replace("\n", " "))
+    pg.goto(base + "#/empresa/AAPL/fund")
+    pg.wait_for_timeout(2500)
+    t = pg.text_content("#view") or ""
+    n = pg.locator("#view .q3 tr").count()
+    check("AAPL: bloque completo en Fundamentales", all(x in t for x in ("Calidad del beneficio", "Balance y liquidez", "Dilución", "Evolución anual")) and n >= 6, f"{n} métricas")
+    check("AAPL: datos nuevos de la SEC (caja, intereses o acciones diluidas)", any(x in t for x in ("Cobertura de intereses", "Acciones diluidas, interanual", "Deuda neta")))
+    pg.goto(base + "#/empresa/SAN.MC/fund")
+    pg.wait_for_timeout(2500)
+    check("SAN.MC: bloque aproximado sin errores", "Calidad del beneficio y balance" in (pg.text_content("#view") or ""))
+
+
 def diseno3(pg, base):
     """Diseño A · entrega 3: Screener de una línea, «Hoy» en rejilla, rotación sectorial nueva y atajos."""
     pg.set_viewport_size({"width": 1440, "height": 900})
@@ -325,7 +344,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, diseno1, diseno3):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

@@ -20,10 +20,13 @@ function detail(sym) {
   }
   return null;
 }
-/* trimestres SEC: [fin, presentado, ventas, bn, ebit, bruto, activos, patrimonio, bpa, periodo, forma, cfo_acumulado] */
-const Q = { fin: 0, pres: 1, v: 2, bn: 3, ebit: 4, bruto: 5, act: 6, pat: 7, bpa: 8, per: 9, forma: 10, cfo: 11 };
-/* ejercicios SEC: [fin, presentado, ventas, bn, ebit, patrimonio, deuda, cfo, capex, acciones, activos, bruto, ac, pc] */
-const FY = { fin: 0, pres: 1, v: 2, bn: 3, ebit: 4, pat: 5, deuda: 6, cfo: 7, capex: 8, acc: 9, act: 10, bruto: 11 };
+/* trimestres SEC: [fin, presentado, ventas, bn, ebit, bruto, activos, patrimonio, bpa (ajustado por splits), periodo, forma,
+   cfo_acumulado, caja + inversiones a corto, deuda financiera, acciones diluidas medias (ajustadas), factor de split aplicado] */
+const Q = { fin: 0, pres: 1, v: 2, bn: 3, ebit: 4, bruto: 5, act: 6, pat: 7, bpa: 8, per: 9, forma: 10, cfo: 11, caja: 12, deuda: 13, acc: 14, split: 15 };
+/* ejercicios SEC: [fin, presentado, ventas, bn, ebit, patrimonio, deuda, cfo, capex, acciones, activos, bruto, ac, pc,
+   caja + inv. cp, pagos con acciones, intereses, vencimientos 12 m, vencimientos año 2, recompras, acciones diluidas medias] */
+const FY = { fin: 0, pres: 1, v: 2, bn: 3, ebit: 4, pat: 5, deuda: 6, cfo: 7, capex: 8, acc: 9, act: 10, bruto: 11, ac: 12, pc: 13,
+  caja: 14, sbc: 15, int: 16, v1: 17, v2: 18, rec: 19, accd: 20 };
 function qLabel(q, short) {
   const p = q[Q.per], m = /^(FY|CY)(\d{4})Q([1-4])$/.exec(p || "");
   if (m) return short ? `T${m[3]} ${m[2].slice(2)}` : `T${m[3]} ${m[1] === "FY" ? "FY" : ""}${m[2]}`;
@@ -175,10 +178,135 @@ function valCol(c) {
     return [t, `${nf(v, 1)}${suf} <span class="fa">vs ${nf(m, 1)}${suf}</span> ${d == null ? "" : `<span class="${(lowGood ? -d : d) > 0 ? "pos" : "neg"}">${sgn(d, 0)} %</span>`}`]; };
   return sec2(`Valoración frente a su ${refN}`, kvt([line("PER", r.per, ref.per, "×", true), line("EV/EBITDA", r.ev_ebitda, ref.ev_ebitda, "×", true), line("P/VC", r.pb, ref.pb, "×", true), line("P/Ventas", r.ps, ref.ps, "×", true)]), `mediana · ${ref.n || "—"} valores`);
 }
+/* ---------- fase 9 · calidad del beneficio y balance ---------- */
+const FIN_SECT = new Set(["Financial Services"]);
+const st3 = (v, ok, bad, hiGood = true) => (v == null ? "na" : hiGood ? (v >= ok ? "ok" : v < bad ? "bad" : "warn") : (v <= ok ? "ok" : v > bad ? "bad" : "warn"));
+const xx = (v, d = 1) => (v == null ? "—" : nf(v, d) + "×");
+const pp = (v, d = 1) => (v == null ? "—" : `${sgn(v, d)} %`);
+function lastWith(rows, col) { for (let i = rows.length - 1; i >= 0; i--) if (rows[i][col] != null) return i; return -1; }
+/* métricas: [grupo, etiqueta, valor mostrado, estado, explicación, fuente] + valores en bruto para la lectura */
+function quality(c) {
+  const { r } = c, out = [], M = {}, fin = FIN_SECT.has(r.sector);
+  const add = (g, t, v, s, tip, src, sv) => out.push({ g, t, v, s, tip, src, sv });
+  if (c.us && c.fy.length) {
+    const fy = c.fy, L = fy[fy.length - 1], P = fy[fy.length - 2], y = L[0].slice(0, 4), cur = c.cur;
+    const g = (x, k) => (x && x[FY[k]] != null ? x[FY[k]] : null);
+    /* calidad del beneficio */
+    const bn = g(L, "bn"), cfo = g(L, "cfo");
+    if (bn != null && cfo != null) {
+      M.conv = bn > 0 ? cfo / bn : null;
+      add("b", `Conversión en caja ${y}`, bn > 0 ? xx(M.conv, 2) : '<span class="mu">pérdidas</span>', bn > 0 ? st3(M.conv, 0.9, 0.7) : "na",
+        "Flujo de caja operativo / beneficio neto. Por encima de 1, el beneficio se cobra; muy por debajo, parte del beneficio son apuntes contables.", "10-K");
+    }
+    const l3 = fy.slice(-3), sb = l3.reduce((a, x) => a + (g(x, "bn") ?? NaN), 0), sc = l3.reduce((a, x) => a + (g(x, "cfo") ?? NaN), 0);
+    if (l3.length === 3 && isFinite(sb) && isFinite(sc) && sb > 0) { M.conv3 = sc / sb; add("b", "Conversión en caja, 3 años", xx(M.conv3, 2), st3(M.conv3, 0.9, 0.7), "Suma de 3 ejercicios: corrige los años con cobros o pagos desplazados.", "10-K"); }
+    const a1 = g(L, "act"), a0 = g(P, "act");
+    if (bn != null && cfo != null && a1) {
+      M.acr = (100 * (bn - cfo)) / (a0 ? (a1 + a0) / 2 : a1);
+      add("b", "Devengos (Sloan)", pp(M.acr, 1), st3(M.acr, 0, 7, false), "(Beneficio − caja operativa) / activos medios. Negativo = el beneficio está respaldado por caja; muy alto = beneficio contable que no se cobra (señal de baja calidad, Sloan 1996).", "10-K");
+    }
+    const capex = g(L, "capex"), v = g(L, "v"), sbc = g(L, "sbc");
+    if (cfo != null && capex != null) {
+      M.fcf = cfo - capex;
+      add("b", `Flujo de caja libre ${y}`, `${mm(M.fcf)} M${v ? ` <span class="fa">· ${nf((100 * M.fcf) / v, 1)} % de ventas</span>` : ""}`, M.fcf > 0 ? "ok" : "bad", "Caja operativa menos inversión en inmovilizado.", "10-K");
+    }
+    if (sbc != null && v) {
+      M.sbc = (100 * sbc) / v;
+      add("b", "Pagos con acciones", `${nf(M.sbc, 1)} % de ventas${M.fcf != null ? ` <span class="fa">· FCF tras ellos ${mm(M.fcf - sbc)} M</span>` : ""}`, st3(M.sbc, 5, 10, false),
+        "Remuneración en acciones: no sale caja, pero diluye al accionista. Se suma a la caja operativa, por eso el FCF «tras pagos con acciones» es más prudente.", "10-K");
+    }
+    /* balance (no se interpreta igual en bancos y aseguradoras) */
+    if (fin) add("s", "Balance", '<span class="mu">no comparable en financieras</span>', "na", "En bancos y aseguradoras los depósitos y reservas son su materia prima: deuda neta, cobertura y liquidez corriente no se leen como en una industrial.", "");
+    else {
+      const qi = lastWith(c.q, Q.deuda), qc = lastWith(c.q, Q.caja), qq = qi >= 0 ? c.q[qi] : null;
+      const debt = qq ? qq[Q.deuda] : g(L, "deuda"), cash = qc >= 0 ? c.q[qc][Q.caja] : g(L, "caja"), when = qq ? qLabel(qq, true) : y;
+      if (debt != null || cash != null) {
+        M.nd = (debt || 0) - (cash || 0);
+        const cq = cfoQ(c.q).slice(-4), cfoT = cq.length === 4 && cq.every((x) => x != null) ? cq.reduce((a, b) => a + b, 0) : cfo;
+        M.ndc = M.nd <= 0 ? 0 : cfoT > 0 ? M.nd / cfoT : null;
+        add("s", `Deuda neta (${when})`, M.nd <= 0 ? `<span class="pos">caja neta ${mm(-M.nd)} M</span>` : `${mm(M.nd)} M <span class="fa">· ${M.ndc == null ? "caja operativa negativa" : nf(M.ndc, 1) + " años de caja operativa"}</span>`,
+          M.nd <= 0 ? "ok" : M.ndc == null ? "bad" : st3(M.ndc, 2, 4, false), "Deuda financiera (sin arrendamientos) menos caja e inversiones a corto, frente a la caja operativa de 12 meses: cuántos años tardaría en pagarla.", "10-Q/10-K");
+      }
+      const ebit = g(L, "ebit"), it = g(L, "int");
+      if (ebit != null && it != null && it > 0) { M.cov = ebit / it; add("s", "Cobertura de intereses", xx(M.cov, 1), st3(M.cov, 8, 3), "Resultado operativo / gastos financieros del ejercicio. Por debajo de 3, una caída del beneficio compromete el pago de intereses.", "10-K"); }
+      else if (ebit != null && debt != null && debt > 0 && it == null) add("s", "Cobertura de intereses", '<span class="mu">sin dato de intereses</span>', "na", "La empresa no publica el gasto financiero con una etiqueta estándar.", "10-K");
+      const ac = g(L, "ac"), pcv = g(L, "pc");
+      if (ac && pcv) { M.lc = ac / pcv; add("s", "Liquidez corriente", xx(M.lc, 2), st3(M.lc, 1.2, 1), "Activo corriente / pasivo corriente al cierre del ejercicio.", "10-K"); }
+      const v1 = g(L, "v1"), v2 = g(L, "v2"), cashY = g(L, "caja");
+      if (v1 != null) {
+        M.cv = v1 > 0 && cashY != null ? cashY / v1 : null;
+        add("s", "Vencimientos de deuda", `${mm(v1)} M a 12 m${v2 != null ? ` · ${mm(v2)} M el 2.º año` : ""}${M.cv != null ? ` <span class="fa">· caja ${nf(M.cv, 1)}×</span>` : ""}`,
+          v1 <= 0 ? "ok" : M.cv == null ? "na" : st3(M.cv, 1.5, 1), "Principal de deuda que vence en los próximos 12 meses y en el segundo año (10-K), frente a la caja e inversiones a corto del cierre.", "10-K",
+          `${mm(v1)} M a 12 m`);
+      }
+    }
+    /* dilución */
+    const qi = lastWith(c.q, Q.acc);
+    if (qi >= 0) { const j = yearAgo(c.q, qi); if (j >= 0 && c.q[j][Q.acc]) { M.dil = chg(c.q[qi][Q.acc], c.q[j][Q.acc]);
+      add("d", `Acciones diluidas, interanual (${qLabel(c.q[qi], true)})`, pp(M.dil, 1), st3(M.dil, 1, 3, false), "Variación de las acciones diluidas medias frente al mismo trimestre del año anterior. Negativo = recompra neta. Ajustado por splits.", "10-Q"); } }
+    const d3 = fy.length >= 4 ? [fy[fy.length - 4], L] : null;
+    if (d3 && g(d3[0], "accd") && g(L, "accd")) { M.dil3 = (Math.pow(g(L, "accd") / g(d3[0], "accd"), 1 / 3) - 1) * 100; add("d", "Acciones diluidas, 3 años (anual)", pp(M.dil3, 1), st3(M.dil3, 1, 3, false), "Ritmo anual compuesto de las acciones diluidas medias en 3 ejercicios (ajustado por splits).", "10-K"); }
+    const rec = g(L, "rec");
+    if (rec != null && rec > 0) add("d", `Recompras ${y}`, `${mm(rec)} M${M.fcf > 0 ? ` <span class="fa">· ${nf((100 * rec) / M.fcf, 0)} % del FCF</span>` : ""}`, M.fcf > 0 && rec > 1.2 * M.fcf ? "warn" : "ok", "Pagos por recompra de acciones propias. Por encima del flujo de caja libre, se financian con deuda o caja acumulada.", "10-K");
+    if (c.sec.splits?.length) add("d", "Splits (5 años)", c.sec.splits.map(([d, n]) => `${fmtDate(d)} ${n >= 1 ? nf(n, 0) + ":1" : "1:" + nf(1 / n, 0)}`).join(" · "), "na", "BPA y acciones de los trimestres anteriores se muestran en la base de acciones actual.", "Yahoo");
+  } else {
+    const an = c.d?.anual || {}, ys = Object.keys(an).sort(), y = ys[ys.length - 1], a = y ? an[y] : null;
+    if (a && a.fcf != null && a.beneficio_neto) { M.conv = a.beneficio_neto > 0 ? a.fcf / a.beneficio_neto : null;
+      add("b", `FCF / beneficio ${y}`, a.beneficio_neto > 0 ? xx(M.conv, 2) : '<span class="mu">pérdidas</span>', a.beneficio_neto > 0 ? st3(M.conv, 0.8, 0.5) : "na", "Flujo de caja libre / beneficio neto (aproximación: Yahoo no da la caja operativa por separado en todas las europeas).", "Yahoo"); }
+    if (!fin && (r.deuda != null || r.caja != null)) { M.nd = (r.deuda || 0) - (r.caja || 0);
+      add("s", "Deuda neta", M.nd <= 0 ? `<span class="pos">caja neta ${mm(-M.nd)} M</span>` : `${mm(M.nd)} M${r.deuda_neta_ebitda != null ? ` <span class="fa">· ${nf(r.deuda_neta_ebitda, 1)}× EBITDA</span>` : ""}`,
+        M.nd <= 0 ? "ok" : st3(r.deuda_neta_ebitda, 2, 3.5, false), "Deuda total (incluye arrendamientos) menos caja, según Yahoo.", "Yahoo"); }
+    if (fin) add("s", "Balance", '<span class="mu">no comparable en financieras</span>', "na", "En bancos y aseguradoras deuda y liquidez no se leen como en una industrial.", "");
+    add("d", "Dilución", '<span class="mu">sin dato en la fuente</span>', "na", "Yahoo no da el histórico de acciones de las europeas.", "");
+  }
+  return { items: out, M };
+}
+const QG = { b: "Calidad del beneficio", s: "Balance y liquidez", d: "Dilución" };
+const qRow = (x) => [`${dot(x.s)} ${x.t.replace(/ \(.*\)$/, "")}`, x.sv || x.v.replace(/ <span class="fa">.*?<\/span>/g, ""), x.tip];
+function qualityCol(c) {
+  const { items } = quality(c); if (!items.length) return "";
+  const pick = ["Conversión en caja", "Devengos", "Deuda neta", "Cobertura", "Vencimientos", "Acciones diluidas, interanual", "FCF / beneficio", "Balance"];
+  const sel = items.filter((x) => pick.some((p) => x.t.startsWith(p))).slice(0, 6);
+  return sec2("Calidad del beneficio y balance", kvt(sel.map(qRow)) + `<div class="fsrc"><button class="link-btn" data-fsec="fund">detalle en Fundamentales</button></div>`, c.us ? "SEC" : "Yahoo · aproximado");
+}
+function qualityBlock(c) {
+  const { items } = quality(c); if (!items.length) return "";
+  const grp = Object.entries(QG).map(([g, t]) => { const xs = items.filter((x) => x.g === g); return xs.length ? `<div>${sec2(t, `<table class="kvt">${xs.map((x) => `<tr><td data-tip="${esc(x.tip + (x.src ? " Fuente: " + x.src + "." : ""))}">${dot(x.s)} ${x.t}</td><td class="num">${x.v}</td></tr>`).join("")}</table>`)}</div>` : ""; }).join("");
+  let tbl = "";
+  if (c.us && c.fy.length >= 2) {
+    const fy = c.fy, g = (x, k) => x[FY[k]];
+    const R = [
+      ["Beneficio neto", (x) => mm(g(x, "bn"))], ["Caja operativa", (x) => mm(g(x, "cfo"))],
+      ["conversión en caja", (x) => (g(x, "bn") > 0 && g(x, "cfo") != null ? xx(g(x, "cfo") / g(x, "bn"), 2) : "—"), "p"],
+      ["Flujo de caja libre", (x) => (g(x, "cfo") != null && g(x, "capex") != null ? mm(g(x, "cfo") - g(x, "capex")) : "—")],
+      ["Pagos con acciones", (x) => mm(g(x, "sbc"))],
+      ["Caja e inversiones a corto", (x) => mm(g(x, "caja"))], ["Deuda financiera", (x) => mm(g(x, "deuda"))],
+      ["Deuda neta", (x) => (g(x, "deuda") == null && g(x, "caja") == null ? "—" : mm((g(x, "deuda") || 0) - (g(x, "caja") || 0)))],
+      ["cobertura de intereses", (x) => (g(x, "ebit") != null && g(x, "int") > 0 ? xx(g(x, "ebit") / g(x, "int"), 1) : "—"), "p"],
+      ["Recompras", (x) => mm(g(x, "rec"))], ["Acciones diluidas (M)", (x) => (g(x, "accd") == null ? "—" : nf(g(x, "accd") / 1e6, 1))],
+    ];
+    const L = fy.length - 1;
+    tbl = sec2("Evolución anual", `<div class="tbl-wrap"><table class="fin"><thead><tr><th></th>${fy.map((x, i) => `<th class="${i === L ? "last" : ""}">${x[0].slice(0, 4)}</th>`).join("")}</tr></thead><tbody>
+      ${R.map(([t, f, cls]) => `<tr class="${cls || ""}"><td>${t}</td>${fy.map((x, i) => `<td class="num${i === L ? " last" : ""}">${f(x)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <div class="fsrc">Millones de ${esc(c.cur)} · SEC 10-K originales · deuda financiera sin arrendamientos · acciones ajustadas por splits · negativos entre paréntesis</div>`, "SEC");
+  }
+  return box("Calidad del beneficio y balance", `<div class="q3">${grp}</div>${tbl}<div class="fsrc">Punto verde = sano · círculo ámbar = vigilar · rojo = débil · gris = no aplica o sin dato. Umbrales fijos y explicados al pasar el ratón; no entran en la nota.</div>`,
+    c.us ? "SEC: 10-K y 10-Q con su fecha de presentación" : "Yahoo Finance · aproximado");
+}
+/* trimestres de respaldo (Yahoo) posteriores al último de la SEC */
+function yqBlock(c) {
+  const yq = c.d?.yq; if (!yq?.length) return "";
+  const lastSec = c.q.length ? c.q[c.q.length - 1][0] : "";
+  const xs = yq.filter((x) => x[0] > lastSec); if (!xs.length) return "";
+  return sec2("Trimestres posteriores · Yahoo (respaldo)", `<div class="tbl-wrap"><table class="fin"><thead><tr><th></th>${xs.map((x) => `<th>${fmtDate(x[0])}</th>`).join("")}</tr></thead><tbody>
+    <tr class="k"><td>Ingresos</td>${xs.map((x) => `<td class="num">${mm(x[1])}</td>`).join("")}</tr><tr class="k"><td>Beneficio neto</td>${xs.map((x) => `<td class="num">${mm(x[2])}</td>`).join("")}</tr>
+    <tr><td>BPA diluido</td>${xs.map((x) => `<td class="num">${x[3] == null ? "—" : x[3] < 0 ? `(${nf(-x[3], 2)})` : nf(x[3], 2)}</td>`).join("")}</tr></tbody></table></div>
+    <div class="fsrc">La API de la SEC no tiene trimestres de esta empresa posteriores al ${lastSec ? fmtDate(lastSec) : "—"} (presentaciones conjuntas con filiales u otro formato). Cifras de Yahoo sin fecha de presentación: no entran en la nota ni en el Laboratorio.</div>`, "Yahoo");
+}
 function secResumen(c) {
   return `<div class="f3"><div class="f3a">${keyData(c)}${eventsBox(c)}${qualityBox(c)}</div>
-    <div class="f3b">${finTable(c)}${chartsRow(c)}</div>
-    <div class="f3c">${scoreCol(c)}${valCol(c)}</div></div>${readingBox(c)}`;
+    <div class="f3b">${finTable(c)}${yqBlock(c)}${chartsRow(c)}</div>
+    <div class="f3c">${scoreCol(c)}${valCol(c)}${qualityCol(c)}</div></div>${readingBox(c)}`;
 }
 
 /* ---------- tarjetas con fuente y fecha ---------- */
@@ -397,6 +525,15 @@ function reading(c) {
   if (M.mbD != null && M.mbD <= -1) contra.push(`El margen bruto cae ${nf(Math.abs(M.mbD), 1)} puntos en cuatro trimestres.`);
   if (M.down2 && M.g > 0) contra.push(`El margen neto baja dos trimestres seguidos (${nf(M.mn[0], 1)} % → ${nf(M.mn[1], 1)} %): el beneficio crece menos que las ventas.`);
   if (M.up2) interp.push("El margen neto sube dos trimestres seguidos: apalancamiento operativo.");
+  const QM = quality(c).M;
+  if (QM.acr != null && QM.acr > 7) contra.push(`Devengos altos (${nf(QM.acr, 1)} % de los activos): buena parte del beneficio no se cobra en caja.`);
+  if (QM.conv3 != null && QM.conv3 >= 1.1) interp.push(`Beneficio de calidad: en tres años la caja operativa es ${nf(QM.conv3, 2)} veces el beneficio.`);
+  if (QM.dil != null && QM.dil > 3) contra.push(`Dilución: las acciones diluidas crecen un ${nf(QM.dil, 1)} % interanual.`);
+  if (QM.dil != null && QM.dil < -2) interp.push(`Recompra neta: las acciones diluidas bajan un ${nf(-QM.dil, 1)} % interanual.`);
+  if (QM.cov != null && QM.cov < 3) contra.push(`Cobertura de intereses baja (${nf(QM.cov, 1)}×): poco margen si cae el beneficio.`);
+  if (QM.cv != null && QM.cv < 1) contra.push(`La caja no cubre los vencimientos de deuda de los próximos 12 meses (${nf(QM.cv, 1)}×): dependerá de refinanciar.`);
+  if (QM.sbc != null && QM.sbc > 10) contra.push(`Pagos con acciones del ${nf(QM.sbc, 1)} % de las ventas: el flujo de caja libre los infla.`);
+  if (QM.ndc != null && QM.ndc > 4) contra.push(`Deuda neta de ${nf(QM.ndc, 1)} años de caja operativa.`);
   if (M.cr != null) (M.cr >= 1 ? interp : contra).push(M.cr >= 1 ? `El beneficio se convierte en caja (${nf(M.cr, 2)} veces en el último año).` : `La caja operativa cubre solo ${nf(M.cr, 2)} veces el beneficio del último año.`);
   if (pv != null) {
     if (pv > 20 && sg != null && sec.crec_ventas != null && sg > sec.crec_ventas + 5) interp.push(`La prima frente a su sector (PER +${nf(pv, 0)} %) se apoya en un crecimiento mayor que el de su sector.`);
@@ -432,7 +569,7 @@ function readingBox(c) {
 
 /* ---------- apartados ---------- */
 function secFund(c) {
-  const { r, d } = c, k = K(); let h = "";
+  const { r, d } = c, k = K(); let h = qualityBlock(c) + yqBlock(c);
   if (c.us) {
     const fy = c.fy, cur = c.cur;
     const rowsF = [["Ventas", (x) => x[FY.v]], ["Beneficio bruto", (x) => x[FY.bruto]], ["Resultado operativo", (x) => x[FY.ebit]], ["Beneficio neto", (x) => x[FY.bn]],

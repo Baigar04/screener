@@ -1,6 +1,7 @@
 """Factores académicos a partir de las cuentas de la SEC (sec_cache.json), «a fecha» de presentación.
 
-Filas anuales (fy): [fin, presentado, ventas, bn, ebit, patrimonio, deuda, cfo, capex, acciones, activos, bruto, ac, pc]
+Filas anuales (fy): [fin, presentado, ventas, bn, ebit, patrimonio, deuda, cfo, capex, acciones, activos, bruto, ac, pc,
+ caja+inv. cp, pagos con acciones, intereses, vencimientos 12 m, vencimientos año 2, recompras, acciones diluidas medias]
 Filas trimestrales (q): [fin, presentado, ventas_3m, bn_3m, ebit_3m, bruto_3m, activos, patrimonio]
 
 Factores (referencia):
@@ -15,6 +16,17 @@ Factores (referencia):
 
 # índices de las filas anuales
 VE, BN, EB, EQ, DE, CFO, CPX, SH, AS, GR, AC, PC = 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+
+
+def unsplit(r):
+    """Cociente de acciones sin el efecto de un split (fase 9): un salto ≥1,8× (o ≤0,55×) a menos de un 5 % de una
+    proporción entera es un split o contrasplit, no emisión; se divide por esa proporción."""
+    for n in (2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50):
+        if r >= 1.8 and abs(r / n - 1) < 0.05:
+            return r / n
+        if r <= 0.55 and abs(r * n - 1) < 0.05:
+            return r * n
+    return r
 
 
 def _g(row, i):
@@ -42,7 +54,7 @@ def annual_factors(cur, prev):
         out["acr"] = (bn - cfo) / avg
     s1, s0 = _g(cur, SH), _g(prev, SH)
     if s1 and s0 and s0 > 0:
-        out["nsi"] = s1 / s0 - 1
+        out["nsi"] = unsplit(s1 / s0) - 1
     out["fs"] = fscore(cur, prev)
     return out
 

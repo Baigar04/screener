@@ -1075,3 +1075,11 @@ table.scr tr.kf td{background:var(--surface-2)}table.scr tr.kf td:first-child{bo
 @media (max-width:640px){.ixs{grid-template-columns:repeat(2,minmax(0,1fr))}.ixs>div{border-bottom:1px solid var(--border)}}
 .mf-btn{display:inline-flex!important}.fwrap{display:none}.fwrap.open{display:block;padding:6px 0 4px;border-bottom:1px solid var(--border);margin-bottom:6px}
 table.scr td.tx,table.scr th.tx{text-align:left}
+/* Fase 9 · calidad del beneficio y balance */
+.q3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 24px;margin-bottom:8px}
+.q3 .kvt td.fa{width:1%;white-space:nowrap;padding-left:8px;font-size:11px}
+.f3c .kvt td{white-space:normal}
+.kvt td .dt{margin-right:6px;vertical-align:0;transform:scale(.8)}
+@media (max-width:1100px){.q3{grid-template-columns:1fr}}
+.q3 .kvt td{white-space:normal!important;vertical-align:top}.q3 .kvt td.num{text-align:right}
+.q3 .kvt td:first-child{width:52%}

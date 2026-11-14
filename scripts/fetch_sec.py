@@ -22,7 +22,7 @@ SITE = os.environ.get("SITE_URL", "https://baigar04.github.io/screener/")
 UA = os.environ.get("SEC_UA", "").strip()
 NOW = datetime.now(timezone.utc)
 REFRESH_DAYS = 30      # se vuelve a pedir una empresa como muy pronto cada 30 días…
-VERSION = 6            # al cambiar el formato se vuelven a pedir todas
+VERSION = 7            # al cambiar el formato se vuelven a pedir todas
 MAX_PER_RUN = 1200     # …y nunca más de estas por ejecución (límite de la SEC: 10 peticiones/s)
 
 TAGS = {
@@ -45,9 +45,20 @@ TAGS = {
     "ac": ["AssetsCurrent"],
     "pc": ["LiabilitiesCurrent"],
     "bpa": ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted", "EarningsPerShareBasic"],
+    # fase 9 · calidad del beneficio y balance
+    "caja": ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", "Cash"],
+    "inv_cp": ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
+    "venc1": ["LongTermDebtMaturitiesRepaymentsOfPrincipalInNextTwelveMonths"],
+    "venc2": ["LongTermDebtMaturitiesRepaymentsOfPrincipalInYearTwo"],
+    "sbc": ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
+    "intereses": ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt"],
+    "recompras": ["PaymentsForRepurchaseOfCommonStock"],
+    "acc_dil": ["WeightedAverageNumberOfDilutedSharesOutstanding"],
 }
-UNIT = {"bpa": "USD/shares"}
-FLOW = {"ventas", "bn", "ebit", "cfo", "capex", "bruto", "coste_ventas"}
+UNIT = {"bpa": "USD/shares", "acc_dil": "shares"}
+FLOW = {"ventas", "bn", "ebit", "cfo", "capex", "bruto", "coste_ventas", "sbc", "intereses", "recompras", "acc_dil"}
+# deuda financiera (sin arrendamientos): «LongTermDebt» ya incluye la parte a corto del largo plazo
+DEBT_TAGS = ("LongTermDebt", "LongTermDebtNoncurrent", "LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings", "CommercialPaper")
 QFLOW = ("ventas", "bn", "ebit", "bruto", "coste_ventas", "bpa")
 
 
@@ -196,6 +207,63 @@ def instant(facts, key, forms=("10-Q", "10-K")):
     return {}
 
 
+def _inst_tag(gaap, tag, forms):
+    out = {}
+    for f in gaap.get(tag, {}).get("units", {}).get("USD") or []:
+        if not str(f.get("form", "")).startswith(forms) or not f.get("filed") or not f.get("end") or f.get("start"):
+            continue
+        if f["end"] not in out or f["filed"] < out[f["end"]][1]:
+            out[f["end"]] = (f["val"], f["filed"])
+    return out
+
+
+def debt(facts, forms=("10-Q", "10-K")):
+    """{fecha: (deuda financiera, presentado)} sin contar dos veces la parte a corto plazo:
+    LongTermDebt (incluye la parte corriente) + préstamos a corto; si no, la parte no corriente + la deuda corriente."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    T = {t: _inst_tag(gaap, t, forms) for t in DEBT_TAGS}
+    out = {}
+    for e in set().union(*[set(d) for d in T.values()]):
+        g = lambda t: T[t][e][0] if e in T[t] else None  # noqa: E731
+        fl = min(T[t][e][1] for t in DEBT_TAGS if e in T[t])
+        stb = (g("ShortTermBorrowings") or 0) + (g("CommercialPaper") or 0)
+        if g("LongTermDebt") is not None:
+            v = g("LongTermDebt") + stb
+        elif g("LongTermDebtNoncurrent") is not None:
+            cur = g("DebtCurrent") if g("DebtCurrent") is not None else (g("LongTermDebtCurrent") or 0) + stb
+            v = g("LongTermDebtNoncurrent") + cur
+        elif g("DebtCurrent") is not None or stb:
+            v = g("DebtCurrent") if g("DebtCurrent") is not None else stb
+        else:
+            continue
+        out[e] = (v, fl)
+    return out
+
+
+def inst_merged(facts, key, forms=("10-Q", "10-K")):
+    """Como instant() pero uniendo las etiquetas por fecha (prioridad en el orden de la lista)."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    return merge_tags([_inst_tag(gaap, t, forms) for t in TAGS[key]], key)
+
+
+def q_shares(facts):
+    """{fin: acciones diluidas medias} de 10-Q (3 meses) y 10-K (media del ejercicio, aproximación para el 4.º trimestre)."""
+    gaap = facts.get("facts", {}).get("us-gaap", {})
+    out = {}
+    for tag in TAGS["acc_dil"]:
+        for f in gaap.get(tag, {}).get("units", {}).get("shares") or []:
+            form, fl, e, st = str(f.get("form", "")), f.get("filed"), f.get("end"), f.get("start")
+            if not fl or not e or not st:
+                continue
+            dur = days(st, e)
+            if (form.startswith("10-Q") and 80 <= dur <= 100) or (form.startswith("10-K") and 330 <= dur <= 400):
+                if e not in out or fl < out[e][1]:
+                    out[e] = (f["val"], fl)
+        if out:
+            return out
+    return out
+
+
 def shares(facts):
     """{fecha_presentación: acciones en circulación} de la portada de cada 10-K."""
     u = facts.get("facts", {}).get("dei", {}).get("EntityCommonStockSharesOutstanding", {}).get("units", {}).get("shares") or []
@@ -204,9 +272,10 @@ def shares(facts):
 
 def parse(facts):
     cols = {k: annual(facts, k) for k in TAGS}
-    for k in ("activos", "patrimonio", "ac", "pc"):   # balances: dato «instantáneo» del 10-K (sin duración)
+    for k in ("activos", "patrimonio", "ac", "pc", "caja", "inv_cp", "venc1", "venc2"):   # balances: dato «instantáneo» del 10-K
         if not cols[k]:
-            cols[k] = {e: v for e, v in instant(facts, k, ("10-K",)).items()}
+            cols[k] = inst_merged(facts, k, ("10-K",))
+    cols["deuda_t"] = debt(facts, ("10-K",))
     sh = shares(facts)
     ends = sorted(set(cols["ventas"]) | set(cols["bn"]))
     rows = []
@@ -215,10 +284,16 @@ def parse(facts):
         if not filed or e < "2008-01-01":
             continue
         v = lambda k: cols[k][e][0] if e in cols[k] else None  # noqa: E731
-        debt = None if v("deuda") is None and v("deuda_cp") is None else (v("deuda") or 0) + (v("deuda_cp") or 0)
+        dt = v("deuda_t")
+        if dt is None and not (v("deuda") is None and v("deuda_cp") is None):
+            dt = (v("deuda") or 0) + (v("deuda_cp") or 0)
         gross = v("bruto") if v("bruto") is not None else (v("ventas") - v("coste_ventas") if v("ventas") is not None and v("coste_ventas") is not None else None)
-        rows.append([e, filed, v("ventas"), v("bn"), v("ebit"), v("patrimonio"), debt, v("cfo"), v("capex"), sh.get(filed),
-                     v("activos"), gross, v("ac"), v("pc")])
+        rows.append([e, filed, v("ventas"), v("bn"), v("ebit"), v("patrimonio"), dt, v("cfo"), v("capex"), sh.get(filed),
+                     v("activos"), gross, v("ac"), v("pc"),
+                     # 14-20 (fase 9): caja + inversiones a corto, pagos con acciones, intereses, vencimientos a 12 meses y
+                     # en el 2.º año, recompras, acciones diluidas medias
+                     None if v("caja") is None and v("inv_cp") is None else (v("caja") or 0) + (v("inv_cp") or 0),
+                     v("sbc"), v("intereses"), v("venc1"), v("venc2"), v("recompras"), v("acc_dil")])
     return rows
 
 
@@ -227,6 +302,10 @@ def parse_q(facts):
     el BPA diluido, la etiqueta del trimestre fiscal, el formulario y el flujo de caja operativo acumulado."""
     cols = {k: quarterly(facts, k) for k in QFLOW}
     bal = {k: instant(facts, k) for k in ("activos", "patrimonio")}
+    bal["caja"] = inst_merged(facts, "caja")
+    bal["inv_cp"] = inst_merged(facts, "inv_cp")
+    bal["deuda"] = debt(facts)
+    shq = q_shares(facts)
     cfo = ytd_cfo(facts)
     out = []
     for e in sorted(set(cols["ventas"]) | set(cols["bn"])):
@@ -239,7 +318,10 @@ def parse_q(facts):
         src = cols["ventas"].get(e) or cols["bn"].get(e)
         eps = v("bpa")
         out.append([e, filed, v("ventas"), v("bn"), v("ebit"), gross, b("activos"), b("patrimonio"),
-                    None if eps is None else round(eps, 4), label(src[2], src[3], e), src[4], cfo[e][0] if e in cfo else None])
+                    None if eps is None else round(eps, 4), label(src[2], src[3], e), src[4], cfo[e][0] if e in cfo else None,
+                    # 12-14 (fase 9): caja + inversiones a corto, deuda financiera, acciones diluidas medias del trimestre
+                    None if b("caja") is None and b("inv_cp") is None else (b("caja") or 0) + (b("inv_cp") or 0),
+                    b("deuda"), shq[e][0] if e in shq else None])
     for i, r in enumerate(out):   # 4.º trimestre deducido incoherente: flujos a «sin dato» (el balance sí vale)
         if r[10] == "10-K" and not q4_ok(out, i):
             for k in (2, 3, 4, 5, 8):
