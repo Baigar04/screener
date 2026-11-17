@@ -97,9 +97,16 @@ def dataroma(cache):
     log("Dataroma gestores:", len(managers))
     old = cache.get("dataroma", {})
     fresh = 0
+    def age(d):
+        try:
+            return (datetime.utcnow() - datetime.strptime(d or "", "%d %b %Y")).days
+        except ValueError:
+            return 999
     for m in managers:
         prev = old.get(m["code"])
-        if prev and prev.get("actualizado") == m["actualizado"] and prev.get("pos"):
+        # la portada de Dataroma puede tardar en cambiar la fecha aunque la cartera ya esté actualizada: si la que
+        # tenemos tiene más de 75 días (trimestre anterior), se vuelve a leer la página de la cartera igualmente
+        if prev and prev.get("actualizado") == m["actualizado"] and prev.get("pos") and age(m["actualizado"]) <= 75:
             m["pos"] = prev["pos"]
             continue
         try:
@@ -113,6 +120,19 @@ def dataroma(cache):
                 if len(tds) < 7:
                     continue
                 pos.append([ysym(sm.group(1)), clean(sm.group(3)), num(tds[2]), clean(tds[3]) or None, num(tds[4]), num(tds[6])])
+            pm = re.search(r"Period:\s*(?:<[^>]+>\s*)*([^<]+)", page)
+            dm = re.search(r"Portfolio date:\s*(?:<[^>]+>\s*)*([^<]+)", page)
+            if pm:
+                m["trimestre"] = clean(pm.group(1)) or m.get("trimestre")
+            if dm:
+                m["fecha_cartera"] = clean(dm.group(1))
+            if prev and prev.get("pos") and pos and sorted(map(tuple, map(lambda x: x[:3], pos))) != sorted(map(tuple, map(lambda x: x[:3], prev["pos"]))) \
+                    and prev.get("actualizado") == m["actualizado"]:
+                m["actualizado"] = datetime.utcnow().strftime("%d %b %Y")   # cartera nueva antes de que la portada cambie la fecha
+            if prev and pos == prev.get("pos"):
+                m["pos"] = pos
+                time.sleep(1.0)
+                continue
             m["pos"] = pos
             fresh += 1
             time.sleep(1.0)
