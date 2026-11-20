@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-17T16:06:09+00:00",
+ "generado": "2026-11-20T03:01:52+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -23,19 +23,19 @@
   },
   "score_diario.json": {
    "estado": "ok",
-   "detalle": "3 fotos diarias"
+   "detalle": "6 fotos diarias"
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 62.6 % > SMA50, Europa: 71.0 % > SMA50"
+   "detalle": "EE. UU.: 49.0 % > SMA50, Europa: 58.7 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
-   "detalle": "10284 operaciones · 63 días · pendientes 3"
+   "detalle": "10746 operaciones · 65 días · pendientes 4"
   },
   "smart.json": {
    "estado": "ok",
-   "detalle": "82 gestores · 1974 valores"
+   "detalle": "82 gestores · 1953 valores"
   },
   "lab.json": {
    "estado": "ok",
@@ -43,15 +43,15 @@
   },
   "fund_cache.json": {
    "estado": "ok",
-   "detalle": "1513 entradas"
+   "detalle": "1515 entradas"
   },
   "news_cache.json": {
    "estado": "ok",
-   "detalle": "1511 entradas"
+   "detalle": "1513 entradas"
   },
   "sec_cache.json": {
    "estado": "ok",
-   "detalle": "1072 entradas"
+   "detalle": "1073 entradas"
   },
   "smart_cache.json": {
    "estado": "ok",
