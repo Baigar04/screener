@@ -43,6 +43,16 @@ STOXX50 = ["ADS.DE", "ADYEN.AS", "AD.AS", "AI.PA", "AIR.PA", "ALV.DE", "ABI.BR",
            "OR.PA", "MC.PA", "MBG.DE", "MUV2.DE", "NDA-FI.HE", "PRX.AS", "SAF.PA", "SAN.PA", "SAP.DE", "SU.PA",
            "SIE.DE", "STLAM.MI", "TTE.PA", "DG.PA", "UCG.MI", "VOW3.DE", "WKL.AS", "ENR.DE", "RHM.DE", "SGO.PA"]
 
+# ampliación del universo (22-nov-2026): ADR de Latinoamérica que cotizan en EE. UU. y Mercado Continuo español fuera del IBEX
+LATAM = ["MELI", "NU", "ITUB", "BBD", "PBR", "PBR-A", "VALE", "ABEV", "SBS", "CIG", "EBR", "BSBR", "ERJ", "GGB", "SID", "UGP", "XP",
+         "STNE", "PAGS", "SUZ", "TIMB", "VIV", "GGAL", "YPF", "PAM", "TGS", "CEPU", "LOMA", "CRESY", "SUPV", "BMA", "TEO", "EDN", "IRS",
+         "BBAR", "VIST", "CX", "AMX", "FMX", "KOF", "TV", "OMAB", "PAC", "ASR", "BSAC", "SQM", "BCH", "LTM", "ENIC", "EC", "CIB", "AVAL",
+         "CPA", "CCU", "BAP", "IFS", "BVN", "SCCO", "DESP", "GLOB", "ARCO", "VTEX", "CAAP", "TX"]
+LATAM_PAISES = {"Brazil", "Mexico", "Argentina", "Chile", "Colombia", "Peru", "Panama", "Uruguay"}
+CONTINUO = ["CIE", "VIS", "EBRO", "FAE", "ENC", "PHM", "CAF", "TRE", "TLGO", "MEL", "ALM", "A3M", "DIA", "ECR", "FCC", "GRE", "LDA",
+            "OHLA", "PSG", "PRS", "TUB", "TRG", "VID", "AZK", "CBAV", "DOM", "EDR", "GSJ", "HOME", "MVC", "R4", "ATRY", "CASH", "GCO",
+            "MDF", "LGT", "ADZ", "BKY", "ENO", "IZE", "ORY", "AMP", "PVA", "NEA", "GEST", "CLNX"]
+
 
 def log(*a):
     print(*a, flush=True)
@@ -124,6 +134,36 @@ def universe():
     except Exception as e:  # noqa: BLE001
         ERRORS.append({"fuente": "Wikipedia", "serie": "S&P 400", "motivo": str(e)[:200]})
     try:
+        html = get("https://en.wikipedia.org/wiki/List_of_S%26P_600_companies").decode()
+        df = pd.read_html(io.StringIO(html), attrs={"id": "constituents"})[0] if 'id="constituents"' in html else \
+            next(t for t in pd.read_html(io.StringIO(html)) if "Symbol" in t.columns and len(t) > 400)
+        for _, r in df.iterrows():
+            s = str(r["Symbol"]).replace(".", "-")
+            d = rows.setdefault(s, {"indices": [], "gics_sector": r.get("GICS Sector"), "gics_industry": r.get("GICS Sub-Industry")})
+            d["indices"].append("S&P 600")
+        log("S&P 600:", len(df))
+    except Exception as e:  # noqa: BLE001
+        ERRORS.append({"fuente": "Wikipedia", "serie": "S&P 600", "motivo": str(e)[:200]})
+    for s in LATAM:
+        rows.setdefault(s, {"indices": []})["indices"].append("ADR Latinoamérica")
+    try:
+        html = get("https://en.wikipedia.org/wiki/FTSE_250_Index").decode()
+        n0 = 0
+        for t in pd.read_html(io.StringIO(html)):
+            tc = next((c for c in map(str, t.columns) if c.strip().lower() in ("ticker", "epic", "symbol", "ticker symbol")), None)
+            if tc and len(t) > 150:
+                for tk in t[tc].astype(str):
+                    tk = tk.strip().rstrip(".").replace(".", "-").replace(" ", "")
+                    if tk and tk.lower() != "nan" and len(tk) <= 6:
+                        rows.setdefault(tk.upper() + ".L", {"indices": []})["indices"].append("FTSE 250")
+                        n0 += 1
+                break
+        log("FTSE 250:", n0)
+        if not n0:
+            ERRORS.append({"fuente": "Wikipedia", "serie": "FTSE 250", "motivo": "tabla de componentes no encontrada"})
+    except Exception as e:  # noqa: BLE001
+        ERRORS.append({"fuente": "Wikipedia", "serie": "FTSE 250", "motivo": str(e)[:200]})
+    try:
         html = get("https://en.wikipedia.org/wiki/STOXX_Europe_600").decode()
         df = next(t for t in pd.read_html(io.StringIO(html)) if "Ticker" in t.columns and len(t) > 500)
         n0 = 0
@@ -139,6 +179,9 @@ def universe():
         rows.setdefault(s, {"indices": []})["indices"].append("Euro Stoxx 50")
     for s in IBEX:
         rows.setdefault(s + ".MC", {"indices": []})["indices"].append("IBEX 35")
+    for s in CONTINUO:
+        if s not in IBEX:
+            rows.setdefault(s + ".MC", {"indices": []})["indices"].append("Mercado Continuo")
     # Valores añadidos a mano: un ticker de Yahoo Finance por línea en universo_extra.txt (# para comentarios)
     extra = os.path.join(ROOT, "universo_extra.txt")
     if os.path.exists(extra):
@@ -771,7 +814,7 @@ def main():
     lim = (NOW - pd.Timedelta(days=135)).strftime("%Y-%m-%d")
     stale_q = [s for s in syms if "." not in s and not s.startswith("IDX_")
                and max((r[0] for r in (SECD.get(s, {}).get("q") or []) if r[2] is not None or r[3] is not None), default="") < lim]
-    for s in stale_q[:80]:
+    for s in stale_q[:200]:
         try:
             YQ[s] = yahoo_quarters(s)
         except Exception as e:  # noqa: BLE001
@@ -787,7 +830,8 @@ def main():
         r.update({k: v for k, v in f.items() if k not in ("anual", "ern", "web", "desc")})
         if not r.get("sector") and U[s].get("gics_sector"):
             r["sector"] = U[s]["gics_sector"]
-        r["region"] = "EE. UU." if (r.get("pais") == "United States" or "." not in s) else "Europa"
+        r["region"] = ("Latinoamérica" if ("ADR Latinoamérica" in r["indices"] or r.get("pais") in LATAM_PAISES)
+                       else "EE. UU." if (r.get("pais") == "United States" or "." not in s) else "Europa")
         detail = {"sym": s, "anual": f.get("anual", {}), "desc": f.get("desc"), "web": f.get("web")}
         if s in SECD:   # cuentas de la SEC para la ficha (EE. UU.): 12 trimestres y 6 ejercicios con su fecha de presentación
             e = SECD[s]
@@ -867,7 +911,8 @@ def main():
     log("Historial de múltiplos (ficha de tesis):", NVH[0], "valores · con datos para DCF:", sum(1 for x in rows if x.get("acciones")))
     stats = {}
     for reg, sub in (("Todos", rows), ("EE. UU.", [r for r in rows if r["region"] == "EE. UU."]),
-                     ("Europa", [r for r in rows if r["region"] == "Europa"])):
+                     ("Europa", [r for r in rows if r["region"] == "Europa"]),
+                     ("Latinoamérica", [r for r in rows if r["region"] == "Latinoamérica"])):
         stats[reg] = {"sector": group_stats(sub, "sector"), "industria": group_stats(sub, "industria"),
                       "mercado": {f: med([r.get(f) for r in sub], f in ("per", "per_fwd", "ev_ebitda", "pb", "ps")) for f in MED_FIELDS}}
     for r in rows:
@@ -911,7 +956,7 @@ def main():
         ERRORS.append({"fuente": "Cálculo", "serie": "Laboratorio", "motivo": str(e)[:200]})
 
     meta = {"generado": NOW.isoformat(timespec="seconds"), "n": len(rows), "errores": ERRORS[:200], "n_errores": len(ERRORS),
-            "fuentes": ["Wikipedia (composición S&P 500 y Nasdaq-100)", "Yahoo Finance vía yfinance (precios y fundamentales)", "Tiingo (respaldo de precios de EE. UU. si Yahoo falla)"],
+            "fuentes": ["Wikipedia (composición S&P 500, Nasdaq-100, S&P 400, S&P 600, FTSE 250 y STOXX Europe 600)", "Yahoo Finance vía yfinance (precios y fundamentales)", "Tiingo (respaldo de precios de EE. UU. si Yahoo falla)"],
             "n_respaldo": len(TIINGO_USED),
             "notas": "Fundamentales refrescados por rotación (cada valor, una vez por semana). Revisiones de beneficios: sin fuente pública fiable."}
     json.dump({**meta, "filas": rows}, open(os.path.join(DATA, "universe.json"), "w"), ensure_ascii=False, separators=(",", ":"))

@@ -11,7 +11,7 @@ const E = {
   f: store.get("filtros", {}),
   rng: store.get("rangos", {}),
   q: "",
-  regions: new Set(store.get("scr_regiones", ["EE. UU.", "Europa"])),
+  regions: new Set(store.get("scr_regiones_v2", [...store.get("scr_regiones", ["EE. UU.", "Europa"]), "Latinoamérica"])),
   sort: store.get("scr_orden", { k: "mcap", d: -1 }),
   cols: store.get("columnas", null),
   watch: store.get("seguimiento", []),
@@ -147,7 +147,7 @@ function renderSectores() {
   const ranks = {};
   cols.forEach(([k]) => { ranks[k] = rows.map((r) => r[1][k]).filter((x) => x != null).sort((a, b) => a - b); });
   let h = `<h2 class="sec">Radar de sectores <span class="hint">Medianas de ${E.uni.n} valores. Azul = mejor, naranja = peor en cada columna. Pulsa un sector para ver sus industrias.</span></h2>
-    <div class="bar">${["Todos", "EE. UU.", "Europa"].map((r) => `<button class="chip ${E.region === r ? "on" : ""}" data-eqr="${r}">${r}</button>`).join("")}
+    <div class="bar">${["Todos", "EE. UU.", "Europa", "Latinoamérica"].filter((r) => E.sec?.stats?.[r]).map((r) => `<button class="chip ${E.region === r ? "on" : ""}" data-eqr="${r}">${r}</button>`).join("")}
     ${H.dropdown("secmetric", "Ordenar por:", SEC_COLS.filter((c) => c[2] != null && c[3] <= lv).map((c) => [c[0], c[1]]), m)}</div>`;
   if (H.S.explain) {
     const lab = SEC_COLS.find((c) => c[0] === m)[1];
@@ -483,7 +483,7 @@ function renderScreener() {
   return `<div class="pg-head"><h1>Screener</h1><div class="pg-sub">${nf(base.length, 0)} valores · ${[...E.regions].join(" y ") || "ninguna región"}${wn} · la cobertura en ámbar indica que falta algún factor</div></div>
     <div class="scr-head"><div class="search-in"><svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4"/></svg>
       <input id="scrq" type="search" placeholder="Filtrar por ticker o nombre" value="${esc(E.q)}" autocomplete="off" aria-label="Filtrar por ticker o nombre"></div>
-    ${["EE. UU.", "Europa"].map((r) => `<button class="chip ${E.regions.has(r) ? "on" : ""}" data-scr="${r}">${r}</button>`).join("")}
+    ${["EE. UU.", "Europa", "Latinoamérica"].map((r) => `<button class="chip ${E.regions.has(r) ? "on" : ""}" data-scr="${r}">${r}</button>`).join("")}
     <button class="chip ${E.onlyWatch ? "on" : ""}" data-act="watchonly">★ Seguimiento (${E.watch.length})</button>
     <button class="chip mf-btn ${E.mf ? "on" : ""}" data-act="mf">+ Filtros y plantillas${chips.length ? ` (${chips.length})` : ""} ${E.mf ? "▴" : "▾"}</button>
     ${E.sc ? `<button class="chip ${E.showW ? "on" : ""}" data-act="weights">Pesos · ${profileName()}</button><button class="chip ${E.showChg ? "on" : ""}" data-act="changes">Qué ha cambiado</button>` : ""}</div>
@@ -783,7 +783,7 @@ function onClick(t, dd) {
     if (E.tmpl === n) { E.tmpl = null; E.f = {}; } else { E.tmpl = n; E.f = { ...TEMPLATES[n] }; }
     E.limit = 50; persist(); H.render(); return true;
   }
-  if ((b = t.closest("[data-scr]"))) { const r = b.dataset.scr; if (E.regions.has(r) && E.regions.size > 1) E.regions.delete(r); else E.regions.add(r); store.set("scr_regiones", [...E.regions]); H.render(); return true; }
+  if ((b = t.closest("[data-scr]"))) { const r = b.dataset.scr; if (E.regions.has(r) && E.regions.size > 1) E.regions.delete(r); else E.regions.add(r); store.set("scr_regiones_v2", [...E.regions]); H.render(); return true; }
   if ((b = t.closest("[data-scrsort]"))) {
     const k = b.dataset.scrsort; E.sort = E.sort.k === k ? { k, d: -E.sort.d } : { k, d: ["nombre", "sector", "industria", "pais"].includes(k) ? 1 : -1 };
     store.set("scr_orden", E.sort); H.render(); return true;

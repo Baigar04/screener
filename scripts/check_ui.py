@@ -314,6 +314,26 @@ def fase9(pg, base):
     check("SAN.MC: bloque aproximado sin errores", "Calidad del beneficio y balance" in (pg.text_content("#view") or ""))
 
 
+def ranking(pg, base):
+    """Smart money · más compradas y vendidas (13F del trimestre, directivos y Congreso a 30 días) y universo ampliado."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/smart")
+    pg.wait_for_selector("[data-smtab=ranking]", timeout=30000)
+    pg.click("[data-smtab=ranking]")
+    pg.wait_for_timeout(3000)
+    t = pg.text_content("#view") or ""
+    n = pg.locator("#view table.rk tbody tr").count()
+    check("ranking: tres bloques con compradas y vendidas", all(x in t for x in ("Superinversores", "Directivos", "Congreso de EE. UU.", "Más compradas", "Más vendidas")) and n >= 10, f"{n} filas")
+    pg.goto(base + "#/hoy")
+    pg.wait_for_timeout(3000)
+    check("«Hoy»: resumen del ranking", "Más compradas · superinversores" in (pg.text_content("#view") or ""))
+    regs = pg.evaluate("(window.SCRUni ? window.SCRUni() : []).reduce((a, r) => (a[r.region] = (a[r.region] || 0) + 1, a), {})")
+    idx = pg.evaluate("(window.SCRUni ? window.SCRUni() : []).reduce((a, r) => { (r.indices || []).forEach((i) => a[i] = (a[i] || 0) + 1); return a; }, {})")
+    print("    regiones:", regs, "· índices:", idx, flush=True)
+    check("universo ampliado: S&P 600, FTSE 250, Mercado Continuo y Latinoamérica", all(idx.get(k, 0) > 0 for k in ("S&P 600", "FTSE 250", "Mercado Continuo", "ADR Latinoamérica")) and regs.get("Latinoamérica", 0) > 0,
+          str(idx))
+
+
 def diseno3(pg, base):
     """Diseño A · entrega 3: Screener de una línea, «Hoy» en rejilla, rotación sectorial nueva y atajos."""
     pg.set_viewport_size({"width": 1440, "height": 900})
@@ -356,7 +376,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

@@ -1085,3 +1085,8 @@ table.scr td.tx,table.scr th.tx{text-align:left}
 .q3 .kvt td:first-child{width:52%}
 /* móvil · tarjetas del screener sin avatar (diseño A) */
 .mcard .sc{background:none!important;padding:0}
+/* Smart money · más compradas y vendidas */
+.rk2{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:8px}
+.rk-h{font-family:var(--serif);font-size:14px;font-weight:600;margin:4px 0 6px}.rk-h.pos{color:var(--pos)}.rk-h.neg{color:var(--neg)}
+table.rk td,table.rk th{padding:4px 8px;white-space:nowrap}table.rk tr{cursor:pointer}
+@media (max-width:900px){.rk2{grid-template-columns:1fr}}

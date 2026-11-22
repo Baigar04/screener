@@ -176,6 +176,13 @@ function smartRows() {
   else {
     const g = (D.gestores || []).filter((x) => x.actualizado_iso && x.actualizado_iso >= addDays(today(), -10));
     out.push(kv("Superinversores con cartera nueva", g.length ? `${g.length}` : "ninguno", "últimos 10 días"));
+    const R = window.SCRSmart.ranking?.();
+    if (R) {
+      const top = (xs) => xs.slice(0, 3).map((x) => link(x.sym)).join(", ") || "—";
+      out.push(kv(`Más compradas · superinversores <i>${esc(R.q || "")}</i>`, top(R.f.b)));
+      out.push(kv("Más vendidas · superinversores", top(R.f.s)));
+      if (R.i.b.length) out.push(kv("Más compradas · directivos 30 d", top(R.i.b)));
+    }
     const c = (D.congreso || []).filter((x) => x.fecha_decl >= lim);
     out.push(kv("Congreso de EE. UU.", `${c.length} operaciones`, [...new Set(c.map((x) => x.sym))].slice(0, 3).join(", ")));
   }
@@ -207,7 +214,7 @@ function render() {
       ${sec("Tu Watchlist hoy", ok ? `${Q.watch().length} valores` : "", ok ? watchToday(uni, Q) : wait)}
       ${sec("Próximos resultados", "tu Watchlist y top 50 por nota", ok ? earn(uni, Q) : wait)}
       ${sec("Movimientos de la nota", "desde la sesión anterior · tus pesos", ok ? moves(uni, Q) : wait)}
-      ${sec(`Smart money ${H.evid("h")}`, "últimos 7-10 días", smartRows())}
+      ${sec(`Smart money ${H.evid("h")}`, `<button class="link-btn" data-goranking="1">ver ranking</button>`, smartRows())}
       ${sec("Tu Diario", "decisiones abiertas", diaryRows())}
     </div>
     <details class="hoy-more"><summary>Más: detalle de directivos, superinversores y copia de seguridad</summary>
@@ -215,6 +222,7 @@ function render() {
 }
 
 function onClick(t) {
+  if (t.closest("[data-goranking]")) { window.SCRSmart?.setTab?.("ranking"); location.hash = "#/smart"; return true; }
   let b;
   if ((b = t.closest("[data-bk]"))) {
     const k = b.dataset.bk;
