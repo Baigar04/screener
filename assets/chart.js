@@ -207,12 +207,14 @@ async function mount(el, sym, opts = {}) {
     if (evLane === 0) { try { main.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.14 } }); } catch (e) { /* */ } }
     if (I.vol.on && D.v) {
       pane++;
-      const s = chart.addSeries(LW.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, pane);
+      /* escala propia superpuesta: los márgenes se respetan y la parte baja queda libre para el carril de eventos */
+      const evOn = I.eventos?.on !== false;
+      const s = chart.addSeries(LW.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false, priceScaleId: "vol" }, pane);
+      try { s.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: evOn ? 0.38 : 0 } }); } catch (e) { /* */ }
       s.setData(T.map((t, i) => (D.v[i] == null ? null : { time: t, value: D.v[i], color: (C[i] >= (C[i - 1] ?? C[i]) ? up : dn) + "88" })).filter(Boolean));
       series["Volumen"] = { s, arr: D.v, color: css("--muted"), vol: true };
       /* franja inferior del panel de volumen reservada al carril de eventos (capa HTML, sin escala) */
       if (I.eventos?.on !== false) {
-        try { s.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.36 } }); } catch (e) { /* */ }
         evLane = pane;
         try { main.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.06 } }); } catch (e) { /* */ }
         heights.push(100);
