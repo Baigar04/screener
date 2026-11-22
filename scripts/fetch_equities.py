@@ -319,6 +319,22 @@ def split_adjust(q, splits):
     return out
 
 
+def total_return(close, div):
+    """Índice de rentabilidad total a partir de cierres sin ajustar y dividendos en su fecha ex: el día ex se suma el
+    dividendo al cierre antes de calcular la variación (dividendo reinvertido). Empieza en 100."""
+    out, lv, prev = [], 100.0, None
+    for c, d in zip(close, div):
+        if c is None or c != c or c <= 0:
+            out.append(None)
+            continue
+        if prev:
+            d = d if d and d == d else 0.0
+            lv *= (c + d) / prev
+        out.append(lv)
+        prev = c
+    return out
+
+
 def split_adjust_fy(fy, splits):
     """Acciones de los ejercicios (portada, col. 9, y diluidas medias, col. 20) en la base de acciones actual."""
     out = []
@@ -854,7 +870,7 @@ def main():
                                 for d, v, a, b in zip(tail.index, tail, s50.iloc[-252:], s200.iloc[-252:])]
             fr = raw.get(s, frames[s])
             divs = [[d.strftime("%Y-%m-%d"), jnum(v, 4)] for d, v in fr["Dividends"].items() if v and v == v and v > 0] if "Dividends" in fr else []
-            ev = {"div": divs[-24:], "ern": f.get("ern", []), "news": ncache.get(s, [])}
+            ev = {"div": divs, "ern": f.get("ern", []), "news": ncache.get(s, [])}
             ohlcv = {"t": [d.strftime("%Y-%m-%d") for d in fr.index],
                      "o": [jnum(x, 3) for x in fr["Open"]], "h": [jnum(x, 3) for x in fr["High"]],
                      "l": [jnum(x, 3) for x in fr["Low"]], "c": [jnum(x, 3) for x in fr["Close"]],
@@ -926,6 +942,19 @@ def main():
         r["med_per_industria"] = st["industria"].get(r.get("industria") or "", {}).get("per")
 
     # índices de referencia para carteras y comparaciones (no entran en el screener)
+    # índices de rentabilidad total (con dividendos reinvertidos) para comparar el Diario, las Carteras y las señales:
+    # se construyen con un ETF de reparto que replica el índice (SPY; iShares Core EURO STOXX 50 de reparto en Xetra)
+    for ysym_, fname, nom in (("SPY", "IDX_SP500TR", "S&P 500 con dividendos (SPY)"), ("EXW1.DE", "IDX_STOXX50TR", "Euro Stoxx 50 con dividendos (EXW1)")):
+        try:
+            idf = yf.download(ysym_, period="5y", interval="1d", auto_adjust=False, actions=True, progress=False)
+            if isinstance(idf.columns, pd.MultiIndex):
+                idf.columns = idf.columns.get_level_values(0)
+            idf = idf.dropna(subset=["Close"])
+            tr = total_return(list(idf["Close"]), list(idf["Dividends"]) if "Dividends" in idf else [0] * len(idf))
+            json.dump({"sym": fname, "fuente": f"Yahoo Finance · {nom}", "t": [d.strftime("%Y-%m-%d") for d in idf.index], "c": [jnum(x, 4) for x in tr]},
+                      open(os.path.join(DATA, "p", fname + ".json"), "w"), separators=(",", ":"))
+        except Exception as e:  # noqa: BLE001
+            ERRORS.append({"fuente": "Yahoo Finance", "serie": ysym_, "motivo": str(e)[:150]})
     for ysym_, fname in (("^GSPC", "IDX_SP500"), ("^STOXX50E", "IDX_STOXX50"), ("^IBEX", "IDX_IBEX")):
         try:
             idf = yf.download(ysym_, period="5y", interval="1d", auto_adjust=False, progress=False)

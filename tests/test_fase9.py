@@ -51,3 +51,18 @@ def test_t4_deducido_tras_split():
     out = fe.split_adjust(q, [("2024-06-10", 10.0)])
     assert out[0][8] == 0.604
     assert abs(out[3][8] - (2.94 - 0.604 - 0.67 - 0.78)) < 1e-9
+
+
+def test_rentabilidad_total():
+    tr = fe.total_return([100, 101, 99, 100], [0, 0, 2, 0])
+    assert tr[0] == 100 and abs(tr[1] - 101) < 1e-9
+    assert abs(tr[2] - 101 * (99 + 2) / 101) < 1e-9          # el día ex se suma el dividendo
+    assert abs(tr[3] - tr[2] * 100 / 99) < 1e-9
+
+
+def test_closes_con_dividendos(tmp_path):
+    import json
+    import score
+    json.dump({"t": ["2026-01-02", "2026-01-05", "2026-01-06"], "c": [100, 98, 98], "ev": {"div": [["2026-01-05", 2.0]]}}, open(tmp_path / "X.json", "w"))
+    t, idx = score.Closes(str(tmp_path)).get("X")
+    assert abs(idx[1] - 1.0) < 1e-9 and abs(idx[2] - 1.0) < 1e-9   # caída por el dividendo compensada

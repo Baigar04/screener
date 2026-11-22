@@ -12,7 +12,9 @@ const DEF_CFG = {
     bb: { on: false, n: 20, k: 2 }, vol: { on: true }, rsi: { on: false, n: 14 }, macd: { on: false, f: 12, s: 26, g: 9 },
     konkorde: { on: false }, eventos: { on: true },
   },
+  ev: { ern: true, news: true, div: true, cong: true, pf: true },
 };
+const EV_TYPES = [["ern", "Resultados"], ["news", "Noticias"], ["div", "Dividendos"], ["cong", "Congreso de EE. UU."], ["pf", "Entradas de tus carteras"]];
 const IND_META = {
   sma1: ["SMA", "Media móvil simple", [["n", "Periodo", 2, 400]]],
   sma2: ["SMA 2", "Segunda media móvil simple", [["n", "Periodo", 2, 400]]],
@@ -22,7 +24,7 @@ const IND_META = {
   vol: ["Volumen", "Acciones negociadas por sesión", []],
   rsi: ["RSI", "Fuerza relativa 0-100: > 70 sobrecompra, < 30 sobreventa", [["n", "Periodo", 2, 100]]],
   macd: ["MACD", "Diferencia de dos EMA y su señal: impulso de la tendencia", [["f", "Rápida", 2, 100], ["s", "Lenta", 3, 200], ["g", "Señal", 2, 50]]],
-  eventos: ["Eventos", "E resultados, D dividendos, N noticias relevantes, flechas del Congreso y entradas de tus carteras; el detalle aparece en la leyenda", []],
+  eventos: ["Eventos", "Franja de eventos bajo el volumen: rombo = resultados, punto = noticias, círculo = dividendo. Pasa el ratón por encima para ver el detalle; pulsa para fijarlo", []],
   konkorde: ["Konkorde", "Manos fuertes (azul), débiles (verde), tendencia (marrón) y su media (roja), a partir de precio y volumen", []],
 };
 
@@ -123,7 +125,7 @@ function baseOptions(LW) {
     autoSize: true,
     layout: { background: { type: LW.ColorType.Solid, color: css("--surface") }, textColor: css("--muted"), fontFamily: css("--font"), fontSize: 11,
       panes: { separatorColor: css("--border"), separatorHoverColor: css("--border-strong") } },
-    grid: { vertLines: { color: css("--border") }, horzLines: { color: css("--border") } },
+    grid: { vertLines: { visible: false }, horzLines: { visible: false } },
     crosshair: { mode: LW.CrosshairMode.Normal },
     rightPriceScale: { borderColor: css("--border") },
     timeScale: { borderColor: css("--border"), rightOffset: 4, minBarSpacing: 0.5 },
@@ -134,6 +136,7 @@ function baseOptions(LW) {
 /* ---------- gráfico de un valor ---------- */
 async function mount(el, sym, opts = {}) {
   const cfg = loadCfg();
+  cfg.ev = { ...DEF_CFG.ev, ...(cfg.ev || {}) };
   el.innerHTML = `<div class="cx"><div class="cx-bar"></div><div class="cx-wrap"><div class="cx-legend"></div><div class="cx-chart"></div></div><div class="cx-note"></div></div>`;
   const root = el.querySelector(".cx"), bar = el.querySelector(".cx-bar"), host = el.querySelector(".cx-chart"),
     legend = el.querySelector(".cx-legend"), note = el.querySelector(".cx-note");
@@ -160,6 +163,8 @@ async function mount(el, sym, opts = {}) {
           <label data-tip="${esc(d)}"><input type="checkbox" data-cx-on="${k}" ${cfg.ind[k].on ? "checked" : ""}> ${t}${k === "konkorde" ? " " + window.SCR.evid("h") : ""}</label>
           <span>${ps.map(([p, pl, mn, mx]) => `<input type="number" class="cx-num" data-cx-p="${k}.${p}" value="${cfg.ind[k][p]}" min="${mn}" max="${mx}" step="${p === "k" ? 0.5 : 1}" title="${pl}" aria-label="${t} ${pl}">`).join("")}</span></div>`).join("")}
           <div class="cx-row"><button class="chip" data-cx-reset="1">Restablecer</button></div></div></div>
+      <div class="dd cx-ind cx-evdd"><button class="dd-btn"><span class="lab">Eventos</span> ▾</button>
+        <div class="dd-menu cx-menu">${EV_TYPES.map(([k, t]) => `<div class="cx-row"><label><input type="checkbox" data-cx-ev="${k}" ${cfg.ev[k] ? "checked" : ""} ${cfg.ind.eventos?.on === false ? "disabled" : ""}> ${t}</label></div>`).join("")}</div></div>
       ${window.SCRDraw ? window.SCRDraw.toolbarHtml(drTool, drMag) : ""}
       <span style="flex:1"></span>
       <button class="icon-btn" data-cx-fs="1" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>`;
@@ -198,18 +203,19 @@ async function mount(el, sym, opts = {}) {
     }
     let pane = 0;
     const heights = [];
-    evLane = null;
+    evLane = I.eventos?.on !== false ? 0 : null;   // panel que aloja el carril (0 = bajo las velas si no hay volumen)
+    if (evLane === 0) { try { main.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.14 } }); } catch (e) { /* */ } }
     if (I.vol.on && D.v) {
       pane++;
       const s = chart.addSeries(LW.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, pane);
       s.setData(T.map((t, i) => (D.v[i] == null ? null : { time: t, value: D.v[i], color: (C[i] >= (C[i - 1] ?? C[i]) ? up : dn) + "88" })).filter(Boolean));
       series["Volumen"] = { s, arr: D.v, color: css("--muted"), vol: true };
-      /* franja inferior del panel de volumen para los marcadores E, D y N */
+      /* franja inferior del panel de volumen reservada al carril de eventos (capa HTML, sin escala) */
       if (I.eventos?.on !== false) {
-        try { s.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.4 } }); } catch (e) { /* */ }
-        evLane = chart.addSeries(LW.LineSeries, { color: "rgba(0,0,0,0)", lineVisible: false, pointMarkersVisible: false, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, pane);
-        evLane.setData(T.map((t) => ({ time: t, value: 0 })));
-        heights.push(96);
+        try { s.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.36 } }); } catch (e) { /* */ }
+        evLane = pane;
+        try { main.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.06 } }); } catch (e) { /* */ }
+        heights.push(100);
       } else heights.push(70);
     }
     if (I.rsi.on) {
@@ -233,11 +239,12 @@ async function mount(el, sym, opts = {}) {
     }
     const wrap = host.parentElement, mainH = window.innerWidth < 640 ? 300 : 380;
     if (!root.classList.contains("fs") && !document.fullscreenElement) wrap.style.height = mainH + heights.reduce((a, b) => a + b, 0) + "px";
-    requestAnimationFrame(() => { try { const ps = chart.panes(); heights.forEach((h, i) => ps[i + 1]?.setHeight(h)); } catch (e) { /* sin paneles ajustables */ } });
+    requestAnimationFrame(() => { try { const ps = chart.panes(); heights.forEach((h, i) => ps[i + 1]?.setHeight(h)); } catch (e) { /* sin paneles ajustables */ } requestAnimationFrame(layoutLane); });
     applyScale();
     addEvents();
     setPeriod();
     chart.subscribeCrosshairMove((p) => showLegend(p));
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => layoutLane());
     showLegend(null);
   }
 
@@ -283,10 +290,10 @@ async function mount(el, sym, opts = {}) {
     if (p && p.time) { const t = typeof p.time === "string" ? p.time : `${p.time.year}-${String(p.time.month).padStart(2, "0")}-${String(p.time.day).padStart(2, "0")}`; const j = T.indexOf(t); if (j >= 0) i = j; }
     const ch = i > 0 && C[i - 1] ? (C[i] / C[i - 1] - 1) * 100 : null;
     const cls = ch == null ? "" : ch >= 0 ? "p" : "n";
-    let h = `<span class="cx-d">${T[i]}</span> A <b>${fmt(D.o[i])}</b> Máx <b>${fmt(D.h[i])}</b> Mín <b>${fmt(D.l[i])}</b> C <b>${fmt(C[i])}</b> <span class="chg ${cls}">${ch == null ? "" : (ch >= 0 ? "+" : "") + fmt(ch) + " %"}</span>`;
-    const extra = Object.entries(series).filter(([, v]) => v.arr && v.arr[i] != null).map(([k, v]) => `<span style="color:${v.color}">${k} ${v.vol ? fmtVol(v.arr[i]) : fmt(v.arr[i])}</span>`);
-    if (extra.length) h += `<br>${extra.join(" · ")}`;
-    const ev = EV.get(T[i]); if (ev) h += `<br><span class="cx-ev">${ev.map((x) => esc(x.txt)).join(" · ")}</span>`;
+    const dt = new Date(T[i] + "T12:00").toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+    let h = `<div><b class="cx-sym">${esc(sym)}</b> <span class="cx-d">${dt}</span> <span class="cx-ohlc">A ${fmt(D.o[i])} · M ${fmt(D.h[i])} · m ${fmt(D.l[i])} · C <b>${fmt(C[i])}</b></span> <span class="chg ${cls}">${ch == null ? "" : (ch >= 0 ? "+" : "") + fmt(ch) + " %"}</span></div>`;
+    const extra = Object.entries(series).filter(([, v]) => v.arr && v.arr[i] != null).map(([k, v]) => `<span style="color:${v.color}">— ${k} ${v.vol ? fmtVol(v.arr[i]) : fmt(v.arr[i])}</span>`);
+    if (extra.length) h += `<div class="cx-l2">${extra.join(" &nbsp; ")}</div>`;
     legend.innerHTML = h;
   }
 
@@ -301,11 +308,12 @@ async function mount(el, sym, opts = {}) {
     if ((b = t.closest("[data-dr-auto]")) && draw) { draw.auto(b.dataset.drAuto); b.closest(".dd")?.classList.remove("open"); return; }
     if (t.closest("[data-dr-undo]") && draw) { draw.undo(); return; }
     if (t.closest("[data-dr-clear]") && draw) { draw.clear(); return; }
-    if (t.closest(".cx-ind .dd-btn")) { e.stopPropagation(); t.closest(".dd").classList.toggle("open"); return; }
+    if (t.closest(".cx-ind .dd-btn")) { e.stopPropagation(); const dd = t.closest(".dd"); bar.querySelectorAll(".cx-ind.open").forEach((x) => x !== dd && x.classList.remove("open")); dd.classList.toggle("open"); return; }
     if (t.closest(".cx-menu")) e.stopPropagation();
   }
   function onChange(e) {
     const t = e.target;
+    if (t.dataset.cxEv) { cfg.ev[t.dataset.cxEv] = t.checked; saveCfg(cfg); build(); return; }
     if (t.dataset.cxOn) { cfg.ind[t.dataset.cxOn].on = t.checked; }
     else if (t.dataset.cxP) {
       const [k, p] = t.dataset.cxP.split("."); let v = +t.value;
@@ -325,7 +333,7 @@ async function mount(el, sym, opts = {}) {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && root.classList.contains("fs")) root.classList.remove("fs"); });
   note.innerHTML = `${esc(D.fuente || "Yahoo Finance")} · ${T.length} sesiones (${T[0]} a ${T[T.length - 1]}) · rueda o pellizco para zoom, arrastrar para desplazar`;
   const NEWS_LAB = { legal: "Legal", producto: "Producto", expansion: "Expansión / operación", resultados: "Resultados", analistas: "Analistas", directivos: "Directivos" };
-  const NEWS_COL = { legal: "#f23645", producto: "#2962ff", expansion: "#089981", resultados: "#ff9800", analistas: "#9c27b0", directivos: "#787b86" };
+  const NEWS_COL = { legal: "var(--neg)", producto: "var(--good)", expansion: "var(--pos)", resultados: "var(--accent)", analistas: "#a48bd6", directivos: "var(--muted)" };
   /* eventos: resultados, dividendos, noticias, Congreso y entradas de mis carteras */
   const EV = new Map();
   let evLane = null;
@@ -339,28 +347,93 @@ async function mount(el, sym, opts = {}) {
     (ev.div || []).forEach(([d, a]) => add(d, { kind: "div", txt: `Dividendo: ${fmt(a, a < 1 ? 4 : 2)} por acción` }));
     (ev.ern || []).forEach(([d, est, rep, sur]) => { if (rep == null) return;
       add(d, { kind: "ern", txt: `Resultados: BPA ${fmt(rep)} frente a ${est == null ? "—" : fmt(est)} estimado${sur == null ? "" : ` (sorpresa ${sur > 0 ? "+" : ""}${fmt(sur, 1)} %)`}`, beat: sur == null ? null : sur >= 0 }); });
-    (ev.news || []).forEach(([d, cat, title]) => { if (cat === "otras") return; add(d, { kind: "news", cat, txt: `${NEWS_LAB[cat] || "Noticia"}: ${title.length > 95 ? title.slice(0, 95) + "…" : title}` }); });
+    (ev.news || []).forEach(([d, cat, title, url, src]) => { if (cat === "otras") return; add(d, { kind: "news", cat, title, url, src, txt: `${NEWS_LAB[cat] || "Noticia"}: ${title}` }); });
     try { (JSON.parse(localStorage.getItem("carteras") || "[]")).forEach((p) => p.items.forEach((x) => { if (x.sym === sym) add(p.creada.slice(0, 10), { kind: "pf", txt: `Entrada en «${p.nombre}» a ${fmt(x.p0)}`, p0: x.p0 }); })); } catch (e) { /* */ }
   }
+  /* Congreso y entradas de tus carteras: marcadores discretos sobre las velas */
   function addEvents() {
     collectEvents();
-    const mk = [], lk = [];
-    if (cfg.ind.eventos?.on !== false) EV.forEach((list, d) => {
-      /* un marcador por día y tipo, pequeño y sin texto: el detalle va en la leyenda */
+    const mk = [], on = cfg.ind.eventos?.on !== false;
+    if (on) EV.forEach((list, d) => {
       const b = list.filter((o) => o.kind === "cb").length, sl = list.filter((o) => o.kind === "cs").length, pf = list.some((o) => o.kind === "pf");
-      if (pf) mk.push({ time: d, position: "belowBar", color: "#2962ff", shape: "circle", size: 0.8 });
-      /* E, D y N van en la franja del volumen; sin volumen, bajo las velas */
-      const er = list.find((o) => o.kind === "ern"); if (er) lk.push({ time: d, position: "belowBar", color: er.beat === false ? css("--neg") : er.beat ? css("--pos") : css("--warn"), shape: "square", size: 1, text: "E" });
-      if (list.some((o) => o.kind === "div")) lk.push({ time: d, position: "belowBar", color: "#00bcd4", shape: "circle", size: 1, text: "D" });
-      const nw = list.filter((o) => o.kind === "news"); if (nw.length) lk.push({ time: d, position: "belowBar", color: NEWS_COL[nw[0].cat] || "#9c27b0", shape: "circle", size: 1, text: "N" });
-      if (b) mk.push({ time: d, position: "belowBar", color: css("--pos"), shape: "arrowUp", size: b > 1 ? 1 : 0.7 });
-      if (sl) mk.push({ time: d, position: "aboveBar", color: css("--neg"), shape: "arrowDown", size: sl > 1 ? 1 : 0.7 });
+      if (pf && cfg.ev.pf) mk.push({ time: d, position: "belowBar", color: css("--good"), shape: "circle", size: 0.7 });
+      if (b && cfg.ev.cong) mk.push({ time: d, position: "belowBar", color: css("--pos"), shape: "arrowUp", size: b > 1 ? 1 : 0.7 });
+      if (sl && cfg.ev.cong) mk.push({ time: d, position: "aboveBar", color: css("--neg"), shape: "arrowDown", size: sl > 1 ? 1 : 0.7 });
     });
-    const setMk = (ser, arr) => { arr.sort((a, b) => (a.time < b.time ? -1 : 1)); try { if (LW.createSeriesMarkers) LW.createSeriesMarkers(ser, arr); else if (ser.setMarkers) ser.setMarkers(arr); } catch (e) { /* sin marcadores */ } };
-    if (evLane) { setMk(main, mk); setMk(evLane, lk); } else setMk(main, mk.concat(lk));
+    mk.sort((a, b) => (a.time < b.time ? -1 : 1));
+    try { if (LW.createSeriesMarkers) LW.createSeriesMarkers(main, mk); else if (main.setMarkers) main.setMarkers(mk); } catch (e) { /* sin marcadores */ }
     const pf = [...EV.values()].flat().filter((o) => o.kind === "pf");
-    if (pf.length) { const avg = pf.reduce((a, o) => a + o.p0, 0) / pf.length; try { main.createPriceLine({ price: avg, color: "#2962ff", lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: true, title: "Media" }); } catch (e) { /* */ } }
+    if (pf.length && on && cfg.ev.pf) { const avg = pf.reduce((a, o) => a + o.p0, 0) / pf.length; try { main.createPriceLine({ price: avg, color: css("--good"), lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: true, title: "Media" }); } catch (e) { /* */ } }
+    paintLane();
   }
+
+  /* ---------- carril de eventos (capa HTML): rombo = resultados, punto = noticias, círculo = dividendo ---------- */
+  const NEWS_PRI = ["resultados", "legal", "analistas", "producto", "expansion", "directivos"];
+  const lane = document.createElement("div"); lane.className = "cx-lane"; host.parentElement.appendChild(lane);
+  const card = document.createElement("div"); card.className = "cx-card"; card.hidden = true; host.parentElement.appendChild(card);
+  let pinned = null;
+  function laneItems() {
+    const out = [];
+    EV.forEach((list, d) => {
+      const er = cfg.ev.ern && list.find((o) => o.kind === "ern"), dv = cfg.ev.div && list.some((o) => o.kind === "div");
+      const nw = cfg.ev.news ? list.filter((o) => o.kind === "news").sort((a, b) => NEWS_PRI.indexOf(a.cat) - NEWS_PRI.indexOf(b.cat)) : [];
+      if (er || dv || nw.length) out.push({ d, er, dv, nw });
+    });
+    return out;
+  }
+  function paintLane() {
+    if (evLane == null) { lane.innerHTML = ""; lane.hidden = true; return; }
+    lane.hidden = false;
+    const ern = (er) => `<i class="g-ern" style="border-color:${er.beat === false ? "var(--neg)" : er.beat ? "var(--pos)" : "var(--warn)"}"></i>`;
+    lane.innerHTML = `<div class="cx-lane-line"></div><span class="cx-lane-lab">Eventos</span><div class="cx-guide" hidden></div>` + laneItems().map((x) => `<button class="cx-g" data-evd="${x.d}" aria-label="Eventos del ${x.d}">
+      ${x.er ? ern(x.er) : ""}${x.nw.length ? `<i class="g-news${x.nw.length > 1 ? " n" : ""}" style="--c:${NEWS_COL[x.nw[0].cat] || "var(--muted)"}">${x.nw.length > 1 ? x.nw.length : ""}</i>` : ""}${x.dv ? '<i class="g-div"></i>' : ""}</button>`).join("");
+    layoutLane();
+  }
+  function laneY() {
+    try {
+      const ps = chart.panes(); let y = 0;
+      for (let k = 0; k < evLane; k++) y += ps[k].getHeight() + 1;
+      return y + ps[evLane].getHeight() - 17;
+    } catch (e) { return null; }
+  }
+  function layoutLane() {
+    if (evLane == null || !chart) return;
+    const y = laneY(); if (y == null) return;
+    let w = host.clientWidth; try { w -= chart.priceScale("right").width(); } catch (e) { /* */ }
+    lane.style.setProperty("--ly", y + "px"); lane.style.setProperty("--lw", w + "px");
+    lane.querySelectorAll(".cx-g").forEach((g) => {
+      const x = chart.timeScale().timeToCoordinate(g.dataset.evd);
+      if (x == null || x < 4 || x > w - 4) { g.style.display = "none"; return; }
+      g.style.display = ""; g.style.transform = `translate(${x}px,${y}px)`;
+    });
+    if (pinned) showCard(pinned, true);
+  }
+  const fdate = (d) => new Date(d + "T12:00").toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+  function showCard(d, keep) {
+    const list = EV.get(d); if (!list) return;
+    const x = chart.timeScale().timeToCoordinate(d), y = laneY(); if (x == null || y == null) return;
+    const er = list.find((o) => o.kind === "ern"), dv = list.find((o) => o.kind === "div");
+    const nw = list.filter((o) => o.kind === "news").sort((a, b) => NEWS_PRI.indexOf(a.cat) - NEWS_PRI.indexOf(b.cat));
+    const sum = [nw.length ? `${nw.length} ${nw.length === 1 ? "noticia" : "noticias"}` : "", er ? `resultados${er.beat == null ? "" : er.beat ? " (supera)" : " (decepciona)"}` : "", dv ? "dividendo" : ""].filter(Boolean).join(" · ");
+    const row = (c, cat, t, src, url) => `<div class="cc-it"><i style="background:${c}"></i><span class="cc-cat">${cat}</span><span class="cc-t">${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t)}</span><span class="cc-src">${esc(src || "")}</span></div>`;
+    card.innerHTML = `<div class="cc-h"><b>${fdate(d)}</b><span>${sum}</span></div>
+      ${er ? row(er.beat === false ? "var(--neg)" : er.beat ? "var(--pos)" : "var(--warn)", "Resultados", er.txt.replace(/^Resultados: /, ""), "Yahoo") : ""}
+      ${dv ? row("var(--good)", "Dividendo", dv.txt.replace(/^Dividendo: /, ""), "Yahoo") : ""}
+      ${nw.slice(0, 4).map((o) => row(NEWS_COL[o.cat] || "var(--muted)", NEWS_LAB[o.cat] || "Noticia", o.title.length > 110 ? o.title.slice(0, 110) + "…" : o.title, o.src, o.url)).join("")}
+      <div class="cc-f">${nw.length > 4 ? `y ${nw.length - 4} más · ` : ""}${keep ? "fijada: pulsa fuera para cerrar" : "pulsa el punto para fijarla"}</div>`;
+    card.hidden = false;
+    const W = host.clientWidth, cw = card.offsetWidth, ch = card.offsetHeight;
+    card.style.left = Math.max(4, Math.min(x > W / 2 ? x - cw - 14 : x + 14, W - cw - 4)) + "px";
+    card.style.top = Math.max(4, y - ch - 10) + "px";
+    const g = lane.querySelector(".cx-guide"); if (g) { g.hidden = false; g.style.transform = `translateX(${x}px)`; g.style.height = y - 8 + "px"; }
+  }
+  function hideCard() { if (pinned) return; card.hidden = true; const g = lane.querySelector(".cx-guide"); if (g) g.hidden = true; }
+  lane.addEventListener("mouseover", (e) => { const g = e.target.closest(".cx-g"); if (g && !pinned) showCard(g.dataset.evd); });
+  lane.addEventListener("mouseout", (e) => { const g = e.target.closest(".cx-g"); if (g && !g.contains(e.relatedTarget)) hideCard(); });
+  lane.addEventListener("click", (e) => { const g = e.target.closest(".cx-g"); if (!g) return; e.stopPropagation(); pinned = pinned === g.dataset.evd ? null : g.dataset.evd; if (pinned) showCard(pinned, true); else hideCard(); });
+  document.addEventListener("pointerdown", (e) => { if (pinned && !card.contains(e.target) && !e.target.closest(".cx-g")) { pinned = null; hideCard(); } }, true);
+  new ResizeObserver(() => layoutLane()).observe(host);
+
   /* sonda: punto pulsante sobre el último cierre */
   const probe = document.createElement("div"); probe.className = "cx-probe"; probe.innerHTML = "<i></i><b></b>";
   host.parentElement.appendChild(probe);

@@ -12,8 +12,11 @@ const HZ_EVAL = { corto: "1m", medio: "3m", largo: "6m" };   // horizonte de cad
 const D = { list: store.get("diario", []), P: {}, reg: null, regErr: null, regLoading: false, form: null, ver: "todas" };
 const save = () => store.set("diario", D.list);
 const decName = (k) => (DEC.find((x) => x[0] === k) || [, k])[1];
-const bench = (sym) => (sym.includes(".") ? "IDX_STOXX50" : "IDX_SP500");
-const benchName = (sym) => (sym.includes(".") ? "Euro Stoxx 50" : "S&P 500");
+/* referencia con dividendos reinvertidos (ETF de reparto); si aún no existe el fichero, el índice de precios */
+const benchTR = (sym) => (sym.includes(".") ? "IDX_STOXX50TR" : "IDX_SP500TR");
+const benchPx = (sym) => (sym.includes(".") ? "IDX_STOXX50" : "IDX_SP500");
+const bench = (sym) => { const t = D.P[benchTR(sym)]; return t && t !== "…" && t.err ? benchPx(sym) : benchTR(sym); };
+const benchName = (sym) => (sym.includes(".") ? "Euro Stoxx 50" : "S&P 500") + (bench(sym).endsWith("TR") ? " con dividendos" : "");
 const sign = (e) => (e.dec === "comprar" ? 1 : e.dec === "vender" || e.dec === "descartar" ? -1 : 0);   // vigilar no cuenta para el acierto
 
 /* ---------- precios (data/p/SYM.json, cierres sin ajustar) ---------- */
@@ -23,20 +26,23 @@ function prices(sym) {
   if (!c) {
     D.P[sym] = "…";
     fetch(`data/p/${encodeURIComponent(sym)}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-      .then((d) => { D.P[sym] = d && d.t ? { t: d.t, c: d.c } : { t: [], c: [], err: true }; H.render(); });
+      .then((d) => { D.P[sym] = d && d.t ? { t: d.t, c: d.c, dv: Object.fromEntries(((d.ev || {}).div || []).filter((x) => x[1] > 0)) } : { t: [], c: [], err: true }; H.render(); });
   }
   return null;
 }
 const idxAtOrBefore = (t, d) => { let lo = 0, hi = t.length - 1, ans = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (t[m] <= d) { ans = m; lo = m + 1; } else hi = m - 1; } return ans; };
-/* rentabilidad encadenando cierres; un salto diario > +80 % o < −45 % se trata como split y no cuenta */
+/* rentabilidad total encadenando cierres: el día ex-dividendo se suma el dividendo (reinvertido); un salto diario
+   > +80 % o < −45 % se trata como split y no cuenta */
 function chain(p, i0, i1) {
-  let r = 1, split = false;
+  let r = 1, split = false, div = 0;
   for (let i = i0 + 1; i <= i1; i++) {
     const a = p.c[i - 1], b = p.c[i]; if (!(a > 0) || !(b > 0)) continue;
-    const q = b / a; if (q > 1.8 || q < 0.55) { split = true; continue; }
+    const d = (p.dv && p.dv[p.t[i]]) || 0;
+    const q = (b + d) / a; if (q > 1.8 || q < 0.55) { split = true; continue; }
+    if (d) div += d / a;
     r *= q;
   }
-  return { r: r - 1, split };
+  return { r: r - 1, split, div };
 }
 /* resultado de una decisión a n sesiones (o hasta hoy si n es null) frente a su índice */
 function perf(e, n) {
@@ -49,7 +55,7 @@ function perf(e, n) {
   const s = chain(p, i0, i1);
   const j0 = idxAtOrBefore(b.t, p.t[i0]), j1 = idxAtOrBefore(b.t, p.t[i1]);
   const ib = j0 >= 0 && j1 > j0 ? b.c[j1] / b.c[j0] - 1 : null;
-  return { r: 100 * s.r, idx: ib == null ? null : 100 * ib, ex: ib == null ? null : 100 * (s.r - ib), split: s.split, hasta: p.t[i1], ses: i1 - i0 };
+  return { r: 100 * s.r, idx: ib == null ? null : 100 * ib, ex: ib == null ? null : 100 * (s.r - ib), split: s.split, hasta: p.t[i1], ses: i1 - i0, div: 100 * s.div };
 }
 
 /* ---------- registro inmutable (data/registro.json) ---------- */
@@ -123,7 +129,7 @@ const cellEx = (p, e) => {
   if (p.open) return `<span class="hint" data-tip="Aún no se ha cumplido el plazo (${p.ses} sesiones)">—</span>`;
   if (p.ex == null) return "—";
   const good = sign(e) ? sign(e) * p.ex > 0 : null;
-  return `<span class="chg ${good == null ? (p.ex >= 0 ? "p" : "n") : good ? "p" : "n"}" data-tip="Valor ${sgn(p.r, 1)} % · ${esc(benchName(e.sym))} ${sgn(p.idx, 1)} % · hasta ${fmtDate(p.hasta)}${p.split ? " · se ha descontado un posible split" : ""}">${sgn(p.ex, 1)} pp${p.split ? "*" : ""}</span>`;
+  return `<span class="chg ${good == null ? (p.ex >= 0 ? "p" : "n") : good ? "p" : "n"}" data-tip="Valor ${sgn(p.r, 1)} % · ${esc(benchName(e.sym))} ${sgn(p.idx, 1)} % · hasta ${fmtDate(p.hasta)}${p.div ? ` · incluye ${nf(p.div, 1)} % de dividendos` : ""}${p.split ? " · se ha descontado un posible split" : ""}">${sgn(p.ex, 1)} pp${p.split ? "*" : ""}</span>`;
 };
 const scoreB = (v) => (window.SCREq ? window.SCREq.scoreBadge(v) : v ?? "—");
 function render() {
@@ -150,7 +156,7 @@ function render() {
         <td class="num">${cellEx(perf(e, 21), e)}</td><td class="num">${cellEx(perf(e, 63), e)}</td><td class="num">${cellEx(perf(e, 126), e)}</td><td class="num">${(() => { const p = perf(e, null); return p.loading ? "…" : p.err || p.ex == null ? "—" : `${cellEx(p, e)} <span class="hint">${p.ses} s.</span>`; })()}</td>
         <td>${e.anulada ? "" : `<button class="link-btn" data-danul="${e.id}" title="Anular (queda a la vista, no cuenta en las estadísticas)">Anular</button>`}</td></tr>`).join("")}
       </tbody></table></div>` : `<div class="soon-box">${D.list.length ? "Ninguna decisión con este filtro." : "Aún no has registrado decisiones. Escribe un ticker y pulsa «Registrar decisión», o hazlo desde la ficha de cualquier empresa."}</div>`}
-    <div class="method">Para «Vender» y «Descartar», acertar es que el valor lo haga peor que su índice; «Vigilar» se mide pero no cuenta en el acierto. Rentabilidad con cierres sin dividendos; * = se ha descontado un posible split. Las decisiones se guardan en este navegador y entran en la copia de seguridad (Mercado › Hoy).</div></section>`;
+    <div class="method">Para «Vender» y «Descartar», acertar es que el valor lo haga peor que su índice; «Vigilar» se mide pero no cuenta en el acierto. Rentabilidad total: el valor con sus dividendos reinvertidos el día ex y el índice con los suyos (ETF de reparto que lo replica); * = se ha descontado un posible split. Las decisiones se guardan en este navegador y entran en la copia de seguridad (Mercado › Hoy).</div></section>`;
   /* notas de las carteras (carteras.js): se muestran aquí, no se duplican */
   const notes = (store.get("carteras", []) || []).flatMap((p) => (p.notas || []).map((n) => ({ ...n, cartera: p.nombre }))).sort((a, b) => (a.f < b.f ? 1 : -1));
   h += `<section class="fbox"><header><h2>Notas de tus carteras</h2><span class="fbox-r">${notes.length} notas · se escriben en Watchlists › Carteras</span></header>

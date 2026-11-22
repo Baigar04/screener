@@ -1090,3 +1090,29 @@ table.scr td.tx,table.scr th.tx{text-align:left}
 .rk-h{font-family:var(--serif);font-size:14px;font-weight:600;margin:4px 0 6px}.rk-h.pos{color:var(--pos)}.rk-h.neg{color:var(--neg)}
 table.rk td,table.rk th{padding:4px 8px;white-space:nowrap}table.rk tr{cursor:pointer}
 @media (max-width:900px){.rk2{grid-template-columns:1fr}}
+/* ===== Gráfico de la ficha (maqueta aprobada 14-nov): sin cuadrícula, leyenda limpia, carril de eventos y tarjeta del día ===== */
+.cx-legend{line-height:1.55}
+.cx-legend .cx-sym{color:var(--text);font-weight:600;margin-right:4px}
+.cx-legend .cx-d{color:var(--muted);margin-right:8px}
+.cx-legend .cx-ohlc{color:var(--muted);font-variant-numeric:tabular-nums}
+.cx-legend .cx-ohlc b{margin:0}
+.cx-legend .cx-l2{font-size:11.5px;font-variant-numeric:tabular-nums}
+.cx-lane{position:absolute;inset:0;pointer-events:none;z-index:6}
+.cx-lane-line{position:absolute;left:0;top:var(--ly);width:var(--lw);height:1px;background:var(--border)}
+.cx-lane-lab{position:absolute;left:calc(var(--lw) + 8px);top:calc(var(--ly) - 7px);font-size:10.5px;color:var(--faint)}
+.cx-guide{position:absolute;left:0;top:0;width:0;border-left:1px dashed var(--muted);opacity:.55}
+.cx-g{position:absolute;left:0;top:0;pointer-events:auto;display:flex;align-items:center;gap:2px;margin:-8px 0 0 -8px;height:16px;min-width:16px;padding:0;background:none;border:0;cursor:pointer}
+.cx-g i{display:block;flex:none}
+.cx-g .g-ern{width:9px;height:9px;transform:rotate(45deg);border:1.6px solid;background:var(--surface)}
+.cx-g .g-news{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.cx-g .g-news.n{width:13px;height:13px;background:var(--surface);border:1.3px solid var(--c);color:var(--c);font:600 8.5px/11px var(--font);font-style:normal;text-align:center}
+.cx-g .g-div{width:7px;height:7px;border-radius:50%;border:1.4px solid var(--good)}
+.cx-g:hover i,.cx-g:focus-visible i{filter:brightness(1.35)}
+.cx-card{position:absolute;z-index:8;width:min(520px,calc(100% - 8px));background:var(--surface-2);border:1px solid var(--border-strong);box-shadow:0 8px 24px rgba(0,0,0,.45);font-size:12.5px}
+.cx-card .cc-h{display:flex;justify-content:space-between;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border)}.cx-card .cc-h span{color:var(--muted)}
+.cx-card .cc-it{display:grid;grid-template-columns:8px 78px 1fr auto;gap:8px;align-items:baseline;padding:6px 12px;border-bottom:1px solid var(--border)}
+.cx-card .cc-it i{width:6px;height:6px;border-radius:50%;display:inline-block}
+.cx-card .cc-cat{color:var(--muted);font-size:11.5px}.cx-card .cc-src{color:var(--faint);font-size:11px}
+.cx-card .cc-t a{color:var(--text);text-decoration:none}.cx-card .cc-t a:hover{text-decoration:underline}
+.cx-card .cc-f{padding:6px 12px;color:var(--faint);font-size:11.5px}
+.cx-evdd .dd-menu{min-width:220px}

@@ -314,6 +314,30 @@ def fase9(pg, base):
     check("SAN.MC: bloque aproximado sin errores", "Calidad del beneficio y balance" in (pg.text_content("#view") or ""))
 
 
+def grafico(pg, base):
+    """Gráfico de la ficha (maqueta 14-nov): sin cuadrícula, leyenda sin titulares, carril de eventos con tarjeta al pasar."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/empresa/AAPL/grafico")
+    pg.wait_for_selector(".cx-chart canvas", timeout=60000)
+    pg.wait_for_timeout(2500)
+    leg = pg.text_content(".cx-legend") or ""
+    check("gráfico: leyenda sin titulares de noticias", "Resultados:" not in leg and "Noticia" not in leg and "AAPL" in leg, leg[:120])
+    vis = pg.evaluate("[...document.querySelectorAll('.cx-lane .cx-g')].filter(g => g.style.display !== 'none').length")
+    check("gráfico: carril de eventos con glifos", vis > 0, f"{vis} visibles")
+    if vis:
+        g = pg.locator(".cx-lane .cx-g:visible").last
+        g.hover()
+        pg.wait_for_timeout(400)
+        check("gráfico: tarjeta del día al pasar el ratón", pg.locator(".cx-card:not([hidden])").count() == 1, (pg.text_content(".cx-card") or "")[:100])
+    check("gráfico: selector de eventos", pg.locator(".cx-evdd [data-cx-ev]").count() == 5)
+    try:
+        import base64
+        b = pg.locator(".cx").first.screenshot(type="jpeg", quality=55)
+        print("CAPTURA_GRAFICO " + base64.b64encode(b).decode(), flush=True)
+    except Exception as e:  # noqa: BLE001
+        print("captura:", e)
+
+
 def ranking(pg, base):
     """Smart money · más compradas y vendidas (13F del trimestre, directivos y Congreso a 30 días) y universo ampliado."""
     pg.set_viewport_size({"width": 1440, "height": 900})
@@ -376,7 +400,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

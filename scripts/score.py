@@ -79,7 +79,8 @@ def split_safe(q):
 
 
 class Closes:
-    """Cierres diarios de data/p/<SYM>.json convertidos en un índice acumulado sin saltos por splits."""
+    """Cierres diarios de data/p/<SYM>.json convertidos en un índice de rentabilidad total (dividendo sumado el día ex)
+    sin saltos por splits."""
 
     def __init__(self, folder):
         self.folder, self.cache = folder, {}
@@ -90,11 +91,12 @@ class Closes:
             try:
                 d = json.load(open(os.path.join(self.folder, sym.replace("/", "_") + ".json")))
                 lv, last = 1.0, None
+                dv = {x[0]: x[1] for x in ((d.get("ev") or {}).get("div") or []) if x and x[1]}
                 for day, c in zip(d.get("t", []), d.get("c", [])):
                     if not c or c <= 0:
                         continue
                     if last:
-                        lv *= split_safe(c / last)
+                        lv *= split_safe((c + dv.get(day, 0.0)) / last)
                     t.append(day)
                     idx.append(lv)
                     last = c

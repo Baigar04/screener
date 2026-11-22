@@ -61,13 +61,19 @@ function splitSafe(q) {
   for (const k of SPLITS) if (Math.abs(q * k - 1) < 0.04 || Math.abs(q / k - 1) < 0.04) return 1;
   return q;
 }
+const divMap = (s) => Object.fromEntries(((s && s.ev && s.ev.div) || []).filter((x) => x[1] > 0));
+/* referencia con dividendos (ETF de reparto); si no está, el índice de precios */
+const benchUS = () => prices("IDX_SP500TR").catch(() => prices("IDX_SP500")).catch(() => null);
+const benchEU = () => prices("IDX_STOXX50TR").catch(() => prices("IDX_STOXX50")).catch(() => null);
+const atOrBefore = (b, d) => { let a = -1; for (let i = 0; i < b.t.length && b.t[i] <= d; i++) a = i; return a; };
 /* rentabilidades diarias alineadas del último año (fechas comunes con relleno hacia delante) */
 function alignReturns(series) {
   const dates = [...new Set(series.flatMap((s) => s.t.slice(-260)))].sort().slice(-253);
   const R = series.map((s) => {
     const m = new Map(s.t.map((t, i) => [t, s.c[i]])); let last = null;
     const px = dates.map((d) => { if (m.has(d) && m.get(d) != null) last = m.get(d); return last; });
-    const r = []; for (let i = 1; i < px.length; i++) r.push(px[i] && px[i - 1] ? splitSafe(px[i] / px[i - 1]) - 1 : 0);
+    const dv = divMap(s);   // dividendo sumado el día ex: rentabilidad total
+    const r = []; for (let i = 1; i < px.length; i++) r.push(px[i] && px[i - 1] ? splitSafe((px[i] + (dv[dates[i]] || 0)) / px[i - 1]) - 1 : 0);
     return { px, r };
   });
   return { dates, R };
@@ -173,7 +179,7 @@ async function build() {
     if (cand.length < 2) throw new Error("Hacen falta al menos 2 valores candidatos. Prueba otra fuente o más valores.");
     if (C.cfg.wmax / 100 * cand.length < 1) throw new Error(`Con ${cand.length} valores y un peso máximo del ${C.cfg.wmax} % no se llega al 100 %. Sube el peso máximo o el número de valores.`);
     const [ser, fx, bus, beu] = await Promise.all([Promise.all(cand.map((r) => prices(r.sym).catch(() => null))), eurusd(),
-      prices("IDX_SP500").catch(() => null), prices("IDX_STOXX50").catch(() => null)]);
+      benchUS(), benchEU()]);
     const ok = cand.filter((_, i) => ser[i] && ser[i].c.length > 120), oks = ser.filter((s) => s && s.c.length > 120);
     if (ok.length < 2) throw new Error("No hay histórico suficiente para estos valores.");
     const { dates, R } = alignReturns(oks);
@@ -260,24 +266,33 @@ function renderBuild() {
   return h;
 }
 /* ---------- carteras guardadas ---------- */
+/* dividendos cobrados desde que se creó la cartera (fecha ex posterior), por acción y en la moneda del valor */
+const DV = {};
+function divSince(sym, d0) {
+  if (!(sym in DV)) { DV[sym] = null; prices(sym).then((s) => { DV[sym] = ((s && s.ev && s.ev.div) || []).filter((x) => x[1] > 0); H.render(); }).catch(() => { DV[sym] = []; }); }
+  return (DV[sym] || []).filter((x) => x[0] > d0).reduce((a, x) => a + x[1], 0);
+}
 function valuation(p) {
-  const uni = window.SCRUni ? window.SCRUni() : [], px = Object.fromEntries(uni.map((r) => [r.sym, r.precio]));
-  let tot = 0; const cur = p.items.map((x) => { const v = px[x.sym] && x.p0 ? x.w * (px[x.sym] / x.p0) : x.w; tot += v; return v; });
-  const items = p.items.map((x, i) => ({ ...x, now: px[x.sym], wcur: cur[i] / tot, drift: (cur[i] / tot - x.w) * 100 }));
-  return { ret: (tot - 1) * 100, items, maxDrift: Math.max(...items.map((x) => Math.abs(x.drift))) };
+  const uni = window.SCRUni ? window.SCRUni() : [], px = Object.fromEntries(uni.map((r) => [r.sym, r.precio])), d0 = p.creada.slice(0, 10);
+  let tot = 0, divTot = 0;
+  const dvs = p.items.map((x) => divSince(x.sym, d0));
+  const cur = p.items.map((x, i) => { const dv = dvs[i]; const v = px[x.sym] && x.p0 ? x.w * ((px[x.sym] + dv) / x.p0) : x.w; if (x.p0) divTot += x.w * dv / x.p0; tot += v; return v; });
+  const items = p.items.map((x, i) => ({ ...x, now: px[x.sym], dv: dvs[i], wcur: cur[i] / tot, drift: (cur[i] / tot - x.w) * 100 }));
+  return { ret: (tot - 1) * 100, div: divTot * 100, items, maxDrift: Math.max(...items.map((x) => Math.abs(x.drift))) };
 }
 async function benchRet(p) {
   try {
-    const [a, e] = await Promise.all([prices("IDX_SP500"), prices("IDX_STOXX50")]);
-    const r = (b, v0) => (b && v0 ? (b.c[b.c.length - 1] / v0 - 1) * 100 : null);
-    const ra = r(a, p.b_us), re = r(e, p.b_eu);
+    const [a, e] = await Promise.all([benchUS(), benchEU()]);
+    const d0 = p.creada.slice(0, 10);
+    const r = (b) => { if (!b) return null; const i = atOrBefore(b, d0); return i >= 0 && b.c[i] ? (b.c[b.c.length - 1] / b.c[i] - 1) * 100 : null; };
+    const ra = r(a), re = r(e);
     return ra != null && re != null ? p.us * ra + (1 - p.us) * re : ra ?? re;
   } catch (e) { return null; }
 }
 function renderSaved() {
   if (!C.saved.length) return `<div class="soon-box">No hay carteras guardadas. Construye una y pulsa «Guardar cartera». Se guardan en este navegador; usa «Exportar todas» para llevarlas a otro dispositivo.</div>
     <div class="bar" style="margin-top:10px"><label class="icon-btn">Importar carteras<input type="file" accept="application/json" data-cimport="1" hidden></label></div>`;
-  let h = `<div class="tbl-wrap"><table><thead><tr><th>Cartera</th><th>Creada</th><th>Método</th><th>Valores</th><th>Rentabilidad</th><th data-tip="Índices de referencia en el mismo periodo, ponderados por región">Referencia</th><th data-tip="Mayor desviación de un peso frente a su objetivo">Desviación máx.</th></tr></thead><tbody>
+  let h = `<div class="tbl-wrap"><table><thead><tr><th>Cartera</th><th>Creada</th><th>Método</th><th>Valores</th><th>Rentabilidad</th><th data-tip="Índices con dividendos en el mismo periodo, ponderados por región">Referencia</th><th data-tip="Mayor desviación de un peso frente a su objetivo">Desviación máx.</th></tr></thead><tbody>
     ${C.saved.map((p) => { const v = valuation(p); return `<tr data-copen="${p.id}" class="${C.open === p.id ? "sel" : ""}"><td>${esc(p.nombre)}</td><td>${fmtDate(p.creada.slice(0, 10))}</td><td>${esc((METODOS.find((m) => m[0] === p.metodo) || [, p.metodo])[1])}</td>
       <td class="num">${p.items.length}</td><td class="num chg ${cls(v.ret)}">${spct(v.ret, 2)}</td><td class="num" id="bench_${p.id}">…</td><td class="num ${v.maxDrift > 5 ? "stale-txt" : ""}">${nf(v.maxDrift, 1)} pp${v.maxDrift > 5 ? " ⚠" : ""}</td></tr>`; }).join("")}
     </tbody></table></div><div class="bar" style="margin-top:10px"><button class="icon-btn" data-cexport="1">Exportar todas</button><label class="icon-btn">Importar<input type="file" accept="application/json" data-cimport="1" hidden></label></div>`;
@@ -286,9 +301,10 @@ function renderSaved() {
     const v = valuation(p);
     h += `<div class="box" style="margin-top:12px"><b>${esc(p.nombre)} · capital inicial ${eur(p.capital)} · valor estimado ${eur(p.capital * (1 + v.ret / 100))}</b>
       ${v.maxDrift > 5 ? `<div class="err-box" style="margin:6px 0">Rebalanceo sugerido: algún peso se ha desviado más de 5 puntos de su objetivo.</div>` : ""}
-      <table><thead><tr><th>Valor</th><th>Objetivo</th><th>Actual</th><th>Desviación</th><th>Precio inicial</th><th>Precio actual</th><th>Variación</th></tr></thead><tbody>
+      <table><thead><tr><th>Valor</th><th>Objetivo</th><th>Actual</th><th>Desviación</th><th>Precio inicial</th><th>Precio actual</th><th data-tip="Dividendos por acción con fecha ex posterior a la creación de la cartera">Dividendos</th><th data-tip="Precio más dividendos frente al precio inicial">Rentabilidad total</th></tr></thead><tbody>
       ${v.items.map((x) => `<tr data-sym="${esc(x.sym)}"><td><b>${esc(x.sym)}</b></td><td class="num">${pct(x.w * 100)}</td><td class="num">${pct(x.wcur * 100)}</td><td class="num ${Math.abs(x.drift) > 5 ? "stale-txt" : ""}">${sgn(x.drift, 1)} pp</td>
-        <td class="num">${nf(x.p0, 2)}</td><td class="num">${nf(x.now, 2)}</td><td class="num chg ${cls(x.now && x.p0 ? x.now / x.p0 - 1 : null)}">${x.now && x.p0 ? spct((x.now / x.p0 - 1) * 100) : "—"}</td></tr>`).join("")}</tbody></table>
+        <td class="num">${nf(x.p0, 2)}</td><td class="num">${nf(x.now, 2)}</td><td class="num">${x.dv ? nf(x.dv, 2) : "—"}</td><td class="num chg ${cls(x.now && x.p0 ? (x.now + (x.dv || 0)) / x.p0 - 1 : null)}">${x.now && x.p0 ? spct(((x.now + (x.dv || 0)) / x.p0 - 1) * 100) : "—"}</td></tr>`).join("")}</tbody></table>
+      <div class="method">Rentabilidad total: precio más dividendos cobrados (${spct(v.div, 2)} de la cartera), sin reinvertir y antes de impuestos. La referencia también incluye dividendos (ETF de reparto del S&P 500 y del Euro Stoxx 50).</div>
       ${C.riskSaved[p.id] === "busy" ? '<div class="skel" style="height:200px;margin-top:12px"></div>' : C.riskSaved[p.id]?.err ? `<div class="err-box" style="margin-top:12px">${esc(C.riskSaved[p.id].err)}</div>` : riskHtml(C.riskSaved[p.id])}
       <h2 class="sec">Notas de la cartera <span class="hint">También aparecen en Investigación › Diario de decisiones, junto a tus decisiones por valor</span></h2>
       ${(p.notas || []).slice().reverse().map((n) => `<div class="note"><span class="hint">${fmtDate(n.f.slice(0, 10))}</span> ${esc(n.t)}</div>`).join("") || '<div class="hint">Sin notas.</div>'}
@@ -304,7 +320,7 @@ async function savedRisk(p) {
   try {
     const uni = window.SCRUni ? window.SCRUni() : [], by = Object.fromEntries(uni.map((r) => [r.sym, r]));
     const v = valuation(p), list = v.items.filter((x) => by[x.sym]);
-    const [ser, bus, beu] = await Promise.all([Promise.all(list.map((x) => prices(x.sym).catch(() => null))), prices("IDX_SP500").catch(() => null), prices("IDX_STOXX50").catch(() => null)]);
+    const [ser, bus, beu] = await Promise.all([Promise.all(list.map((x) => prices(x.sym).catch(() => null))), benchUS(), benchEU()]);
     const k = list.map((x, i) => [x, ser[i]]).filter(([, s]) => s && s.c.length > 120);
     if (k.length < 2) throw new Error("No hay histórico suficiente para analizar el riesgo de esta cartera.");
     const tw = k.reduce((a, [x]) => a + x.wcur, 0);
@@ -314,7 +330,7 @@ async function savedRisk(p) {
 }
 async function saveCurrent() {
   const r = C.res; if (!r) return;
-  const [a, e] = await Promise.all([prices("IDX_SP500").catch(() => null), prices("IDX_STOXX50").catch(() => null)]);
+  const [a, e] = await Promise.all([benchUS(), benchEU()]);
   const us = r.items.reduce((s, x) => s + (isUS(x.r) ? x.w : 0), 0);
   const p = { id: Date.now().toString(36), nombre: `Cartera ${new Date().toLocaleDateString("es-ES")} · ${(METODOS.find((m) => m[0] === r.metodo) || [])[1]}`,
     creada: new Date().toISOString(), metodo: r.metodo, capital: C.cfg.capital, us, b_us: a ? a.c[a.c.length - 1] : null, b_eu: e ? e.c[e.c.length - 1] : null,
