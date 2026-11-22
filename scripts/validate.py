@@ -137,7 +137,7 @@ def v_sectors(d, prev):
     check_generado(d, "sectors.json")
     st = (d.get("stats") or {}).get("Todos") or {}
     check(isinstance(st.get("sector"), dict) and st["sector"], "sectors.json: sin estadísticas por sector")
-    if prev:
+    if prev and len(st["sector"]) < 11:   # 11 sectores GICS: por encima no hay pérdida (la versión publicada pudo tener nombres duplicados)
         check_ratio(len(st["sector"]), len(((prev.get("stats") or {}).get("Todos") or {}).get("sector") or {}), "sectors.json (sectores)")
     return f"{len(st['sector'])} sectores"
 

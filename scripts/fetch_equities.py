@@ -48,6 +48,11 @@ LATAM = ["MELI", "NU", "ITUB", "BBD", "PBR", "PBR-A", "VALE", "ABEV", "SBS", "CI
          "STNE", "PAGS", "SUZ", "TIMB", "VIV", "GGAL", "YPF", "PAM", "TGS", "CEPU", "LOMA", "CRESY", "SUPV", "BMA", "TEO", "EDN", "IRS",
          "BBAR", "VIST", "CX", "AMX", "FMX", "KOF", "TV", "OMAB", "PAC", "ASR", "BSAC", "SQM", "BCH", "LTM", "ENIC", "EC", "CIB", "AVAL",
          "CPA", "CCU", "BAP", "IFS", "BVN", "SCCO", "DESP", "GLOB", "ARCO", "VTEX", "CAAP", "TX"]
+# sector GICS de Wikipedia → nombre de sector de Yahoo (mientras un valor nuevo no tiene fundamentales)
+GICS_YAHOO = {"Information Technology": "Technology", "Health Care": "Healthcare", "Financials": "Financial Services",
+              "Consumer Discretionary": "Consumer Cyclical", "Consumer Staples": "Consumer Defensive", "Materials": "Basic Materials",
+              "Industrials": "Industrials", "Energy": "Energy", "Utilities": "Utilities", "Real Estate": "Real Estate",
+              "Communication Services": "Communication Services"}
 LATAM_PAISES = {"Brazil", "Mexico", "Argentina", "Chile", "Colombia", "Peru", "Panama", "Uruguay"}
 CONTINUO = ["CIE", "VIS", "EBRO", "FAE", "ENC", "PHM", "CAF", "TRE", "TLGO", "MEL", "ALM", "A3M", "DIA", "ECR", "FCC", "GRE", "LDA",
             "OHLA", "PSG", "PRS", "TUB", "TRG", "VID", "AZK", "CBAV", "DOM", "EDR", "GSJ", "HOME", "MVC", "R4", "ATRY", "CASH", "GCO",
@@ -845,7 +850,7 @@ def main():
         r = {"sym": s, "indices": U[s].get("indices", [])}
         r.update({k: v for k, v in f.items() if k not in ("anual", "ern", "web", "desc")})
         if not r.get("sector") and U[s].get("gics_sector"):
-            r["sector"] = U[s]["gics_sector"]
+            r["sector"] = GICS_YAHOO.get(U[s]["gics_sector"], U[s]["gics_sector"])
         r["region"] = ("Latinoamérica" if ("ADR Latinoamérica" in r["indices"] or r.get("pais") in LATAM_PAISES)
                        else "EE. UU." if (r.get("pais") == "United States" or "." not in s) else "Europa")
         detail = {"sym": s, "anual": f.get("anual", {}), "desc": f.get("desc"), "web": f.get("web")}
