@@ -330,6 +330,16 @@ def grafico(pg, base):
         pg.wait_for_timeout(400)
         check("gráfico: tarjeta del día al pasar el ratón", pg.locator(".cx-card:not([hidden])").count() == 1, (pg.text_content(".cx-card") or "")[:100])
     check("gráfico: selector de eventos", pg.locator(".cx-evdd [data-cx-ev]").count() == 5)
+    for size in ("", "l"):   # el cursor del gráfico debe coincidir con el ratón, también con «texto grande» (zoom)
+        pg.evaluate(f"document.documentElement.dataset.size = '{size}'")
+        pg.wait_for_timeout(600)
+        b = pg.locator(".cx-chart").bounding_box()
+        pg.mouse.move(b["x"] + 400, b["y"] + 150)
+        pg.wait_for_timeout(300)
+        pt = pg.evaluate("window.SCRChartLastPt")
+        # el punto del gráfico está en píxeles propios del gráfico: con zoom efectivo 1 debe ser 400 ± 3
+        check(f"gráfico: cursor alineado con el ratón (texto {'grande' if size else 'normal'})", bool(pt) and abs(pt["x"] - 400) <= 3, str(pt))
+    pg.evaluate("document.documentElement.dataset.size = ''")
     try:
         import base64
         b = pg.locator(".cx").first.screenshot(type="jpeg", quality=55)

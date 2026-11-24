@@ -245,7 +245,7 @@ async function mount(el, sym, opts = {}) {
     applyScale();
     addEvents();
     setPeriod();
-    chart.subscribeCrosshairMove((p) => showLegend(p));
+    chart.subscribeCrosshairMove((p) => { showLegend(p); window.SCRChartLastPt = p && p.point; });
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => layoutLane());
     showLegend(null);
   }
