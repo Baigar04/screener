@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-22T21:44:21+00:00",
+ "generado": "2026-11-24T18:07:10+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -7,7 +7,7 @@
   },
   "universe.json": {
    "estado": "ok",
-   "detalle": "2429 valores · 2416/2425 precios al día"
+   "detalle": "2429 valores · 2416/2426 precios al día"
   },
   "sectors.json": {
    "estado": "ok",
@@ -19,23 +19,23 @@
   },
   "score_hist.json": {
    "estado": "ok",
-   "detalle": "3 semanas"
+   "detalle": "4 semanas"
   },
   "score_diario.json": {
    "estado": "ok",
-   "detalle": "7 fotos diarias"
+   "detalle": "8 fotos diarias"
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 36.3 % > SMA50, Europa: 40.8 % > SMA50"
+   "detalle": "EE. UU.: 46.0 % > SMA50, Europa: 46.1 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
-   "detalle": "11056 operaciones · 67 días · pendientes 3"
+   "detalle": "11226 operaciones · 68 días · pendientes 3"
   },
   "smart.json": {
    "estado": "ok",
-   "detalle": "83 gestores · 1991 valores"
+   "detalle": "83 gestores · 1992 valores"
   },
   "lab.json": {
    "estado": "ok",
