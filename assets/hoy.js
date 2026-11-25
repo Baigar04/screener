@@ -208,7 +208,8 @@ const item = (when, c, txt, sub = "") => `<li><span class="hy-when">${when}</spa
 function riskList() {
   const D = window.SCRRisk?.data?.();
   if (!D?.mercados) return [];
-  return (window.SCRRisk.followed?.() || []).map((k) => D.mercados[k]).filter(Boolean);
+  const tOf = window.SCRRisk.tOf || ((T) => T);
+  return (window.SCRRisk.followed?.() || []).map((k) => tOf(D.mercados[k])).filter(Boolean);
 }
 function cambios(uni, Q) {
   const out = [];

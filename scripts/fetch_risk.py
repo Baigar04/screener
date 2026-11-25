@@ -41,6 +41,7 @@ MIN_HIST = 36         # meses mínimos de historia de una señal para dar percen
 L2 = 10.0             # penalización de la logística (fuerte: solo ~18 caídas independientes desde 1993)
 N_BOOT = 60           # remuestreos para el intervalo
 MIN_SKILL = 0.03      # mejora mínima del Brier sobre la tasa base para darlo por validado (3 %)
+EXAMEN = "2016-01"    # examen único (fase 1d): solo cuentan las previsiones desde este mes, que no se usaron para diseñar nada
 
 
 def log(*a):
@@ -279,6 +280,26 @@ def pct_point_in_time(series, months, sentido):
     return out
 
 
+class plazo:
+    """Fija temporalmente el horizonte (meses) y la caída del «evento»: 12 meses y 15 % por defecto; 3 meses y 10 % para el corto plazo."""
+    def __init__(self, meses, caida):
+        self.v = (meses, caida)
+
+    def __enter__(self):
+        global HORIZONTE, CAIDA
+        self.old = (HORIZONTE, CAIDA)
+        HORIZONTE, CAIDA = self.v
+
+    def __exit__(self, *a):
+        global HORIZONTE, CAIDA
+        HORIZONTE, CAIDA = self.old
+
+
+# Plazo corto (fase 1d, fijado antes del examen): caída >10 % en 3 meses con volatilidad, crédito y tendencia.
+CORTO = (3, 0.10)
+SENALES_CORTO = ("vix", "vol_idx", "tendencia", "nfci", "ebp", "ebp_6m", "baa", "ciss")
+
+
 def labels(daily, months):
     """1 si el IBEX cae más de CAIDA desde el cierre del mes en algún momento de los HORIZONTE meses siguientes."""
     by_m = {}
@@ -300,17 +321,18 @@ def episodes(daily):
     """Caídas de más de CAIDA desde el máximo de los 12 meses anteriores: [(mes del máximo, mes del mínimo, caída)].
     Un episodio nuevo solo cuenta si han pasado 12 meses desde el anterior (si no, es la misma caída)."""
     from collections import deque
+    dias = int(HORIZONTE * 30.44)
     eps, win, last_trig = [], deque(), None
     for i, (d, c) in enumerate(daily):
-        while win and (d - daily[win[0]][0]).days > 365:
+        while win and (d - daily[win[0]][0]).days > dias:
             win.popleft()
         while win and daily[win[-1]][1] <= c:
             win.pop()
         win.append(i)
         pk = win[0]
-        if c <= daily[pk][1] * (1 - CAIDA) and (last_trig is None or (d - last_trig).days > 365):
+        if c <= daily[pk][1] * (1 - CAIDA) and (last_trig is None or (d - last_trig).days > dias):
             last_trig = d
-            tr = min(range(i, len(daily)), key=lambda k: daily[k][1] if (daily[k][0] - d).days <= 365 else float("inf"))
+            tr = min(range(i, len(daily)), key=lambda k: daily[k][1] if (daily[k][0] - d).days <= dias else float("inf"))
             eps.append((ym(daily[pk][0]), ym(daily[tr][0]), round(daily[tr][1] / daily[pk][1] - 1, 3)))
     return eps
 
@@ -356,6 +378,16 @@ def boot_interval(X, y, xnow, rng, reps=N_BOOT, block=12):
     return float(np.percentile(preds, 5)), float(np.percentile(preds, 95))
 
 
+def _metrics(p, y, base):
+    p, y, base = np.asarray(p), np.asarray(y), np.asarray(base)
+    if len(p) == 0:
+        return None
+    b, bb = float(np.mean((p - y) ** 2)), float(np.mean((base - y) ** 2))
+    ece, tabla = calib_error(p, y)
+    return {"brier": round(b, 3), "brier_base": round(bb, 3), "skill": round((1 - b / bb) * 100, 1) if bb else 0.0,
+            "ece": round(ece * 100, 1), "meses": int(len(p)), "eventos": int(np.sum(y)), "calibracion": tabla}
+
+
 def calib_error(p, y, bins=10):
     p, y = np.asarray(p), np.asarray(y)
     idx = np.minimum((p * bins).astype(int), bins - 1)
@@ -378,7 +410,7 @@ def signal_track(pcts, eps, months, thr=0.8):
     ev = [e for e in eps if e[0] >= ym_add(first, 12)]
     avisadas, leads = 0, []
     for pk, _, _ in ev:
-        win = [m for m in months if 1 <= months_between(m, pk) <= 12 and (pcts.get(m) or 0) >= thr]
+        win = [m for m in months if 1 <= months_between(m, pk) <= HORIZONTE and (pcts.get(m) or 0) >= thr]
         if win:
             avisadas += 1
             leads.append(months_between(win[0], pk))
@@ -393,7 +425,7 @@ def signal_track(pcts, eps, months, thr=0.8):
     if cur:
         tramos.append(cur)
     last = months[-1]
-    falsas = [t for t in tramos if months_between(t, last) >= 12 and not any(0 <= months_between(t, pk) <= 12 for pk, _, _ in eps)]
+    falsas = [t for t in tramos if months_between(t, last) >= HORIZONTE and not any(0 <= months_between(t, pk) <= HORIZONTE for pk, _, _ in eps)]
     return {"n": len(ev), "avisadas": avisadas, "avisos": len(tramos), "falsas": len(falsas),
             "antelacion": round(float(np.median(leads)), 0) if leads else None}
 
@@ -425,8 +457,8 @@ def index_daily(ticker, nombre):
     return out
 
 
-def thermometer(raw, daily, nombre="IBEX 35"):
-    """raw: {clave: (meta, obs)}; daily: [(fecha, cierre)] del índice."""
+def thermometer(raw, daily, nombre="IBEX 35", solo=None):
+    """raw: {clave: (meta, obs)}; daily: [(fecha, cierre)] del índice. solo: claves de señales permitidas en el modelo."""
     last_m = ym(daily[-1][0])
     first_m = max("1990-01", ym(daily[0][0]))
     inicio_wf = max(INICIO_WF, ym_add(first_m, 96))   # al menos 8 años de historia antes de la primera previsión
@@ -437,6 +469,8 @@ def thermometer(raw, daily, nombre="IBEX 35"):
         m = ym_add(m, 1)
     feats, metas = [], []
     for k, (meta, obs) in raw.items():
+        if solo is not None and k not in solo:
+            continue
         meta = dict(meta)
         ser = ffill(monthly(obs, meta["retraso"]), months)
         meta["pcts"] = pct_point_in_time(ser, months, meta["sentido"])
@@ -451,7 +485,7 @@ def thermometer(raw, daily, nombre="IBEX 35"):
 
     rng = np.random.default_rng(20261125)
     hist = []
-    wf_p, wf_y, wf_base = [], [], []
+    wf_p, wf_y, wf_base, wf_m = [], [], [], []
     for mo in months:
         if mo < inicio_wf:
             continue
@@ -471,6 +505,7 @@ def thermometer(raw, daily, nombre="IBEX 35"):
             wf_p.append(p)
             wf_y.append(y[mo])
             wf_base.append(base)
+            wf_m.append(mo)
     if not hist:
         raise RuntimeError("sin meses suficientes para estimar")
     # modelo final con todos los meses etiquetados (pesos y aportaciones de hoy)
@@ -502,11 +537,25 @@ def thermometer(raw, daily, nombre="IBEX 35"):
             if on and cur is None:
                 cur = mo
             if not on and cur is not None:
-                if months_between(cur, last_m) >= 12 and not any(0 <= months_between(cur, pk) <= 12 for pk, _, _ in eps):
+                if months_between(cur, last_m) >= HORIZONTE and not any(0 <= months_between(cur, pk) <= HORIZONTE for pk, _, _ in eps):
                     falsas_y.append(cur[:4])
                 cur = None
-    skill = 1 - brier / brier_b if brier_b else 0.0
-    validado = bool(skill >= MIN_SKILL and ece < 0.10)
+    ex = [i for i, m in enumerate(wf_m) if m >= EXAMEN]
+    ds = [i for i, m in enumerate(wf_m) if m < EXAMEN]
+    E = _metrics(wf_p[ex], wf_y[ex], wf_base[ex]) if ex else None
+    Dd = _metrics(wf_p[ds], wf_y[ds], wf_base[ds]) if ds else None
+    validado = bool(E and E["skill"] >= MIN_SKILL * 100 and E["ece"] < 10 and E["meses"] >= 60)
+    fin = last_m[:4]
+    if validado:
+        motivo = f"En el examen {EXAMEN[:4]}-{fin} mejora a la media un {E['skill']:.1f} % y está calibrada".replace(".", ",")
+    elif not E or E["meses"] < 60:
+        motivo = "Sin meses suficientes en el examen"
+    elif E["skill"] <= 0:
+        motivo = f"En el examen {EXAMEN[:4]}-{fin} no mejora a la media histórica"
+    elif E["skill"] < MIN_SKILL * 100:
+        motivo = f"En el examen {EXAMEN[:4]}-{fin} mejora a la media solo un {E['skill']:.1f} % (mínimo exigido: {MIN_SKILL * 100:.0f} %)".replace(".", ",")
+    else:
+        motivo = f"Descalibrada en el examen (error medio {E['ece']:.1f} pp)".replace(".", ",")
     regimen = "Alerta" if p_now >= t_alert else "Tensión" if p_now >= t_tens else "Normal"
     since = next((m for m in months if hist and m == hist[0][0]), None)
     senales = []
@@ -528,14 +577,12 @@ def thermometer(raw, daily, nombre="IBEX 35"):
     return {
         "objetivo": f"Probabilidad de que el {nombre} caiga más de un {int(CAIDA * 100)} % en algún momento de los {HORIZONTE} meses siguientes",
         "actual": {"mes": last_m, "p": p_now, "lo": lo_now, "hi": hi_now, "base": base_now, "regimen": regimen,
-                   "validado": validado,
-                   "motivo": "Mejora a la tasa base fuera de muestra y está calibrada" if validado else
-                   ("No mejora a la tasa base fuera de muestra" if brier >= brier_b else
-                    f"Mejora a la tasa base solo un {skill * 100:.1f} % (mínimo exigido: {MIN_SKILL * 100:.0f} %)".replace(".", ",") if skill < MIN_SKILL else
-                    "Descalibrada (error medio > 10 pp)")},
+                   "validado": validado, "motivo": motivo},
+        "horizonte": HORIZONTE, "caida": CAIDA,
         "umbrales": {"tension": t_tens, "alerta": t_alert},
-        "precision": {"brier": round(brier, 3), "brier_base": round(brier_b, 3), "ece": round(ece * 100, 1), "calibracion": tabla,
-                      "meses_fuera_muestra": int(len(wf_p)), "desde": hist[0][0],
+        "precision": {"brier": E["brier"] if E else None, "brier_base": E["brier_base"] if E else None, "ece": E["ece"] if E else None,
+                      "calibracion": E["calibracion"] if E else [], "meses_fuera_muestra": E["meses"] if E else 0,
+                      "desde": hist[0][0], "examen_desde": EXAMEN, "examen": E, "diseno": Dd,
                       "caidas": trk["n"] if trk else None, "avisadas": trk["avisadas"] if trk else None,
                       "antelacion": trk["antelacion"] if trk else None, "falsas": sorted(set(falsas_y)),
                       "caidas_total": len(eps)},
@@ -544,8 +591,9 @@ def thermometer(raw, daily, nombre="IBEX 35"):
         "caidas": [[a, b, c] for a, b, c in eps],
         "senales": senales,
         "metodo": ("Percentil «a fecha» de cada señal (con su retraso de publicación) → regresión logística con penalización L2. "
-                   f"Estimación «walk-forward» desde {inicio_wf[:4]}: cada mes solo usa meses cuyo resultado a 12 meses ya se conocía. "
-                   "Intervalo del 90 % por remuestreo de bloques de 12 meses. Señales sin dato en un mes cuentan como neutras."),
+                   f"Estimación «walk-forward» desde {inicio_wf[:4]}: cada mes solo usa meses cuyo resultado a {HORIZONTE} meses ya se conocía. "
+                   f"Validación: examen único con las previsiones desde {EXAMEN[:4]}. Intervalo del 90 % por remuestreo de bloques de 12 meses. "
+                   "Señales sin dato en un mes cuentan como neutras."),
     }
 
 
@@ -748,22 +796,27 @@ def interpret(T, ia, nombre, clave):
     """Lectura del termómetro (3 frases) y lectura conjunta de la página para una bolsa. Solo usa los datos de T e ia."""
     a, P = T["actual"], T["precision"]
     p, base, alerta = a["p"], a["base"], T["umbrales"]["alerta"]
+    hz, cd = T.get("horizonte", 12), int(round(T.get("caida", 0.15) * 100))
+    que = f"una caída de más del {cd} % en el {nombre} en los próximos {hz} meses"
     # 1 · nivel
     if p >= alerta:
-        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses está en zona de alerta: {_f(p)} % frente al {_f(base)} % habitual en este índice."
+        nivel = f"El riesgo de {que} está en zona de alerta: {_f(p)} % frente al {_f(base)} % habitual en este índice."
     elif p > base * 1.2:
-        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses es mayor de lo habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
+        nivel = f"El riesgo de {que} es mayor de lo habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
     elif p >= base * 0.8:
-        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses es similar al habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
+        nivel = f"El riesgo de {que} es similar al habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
     else:
-        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses es menor de lo habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
+        nivel = f"El riesgo de {que} es menor de lo habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
     # 2 · confianza
+    E = P.get("examen") or {}
     if a["validado"]:
-        mejora = (1 - P["brier"] / P["brier_base"]) * 100 if P["brier_base"] else 0
-        conf = (f"El modelo está validado en este índice: fuera de muestra mejora a la media un {_f(mejora)} % y avisó de {P['avisadas']} de {P['caidas']} caídas desde {P['desde'][:4]}, "
-                f"con {len(P['falsas'])} falsas alarmas. Aun así, el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza.") if P.get("caidas") else                f"El modelo está validado en este índice, pero el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza."
+        conf = (f"El modelo está validado en este índice: en el examen {P.get('examen_desde', '2016')[:4]}-{a['mes'][:4]}, con datos que no se usaron para diseñarlo, "
+                f"mejora a la media un {_f(E.get('skill', 0), 1)} % y está calibrado. "
+                + (f"Desde {P['desde'][:4]} avisó de {P['avisadas']} de {P['caidas']} caídas con {len(P['falsas'])} falsas alarmas. " if P.get("caidas") else "")
+                + f"Aun así, el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza.")
     else:
-        conf = (f"En este índice el modelo no demuestra ventaja ({a['motivo'].lower()}), así que la referencia fiable es la media histórica: {_f(base)} %. "
+        m = a["motivo"]
+        conf = (f"En este índice el modelo no demuestra ventaja ({m[0].lower() + m[1:]}), así que la referencia fiable es la media histórica: {_f(base)} %. "
                 f"La cifra del modelo es solo orientativa.")
     # 3 · qué la mueve
     contr = [s for s in T["senales"] if s.get("modelo") and s.get("aporta") is not None]
@@ -819,12 +872,12 @@ def interpret(T, ia, nombre, clave):
         puntos.append(f"la fase de {ia['fase']} del ciclo IA")
     if tend is not None and tend <= -2:
         puntos.append("la tendencia bajista")
-    concl = f"Riesgo a 12 meses {riesgo_txt}" + (", sostenido por un crédito tranquilo" if c_est == "tranquilo" else "") + "."
+    concl = f"Riesgo a {hz} meses {riesgo_txt}" + (", sostenido por un crédito tranquilo" if c_est == "tranquilo" else "") + "."
     if puntos:
         lista = ", ".join(puntos[:-1]) + (" y " if len(puntos) > 1 else "") + puntos[-1]
         concl += (" Los puntos débiles son " if len(puntos) > 1 else " El punto débil es ") + lista
         lento = [x for x, c in (("la valoración", any("valoración" in p for p in puntos)), ("el ciclo IA", any("ciclo" in p for p in puntos))) if c]
-        concl += (f"; {' y '.join(lento)} " + ("pesan" if len(lento) > 1 else "pesa") + " más a varios años que en los próximos 12 meses.") if lento else "."
+        concl += (f"; {' y '.join(lento)} " + ("pesan" if len(lento) > 1 else "pesa") + f" más a varios años que en los próximos {hz} meses.") if lento else "."
     if not a["validado"]:
         concl += f" Como el modelo no está validado aquí, apóyate más en la media histórica ({_f(base)} %) que en la cifra del termómetro."
     vig = []
@@ -888,11 +941,22 @@ def main():
             T = thermometer(sub, daily, nombre)
             T.update({"clave": clave, "nombre": nombre, "ticker": ticker, "region": region, "inicio": daily[0][0].isoformat()})
             T["lectura"] = interpret(T, out.get("ia"), nombre, clave)
+            try:
+                with plazo(*CORTO):
+                    T3 = thermometer(sub, daily, nombre, solo=SENALES_CORTO)
+                    T3.update({"clave": clave, "nombre": nombre})
+                    T3["lectura"] = interpret(T3, out.get("ia"), nombre, clave)
+                T["h3"] = {k: T3[k] for k in ("objetivo", "actual", "horizonte", "caida", "umbrales", "precision", "hist", "caidas", "senales", "metodo", "lectura")}
+                a3, E3 = T3["actual"], T3["precision"]["examen"] or {}
+                log(f"   3 meses: {a3['p']} % base {a3['base']} · {'VALIDADO' if a3['validado'] else 'sin ventaja'} · examen {E3.get('skill')} % · ECE {E3.get('ece')}")
+            except Exception as e:  # noqa: BLE001
+                ERRORS.append({"fuente": "Cálculo", "serie": f"Plazo de 3 meses {nombre}", "motivo": str(e)[:200]})
             mercados[clave] = T
             orden.append(clave)
             a, P = T["actual"], T["precision"]
-            log(f"{nombre}: {a['p']} % [{a['lo']}-{a['hi']}] base {a['base']} · {a['regimen']} · {'validado' if a['validado'] else 'SIN ventaja'} · "
-                f"Brier {P['brier']} vs {P['brier_base']} · ECE {P['ece']} · avisadas {P['avisadas']}/{P['caidas']} · falsas {len(P['falsas'])} · {time.time() - t0:.0f} s")
+            E, Dd = P.get("examen") or {}, P.get("diseno") or {}
+            log(f"{nombre}: {a['p']} % [{a['lo']}-{a['hi']}] base {a['base']} · {a['regimen']} · {'VALIDADO' if a['validado'] else 'sin ventaja'} · "
+                f"examen {E.get('skill')} % ECE {E.get('ece')} · diseño {Dd.get('skill')} % · avisadas {P['avisadas']}/{P['caidas']} · {time.time() - t0:.0f} s")
         except Exception as e:  # noqa: BLE001
             import traceback
             traceback.print_exc()

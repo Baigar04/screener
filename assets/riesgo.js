@@ -8,6 +8,9 @@ const { esc, nf, sgn, fmtDate, store } = H;
 const R = { d: undefined, loading: false };
 const DEF_SEG = ["sp500", "ndx", "sx5e", "ibex"];
 const segs = () => { const D = R.d; const v = store.get("rsk_bolsas", DEF_SEG).filter((k) => D?.mercados?.[k]); return v.length ? v : (D?.orden || []).slice(0, 1); };
+const plazo = () => (store.get("rsk_plazo", "12") === "3" ? "3" : "12");
+const tOf = (T) => (T && plazo() === "3" && T.h3 ? { ...T, ...T.h3 } : T);
+const cd = (T) => Math.round((T?.caida ?? 0.15) * 100), hz = (T) => T?.horizonte ?? 12;
 const selK = () => { const D = R.d, s = segs(), k = store.get("rsk_sel", s[0]); return D?.mercados?.[k] ? k : s[0]; };
 
 async function ensure() {
@@ -133,16 +136,18 @@ function thermoBox(T) {
   const falsas = P.falsas?.length ? `<span data-tip="Años: ${esc(P.falsas.join(", "))}">${P.falsas.length}</span>` : "0";
   const lect = H.ui.lectura(T.lectura?.termometro);
   return `<section class="rsk-p"><h3>Termómetro · ${esc(T.nombre)}</h3>${gauge(a.p, a.lo, a.hi, a.base, T.umbrales.alerta, ok)}${head}${lect}
-    <h3 class="rsk-h2">Precisión <span>fuera de muestra desde ${fm(P.desde)}</span></h3>
+    <h3 class="rsk-h2">Precisión <span>${P.examen ? `examen ${(P.examen_desde || "").slice(0, 4)}-${(a.mes || "").slice(0, 4)}` : `fuera de muestra desde ${fm(P.desde)}`}</span></h3>
     <table class="rsk-kv"><tr><td>Intervalo del 90 %</td><td class="num">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td></tr>
-      <tr><td>Caídas &gt;15 % en el periodo</td><td class="num">${P.caidas ?? "—"}</td></tr>
-      <tr><td>Avisadas (1-12 meses antes)</td><td class="num">${P.avisadas ?? "—"} de ${P.caidas ?? "—"}${P.antelacion != null ? ` · ${nf(P.antelacion, 0)} m` : ""}</td></tr>
-      <tr><td>Falsas alarmas</td><td class="num">${falsas}</td></tr>
-      <tr><td>Brier · modelo frente a base</td><td class="num">${nf(P.brier, 3)} · ${nf(P.brier_base, 3)}</td></tr>
-      <tr><td>Error medio de calibración</td><td class="num">${nf(P.ece, 1)} pp</td></tr>
-      <tr><td>Meses evaluados</td><td class="num">${P.meses_fuera_muestra}</td></tr></table>
+      ${P.examen ? `<tr><td>Examen: mejora frente a la media</td><td class="num ${P.examen.skill >= 3 ? "pos" : ""}">${sgn(P.examen.skill, 1)} %</td></tr>
+      <tr><td>Examen: error de calibración</td><td class="num">${nf(P.examen.ece, 1)} pp</td></tr>
+      <tr><td>Examen: meses · meses con caída</td><td class="num">${P.examen.meses} · ${P.examen.eventos}</td></tr>
+      ${P.diseno ? `<tr><td>Diseño ${(P.desde || "").slice(0, 4)}-2015: mejora</td><td class="num rsk-fa">${sgn(P.diseno.skill, 1)} %</td></tr>` : ""}`
+      : `<tr><td>Examen</td><td class="num rsk-fa">sin meses suficientes</td></tr>`}
+      <tr><td>Caídas &gt;${cd(T)} % desde ${(P.desde || "").slice(0, 4)}</td><td class="num">${P.caidas ?? "—"}</td></tr>
+      <tr><td>Avisadas (1-${hz(T)} meses antes)</td><td class="num">${P.avisadas ?? "—"} de ${P.caidas ?? "—"}${P.antelacion != null ? ` · ${nf(P.antelacion, 0)} m` : ""}</td></tr>
+      <tr><td>Falsas alarmas</td><td class="num">${falsas}</td></tr></table>
     <div class="rsk-verdict ${ok ? "ok" : "nu"}">${ok ? "Validado: " : "Sin ventaja demostrada: "}${esc(a.motivo)}.</div>
-    ${exp(`<b>Cómo de preciso es.</b> Desde ${(T.indice[0]?.[0] || "").slice(0, 4)} el ${esc(T.nombre)} ha tenido ${P.caidas_total} caídas de más del 15 %: es una muestra pequeña, por eso el intervalo es ancho. El número sirve para comparar el riesgo de hoy con su media (${nf(a.base, 0)} %), no como certeza. Brier: error medio al cuadrado de las previsiones (más bajo, mejor); si no mejora al de la tasa base, el termómetro no aporta y se dice.`)}</section>`;
+    ${exp(`<b>Cómo de preciso es.</b> Desde ${(T.indice[0]?.[0] || "").slice(0, 4)} el ${esc(T.nombre)} ha tenido ${P.caidas_total} caídas de más del ${cd(T)} %: es una muestra pequeña, por eso el intervalo es ancho. El número sirve para comparar el riesgo de hoy con su media (${nf(a.base, 0)} %), no como certeza. <b>Examen</b>: el modelo se evalúa una sola vez con las previsiones desde ${(P.examen_desde || "2016").slice(0, 4)}, que no se usaron para diseñarlo; solo se da por validado si ahí mejora a la media al menos un 3 % y está calibrado (cuando dice 30 %, pasa más o menos 3 de cada 10 veces). El modelo por bolsa se eligió después de ver que el modelo conjunto suspendía este examen.`)}</section>`;
 }
 
 function signalsBox(T, D) {
@@ -192,11 +197,11 @@ function trackBox(T) {
   const rows = T.senales.filter((s) => s.modelo && s.historial && s.historial.n).sort((a, b) => b.historial.avisadas / b.historial.n - a.historial.avisadas / a.historial.n);
   const P = T.precision;
   const r = (n, h, b = false) => `<tr${b ? ' class="rsk-b"' : ""}><td>${n}</td><td class="num ${h.avisadas / h.n >= 0.6 ? "pos" : "warn"}">${h.avisadas} de ${h.n}</td><td class="num">${h.antelacion != null ? `${nf(h.antelacion, 0)} m` : "—"}</td><td class="num">${h.falsas ?? "—"}</td></tr>`;
-  return `<section class="rsk-p"><h3>¿Ha funcionado antes? <span>caídas &gt;15 % del ${esc(T.nombre)}</span></h3>
+  return `<section class="rsk-p"><h3>¿Ha funcionado antes? <span>caídas &gt;${cd(T)} % del ${esc(T.nombre)}</span></h3>
     <div class="rsk-scroll"><table class="rsk-t"><thead><tr><th>Señal</th><th class="num">Avisadas</th><th class="num">Antel.</th><th class="num">Falsas</th></tr></thead><tbody>
     ${rows.map((s) => r(esc(s.nombre), s.historial)).join("")}
     ${P.caidas ? r(`Termómetro &gt; ${nf(T.umbrales.alerta, 0)} %`, { avisos: null, avisadas: P.avisadas, n: P.caidas, antelacion: P.antelacion, falsas: P.falsas?.length }, true) : ""}</tbody></table></div>
-    <div class="method">Aviso = la señal en su 20 % más alto de la historia (o el termómetro sobre el umbral) entre 12 y 1 meses antes del máximo previo a la caída. Antelación: mediana en meses. Falsa alarma: tramo de aviso sin caída en los 12 meses siguientes.</div></section>`;
+    <div class="method">Aviso = la señal en su 20 % más alto de la historia (o el termómetro sobre el umbral) entre ${hz(T)} y 1 meses antes del máximo previo a la caída. Antelación: mediana en meses. Falsa alarma: tramo de aviso sin caída en los 12 meses siguientes.</div></section>`;
 }
 
 function spark(T) {
@@ -213,13 +218,14 @@ function marketsBox(D) {
   const S = segs(), sel = selK();
   const chips = (D.orden || []).map((k) => `<button class="rsk-chip${S.includes(k) ? " on" : ""}" data-rskseg="${k}" aria-pressed="${S.includes(k)}">${esc(D.mercados[k].nombre)}</button>`).join("");
   const rows = S.map((k) => {
-    const T = D.mercados[k], a = T.actual, P = T.precision;
+    const T = tOf(D.mercados[k]), a = T.actual, P = T.precision;
     return `<tr class="${k === sel ? "sel" : ""}" data-rsksel="${k}" tabindex="0"><td><b>${esc(T.nombre)}</b></td><td class="num">${nf(a.p, 0)} %</td><td class="num rsk-fa">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td><td class="num">${nf(a.base, 0)} %</td>
-      <td>${pillOf(a)}</td><td class="num">${P.caidas ? `${P.avisadas} de ${P.caidas}` : "—"}</td><td class="num">${P.falsas?.length ?? "—"}</td><td>${spark(T)}</td></tr>`;
+      <td>${pillOf(a)}</td><td class="num ${P.examen?.skill >= 3 ? "pos" : "rsk-fa"}">${P.examen ? `${sgn(P.examen.skill, 1)} %` : "—"}</td><td class="num">${P.caidas ? `${P.avisadas} de ${P.caidas}` : "—"}</td><td>${spark(T)}</td></tr>`;
   }).join("");
-  return `<section class="rsk-p rsk-mk"><h3>Bolsas <span>elige las que quieres seguir · pulsa una fila para ver su detalle</span></h3><div class="rsk-chips">${chips}</div>
-    <div class="rsk-scroll"><table class="rsk-t rsk-cmp"><thead><tr><th>Bolsa</th><th class="num">Prob. caída &gt;15 %</th><th class="num">Intervalo 90 %</th><th class="num">Media histórica</th><th>Régimen</th><th class="num">Caídas avisadas</th><th class="num">Falsas alarmas</th><th>5 años</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${exp("<b>Cómo comparar.</b> Cada bolsa tiene su propia media histórica: en unas las caídas de más del 15 % son mucho más frecuentes que en otras. Por eso importa más la cifra frente a su media que la cifra sola. «Sin ventaja» significa que en esa bolsa el modelo no mejora a la media fuera de muestra.")}</section>`;
+  const pz = `<div class="rsk-plazo"><span>Plazo</span>${[["12", "12 meses · caída >15 %"], ["3", "3 meses · caída >10 %"]].map(([v, l]) => `<button class="rsk-chip${plazo() === v ? " on" : ""}" data-rskplazo="${v}" aria-pressed="${plazo() === v}">${l}</button>`).join("")}</div>`;
+  return `<section class="rsk-p rsk-mk"><h3>Bolsas <span>elige las que quieres seguir · pulsa una fila para ver su detalle</span></h3>${pz}<div class="rsk-chips">${chips}</div>
+    <div class="rsk-scroll"><table class="rsk-t rsk-cmp"><thead><tr><th>Bolsa</th><th class="num">Prob. caída &gt;${plazo() === "3" ? "10 % · 3 m" : "15 % · 12 m"}</th><th class="num">Intervalo 90 %</th><th class="num">Media histórica</th><th>Régimen</th><th class="num">Examen: mejora</th><th class="num">Caídas avisadas</th><th>5 años</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${exp("<b>Cómo comparar.</b> Cada bolsa tiene su propia media histórica: en unas las caídas grandes son mucho más frecuentes que en otras. Por eso importa más la cifra frente a su media que la cifra sola. «Sin ventaja» significa que en esa bolsa el modelo no mejora a la media fuera de muestra.")}</section>`;
 }
 
 function readingBox(T) {
@@ -231,12 +237,12 @@ function render() {
   if (R.d === undefined) return `<div class="skel" style="height:420px"></div>`;
   const D = R.d;
   if (!D?.mercados || !Object.keys(D.mercados).length) return `<div class="pg-head"><h1>Riesgo de mercado</h1></div><div class="box">Todavía no hay datos del termómetro: se generan en la próxima actualización automática.</div>`;
-  const T = D.mercados[selK()];
+  const T = tOf(D.mercados[selK()]);
   const nfu = new Set(T.senales.map((s) => s.fuente.split(/[,(·]/)[0].trim())).size;
-  return `<div class="pg-head"><h1>Riesgo de mercado</h1><div class="pg-sub">Probabilidad de que cada bolsa caiga más de un 15 % en algún momento de los próximos 12 meses · datos del ${fmtDate(D.generado.slice(0, 10))} · ${Object.keys(D.mercados).length} bolsas · ${nfu} fuentes${D.errores?.length ? ` · <span class="stale-txt" data-tip="${esc(D.errores.map((e) => `${e.serie}: ${e.motivo}`).join(" · "))}">${D.errores.length} aviso(s) de fuentes</span>` : ""}</div></div>
+  return `<div class="pg-head"><h1>Riesgo de mercado</h1><div class="pg-sub">Probabilidad de que cada bolsa caiga más de un ${plazo() === "3" ? "10 % en algún momento de los próximos 3 meses" : "15 % en algún momento de los próximos 12 meses"} · datos del ${fmtDate(D.generado.slice(0, 10))} · ${Object.keys(D.mercados).length} bolsas · ${nfu} fuentes${D.errores?.length ? ` · <span class="stale-txt" data-tip="${esc(D.errores.map((e) => `${e.serie}: ${e.motivo}`).join(" · "))}">${D.errores.length} aviso(s) de fuentes</span>` : ""}</div></div>
     ${marketsBox(D)}
     <div class="rsk-top">${thermoBox(T)}
-      <div class="rsk-col"><section class="rsk-p"><h3>Probabilidad de caída &gt;15 % · ${esc(T.nombre)} <span>banda: intervalo del 90 % · sombreado: caídas reales</span></h3>${probChart(T)}
+      <div class="rsk-col"><section class="rsk-p"><h3>Probabilidad de caída &gt;${cd(T)} % en ${hz(T)} meses · ${esc(T.nombre)} <span>banda: intervalo del 90 % · sombreado: caídas reales</span></h3>${probChart(T)}
         ${exp(`<b>Cómo se calcula.</b> ${esc(T.metodo)} Cada punto de la línea es la previsión que se habría hecho ese mes con lo que se sabía entonces.`)}</section>${trackBox(T)}</div></div>
     <div class="rsk-bot">${signalsBox(T, D)}<div class="rsk-col">${iaBox(D.ia, D.concentracion)}</div></div>
     ${readingBox(T)}`;
@@ -252,6 +258,7 @@ function onClick(t) {
     if (!cur.includes(k)) store.set("rsk_sel", k); else if (selK() === k) store.set("rsk_sel", nx[0]);
     H.render(); return true;
   }
+  if ((b = t.closest("[data-rskplazo]"))) { store.set("rsk_plazo", b.dataset.rskplazo); H.render(); return true; }
   if ((b = t.closest("[data-rsksel]"))) { store.set("rsk_sel", b.dataset.rsksel); if (b.dataset.sub) return false; H.render(); return true; }
   return false;
 }
@@ -263,15 +270,15 @@ function strip() {
   if (!D?.mercados || !Object.keys(D.mercados).length) return "";
   const S = segs().slice(0, 4), any = D.mercados[S[0]];
   const ebp = any.senales.find((s) => s.k === "ebp"), vix = any.senales.find((s) => s.k === "vix"), I = D.ia;
-  const it = S.map((k) => { const T = D.mercados[k], a = T.actual; return `<div class="rsk-sm" data-sub="riesgo" data-rsksel="${k}"><span>${esc(T.nombre)}</span><b class="num">${nf(a.p, 0)} %</b><small>${pillOf(a)} <span class="num">media ${nf(a.base, 0)} %</span></small></div>`; });
+  const it = S.map((k) => { const T = tOf(D.mercados[k]), a = T.actual; return `<div class="rsk-sm" data-sub="riesgo" data-rsksel="${k}"><span>${esc(T.nombre)}</span><b class="num">${nf(a.p, 0)} %</b><small>${pillOf(a)} <span class="num">media ${nf(a.base, 0)} %</span></small></div>`; });
   if (ebp) it.push(`<div><span>Crédito (EBP)</span><b class="num">${nf(ebp.ultimo.valor, 2)}</b><small class="num">percentil ${ebp.pct ?? "—"}</small></div>`);
   if (I?.fase) it.push(`<div><span>Ciclo IA</span><b class="${I.fase === "Digestión" || I.fase === "Contracción" ? "warn" : ""}">${esc(I.fase)}</b><small>${esc(I.trimestre)}</small></div>`);
   if (vix) it.push(`<div><span>VIX</span><b class="num">${nf(vix.ultimo.valor, 1)}</b><small class="num">percentil ${vix.pct ?? "—"}</small></div>`);
-  const gl = X() ? `<div class="rsk-exp hoy-gl"><b>Cómo leer esta franja.</b> Para cada bolsa que sigues: probabilidad estimada de que caiga más de un 15 % en algún momento de los próximos 12 meses, comparada con su media histórica, y su régimen (normal, tensión o alerta; «sin ventaja» si el modelo no mejora a la media en esa bolsa). Las bolsas se eligen en Mercado › Riesgo. <b>Crédito (EBP)</b>: lo que se cobra de más por prestar a empresas por encima de su riesgo de quiebra; cuando sube, el crédito se encarece y suele anticipar caídas. <b>Ciclo IA</b>: ${I?.fase ? esc(FASE_TXT[I.fase]) : "fase de la inversión en IA de las grandes tecnológicas."} <b>VIX</b>: volatilidad esperada del S&amp;P 500.</div>` : "";
+  const gl = X() ? `<div class="rsk-exp hoy-gl"><b>Cómo leer esta franja.</b> Para cada bolsa que sigues: probabilidad estimada de que caiga más de un ${plazo() === "3" ? "10 % en algún momento de los próximos 3 meses" : "15 % en algún momento de los próximos 12 meses"} (el plazo se elige en Contexto › Riesgo), comparada con su media histórica, y su régimen (normal, tensión o alerta; «sin ventaja» si el modelo no mejora a la media en esa bolsa). Las bolsas se eligen en Mercado › Riesgo. <b>Crédito (EBP)</b>: lo que se cobra de más por prestar a empresas por encima de su riesgo de quiebra; cuando sube, el crédito se encarece y suele anticipar caídas. <b>Ciclo IA</b>: ${I?.fase ? esc(FASE_TXT[I.fase]) : "fase de la inversión en IA de las grandes tecnológicas."} <b>VIX</b>: volatilidad esperada del S&amp;P 500.</div>` : "";
   return `<div class="rsk-strip">${it.join("")}<button class="link-btn" data-sub="riesgo">Ver Riesgo →</button></div>${gl}`;
 }
 
 H.modules.riesgo = render;
 H.handlers.unshift(onClick);
-window.SCRRisk = { ensure, strip, data: () => R.d, followed: segs };
+window.SCRRisk = { ensure, strip, data: () => R.d, followed: segs, tOf, plazo };
 })();

@@ -128,9 +128,10 @@ def _T(p, base, validado=True, pct_cred=20, tend=5.0):
            {"k": "cap_pib", "nombre": "Capitalización / PIB", "modelo": True, "pct": 99, "peso": 1, "aporta": 0.0, "ultimo": {"valor": 250}},
            {"k": "tendencia", "nombre": "Índice frente a su media", "modelo": True, "pct": 40, "peso": 8, "aporta": 0.0, "ultimo": {"valor": tend}},
            {"k": "ebp_6m", "nombre": "Cambio del EBP", "modelo": True, "pct": 50, "peso": 5, "aporta": 0.0, "ultimo": {"valor": 0.0}}]
-    return {"actual": {"p": p, "lo": p - 8, "hi": p + 8, "base": base, "validado": validado, "motivo": "No mejora a la tasa base fuera de muestra"},
+    return {"actual": {"mes": "2026-11", "p": p, "lo": p - 8, "hi": p + 8, "base": base, "validado": validado, "motivo": "No mejora a la tasa base fuera de muestra"},
             "umbrales": {"alerta": base + 12}, "senales": sen,
-            "precision": {"brier": 0.23, "brier_base": 0.25, "avisadas": 5, "caidas": 11, "desde": "2001-01", "falsas": ["2002", "2011"]}}
+            "precision": {"brier": 0.23, "brier_base": 0.25, "avisadas": 5, "caidas": 11, "desde": "2001-01", "falsas": ["2002", "2011"],
+                          "examen_desde": "2016-01", "examen": {"skill": 6.2, "ece": 4.0, "meses": 119}}}
 
 
 def test_lectura_del_termometro_y_conjunta():
@@ -148,3 +149,29 @@ def test_lectura_del_termometro_y_conjunta():
     assert "zona de alerta" in L2["termometro"][0] and "no demuestra ventaja" in L2["termometro"][1]
     assert "crédito tenso" in L2["conjunta"]["conclusion"] and "media histórica" in L2["conjunta"]["conclusion"]
     assert "indirecta" in " ".join(L2["conjunta"]["bloques"])
+
+
+def test_plazo_corto_cambia_horizonte_y_caida():
+    assert (R.HORIZONTE, R.CAIDA) == (12, 0.15)
+    with R.plazo(*R.CORTO):
+        assert (R.HORIZONTE, R.CAIDA) == (3, 0.10)
+    assert (R.HORIZONTE, R.CAIDA) == (12, 0.15)
+    T = _T(12, 10)
+    T.update({"horizonte": 3, "caida": 0.10})
+    L = R.interpret(T, None, "DAX", "dax")
+    assert "más del 10 %" in L["termometro"][0] and "próximos 3 meses" in L["termometro"][0]
+    assert L["conjunta"]["conclusion"].startswith("Riesgo a 3 meses")
+
+
+def test_examen_decide_la_validacion():
+    rng = np.random.default_rng(7)
+    n = 34 * 260
+    ret = rng.normal(0.0003, 0.012, n)
+    daily = _daily(list(100 * np.exp(np.cumsum(ret))))
+    meta = lambda k: {"k": k, "nombre": k, "vel": "media", "fuente": "x", "url": "", "frec": "diario", "retraso": 0, "sentido": 1,
+                      "modelo": True, "desde": "1993-01", "ultimo": {"fecha": "2026-01-01", "valor": 1}}
+    raw = {f"s{i}": (meta(f"s{i}"), [(d, float(rng.normal())) for d, _ in daily[::20]]) for i in range(5)}
+    T = R.thermometer(raw, daily, "Ruido")
+    P = T["precision"]
+    assert P["examen_desde"] == R.EXAMEN and "examen" in P and "diseno" in P
+    assert T["actual"]["validado"] is False      # señales de puro ruido no pueden aprobar

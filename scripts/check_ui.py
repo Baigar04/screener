@@ -150,7 +150,7 @@ def tanda2(pg, base):
     pg.wait_for_timeout(4000)
     pg.evaluate("document.querySelector('.hoy-more').open = true")
     t = pg.text_content("#view")
-    check("«Hoy»: secciones", all(x in t for x in ("Pulso del mercado", "Tu Watchlist hoy", "Próximos resultados", "Movimientos de la nota", "Smart money", "Tu Diario", "Copia de seguridad")))
+    check("«Hoy»: secciones", all(x in t for x in ("Qué ha cambiado", "Avisos", "Tus valores", "Lectura del día", "Próximos resultados", "Smart money", "Tu Diario", "Pulso del mercado", "Copia de seguridad")))
     check("«Hoy»: estado de los datos", "validación" in t or "no pasaron" in t, t.split("\n")[0][:80])
     with pg.expect_download(timeout=10000) as dl:
         pg.click("[data-bk=down]")

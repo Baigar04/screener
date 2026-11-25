@@ -1223,3 +1223,4 @@ table.rsk-kv{table-layout:fixed}.rsk-kv td{background:none!important;position:st
 @media (max-width:900px){.hgrid.hy2{grid-template-columns:1fr}.hgrid.hy2 .hs{border-right:0}.ui-2c{grid-template-columns:1fr}}
 body.one-sec .tabsbar #side{visibility:hidden}
 @media (max-width:900px){.top .nav{grid-template-columns:repeat(6,1fr)!important}.top .nav button{font-size:10.5px!important;padding:6px 0!important;min-width:0}.top .nav button .lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.rsk-plazo{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}.rsk-plazo>span{color:var(--muted);font-size:11.5px;margin-right:4px}
