@@ -821,7 +821,10 @@ def interpret(T, ia, nombre, clave):
         puntos.append("la tendencia bajista")
     concl = f"Riesgo a 12 meses {riesgo_txt}" + (", sostenido por un crédito tranquilo" if c_est == "tranquilo" else "") + "."
     if puntos:
-        concl += " Los puntos débiles son " + ", ".join(puntos[:-1]) + (" y " if len(puntos) > 1 else "") + puntos[-1] +                  ("; la valoración y el ciclo IA pesan más a varios años que en los próximos 12 meses." if any("valoración" in x or "ciclo" in x for x in puntos) else ".")
+        lista = ", ".join(puntos[:-1]) + (" y " if len(puntos) > 1 else "") + puntos[-1]
+        concl += (" Los puntos débiles son " if len(puntos) > 1 else " El punto débil es ") + lista
+        lento = [x for x, c in (("la valoración", any("valoración" in p for p in puntos)), ("el ciclo IA", any("ciclo" in p for p in puntos))) if c]
+        concl += (f"; {' y '.join(lento)} " + ("pesan" if len(lento) > 1 else "pesa") + " más a varios años que en los próximos 12 meses.") if lento else "."
     if not a["validado"]:
         concl += f" Como el modelo no está validado aquí, apóyate más en la media histórica ({_f(base)} %) que en la cifra del termómetro."
     vig = []
