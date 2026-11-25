@@ -1247,3 +1247,4 @@ body.one-sec .tabsbar #side{visibility:hidden}
 .geo-pista .rsk-kv td{text-align:left!important;white-space:normal}
 .geo-3{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr)}
 @media (max-width:1100px){.geo-3{grid-template-columns:1fr}}
+.geo-3>section,.geo-top>section,.geo-pista{min-width:0}

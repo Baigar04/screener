@@ -127,8 +127,8 @@ function sensBox(G) {
   return `<section class="rsk-p"><h3>Sensibilidad a un sobresalto geopolítico <span>rentabilidad media del mes si el GPR sube 2 desviaciones · 2000-${(G.global?.ultimo_mes || "").slice(0, 4)}</span></h3>
     ${SB.length ? bars(SB.map((x) => [x.nombre, x.beta2, x.t])) : `<div class="hint">Sin datos.</div>`}
     ${ST.length ? `<h3 class="rsk-h2">Por sectores <span>mediana de los valores del universo · descontando su bolsa · 5 años</span></h3>
-      <table class="rsk-t"><thead><tr><th>Sector</th><th class="num">Mediana</th><th class="num">Valores</th><th class="num">Ganan</th><th class="num">Significativos</th></tr></thead><tbody>
-      ${ST.map(([s, x]) => `<tr><td>${esc(s)}</td><td class="num ${x.mediana >= 0 ? "pos" : "neg"}">${sgn(x.mediana, 2)} %</td><td class="num">${x.n}</td><td class="num">${x.positivos} %</td><td class="num rsk-fa">${x.significativos}</td></tr>`).join("")}</tbody></table>` : ""}
+      <div class="rsk-scroll"><table class="rsk-t"><thead><tr><th>Sector</th><th class="num">Mediana</th><th class="num">Valores</th><th class="num">Ganan</th><th class="num">Significativos</th></tr></thead><tbody>
+      ${ST.map(([s, x]) => `<tr><td>${esc(s)}</td><td class="num ${x.mediana >= 0 ? "pos" : "neg"}">${sgn(x.mediana, 2)} %</td><td class="num">${x.n}</td><td class="num">${x.positivos} %</td><td class="num rsk-fa">${x.significativos}</td></tr>`).join("")}</tbody></table></div>` : ""}
     ${exp("<b>Cómo se calcula.</b> Regresión de las rentabilidades mensuales sobre el cambio del índice GPR (estandarizado). En los valores se descuenta el movimiento de su bolsa, para aislar el efecto geopolítico. En gris, efectos no significativos (t &lt; 2): con 5 años de datos mensuales, la mayoría de valores no tienen una sensibilidad clara, y se dice.")}</section>`;
 }
 function eventsBox(G) {
@@ -142,7 +142,7 @@ function valoresBox(G) {
   const w = watch(), S = G.sens_valores || {};
   if (!w.length) return "";
   const rows = w.filter((s) => S[s]).slice(0, 15).map((s) => { const [b, t] = S[s]; return `<tr><td><button class="link-btn" data-sym="${esc(s)}">${esc(s)}</button></td><td class="num ${Math.abs(t) < 2 ? "rsk-fa" : b >= 0 ? "pos" : "neg"}">${sgn(b, 1)} %</td><td class="num rsk-fa">${nf(t, 1)}</td><td>${Math.abs(t) < 2 ? "Sin efecto claro" : b >= 0 ? "Gana con escalada" : "Pierde con escalada"}</td></tr>`; }).join("");
-  return rows ? `<section class="rsk-p"><h3>Tus valores <span>sensibilidad al GPR descontando su bolsa</span></h3><table class="rsk-t"><thead><tr><th>Valor</th><th class="num">+2σ GPR</th><th class="num">t</th><th>Lectura</th></tr></thead><tbody>${rows}</tbody></table></section>` : "";
+  return rows ? `<section class="rsk-p"><h3>Tus valores <span>sensibilidad al GPR descontando su bolsa</span></h3><div class="rsk-scroll"><table class="rsk-t"><thead><tr><th>Valor</th><th class="num">+2σ GPR</th><th class="num">t</th><th>Lectura</th></tr></thead><tbody>${rows}</tbody></table></div></section>` : "";
 }
 
 function render() {
