@@ -22,6 +22,7 @@ import math
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
@@ -200,7 +201,32 @@ def diff(a, b):
 
 
 # Catálogo: clave, nombre, velocidad, fuente, url, frecuencia, retraso (meses), sentido (+1 = más alto, más riesgo),
-#           en_modelo, función de descarga
+#           en_modelo, función de descarga. Ámbito (AMBITO): «global» entra en todas las bolsas; «europa», «es» e «it» solo donde aplican.
+AMBITO = {"ciss": "europa", "prima_es": "es", "prima_it": "it"}
+
+# Bolsas: clave, nombre, ticker de Yahoo, región (para las señales propias), sesiones mínimas
+MERCADOS = [
+    ("sp500", "S&P 500", "^GSPC", "us"),
+    ("ndx", "Nasdaq 100", "^NDX", "us"),
+    ("sx5e", "Euro Stoxx 50", "^STOXX50E", "europa"),
+    ("dax", "DAX", "^GDAXI", "europa"),
+    ("cac", "CAC 40", "^FCHI", "europa"),
+    ("ftse", "FTSE 100", "^FTSE", "uk"),
+    ("ibex", "IBEX 35", "^IBEX", "es"),
+    ("mib", "FTSE MIB", "FTSEMIB.MI", "it"),
+    ("n225", "Nikkei 225", "^N225", "asia"),
+    ("hsi", "Hang Seng", "^HSI", "asia"),
+    ("eem", "MSCI Emergentes (EEM)", "EEM", "em"),
+]
+
+
+def usa_senal(k, region):
+    a = AMBITO.get(k, "global")
+    if a == "global":
+        return True
+    if a == "europa":
+        return region in ("europa", "es", "it")
+    return a == region
 def catalogo():
     return [
         ("cape", "CAPE de Shiller (EE. UU.)", "lenta", "Robert Shiller, Yale (vía multpl.com)", "https://shillerdata.com/", "mensual", 1, +1, True,
@@ -217,6 +243,8 @@ def catalogo():
          lambda: ecb("CISS.D.U2.Z0Z.4F.EC.SS_CIN.IDX")),
         ("prima_es", "Prima de riesgo España (10 a − Bund)", "media", "BCE (rendimientos de convergencia)", "https://data.ecb.europa.eu/data/datasets/IRS", "mensual", 1, +1, True,
          lambda: [(d, v * 100) for d, v in diff(ecb("IRS.M.ES.L.L40.CI.0000.EUR.N.Z"), ecb("IRS.M.DE.L.L40.CI.0000.EUR.N.Z"))]),
+        ("prima_it", "Prima de riesgo Italia (10 a − Bund)", "media", "BCE (rendimientos de convergencia)", "https://data.ecb.europa.eu/data/datasets/IRS", "mensual", 1, +1, True,
+         lambda: [(d, v * 100) for d, v in diff(ecb("IRS.M.IT.L.L40.CI.0000.EUR.N.Z"), ecb("IRS.M.DE.L.L40.CI.0000.EUR.N.Z"))]),
         ("margen", "Crédito de margen / capitalización", "media", "Fed, cuentas financieras Z.1 (FRED)", "https://fred.stlouisfed.org/series/BOGZ1FL663067003Q", "trimestral", 3, +1, True,
          lambda: ratio(fred("BOGZ1FL663067003Q"), fred("NCBEILQ027S"), 100)),
         ("curva", "Curva 10 a − 3 m (EE. UU.)", "media", "Tesoro de EE. UU. vía FRED", "https://fred.stlouisfed.org/series/T10Y3M", "diario", 0, -1, True,
@@ -382,23 +410,25 @@ def lectura(p, sentido):
     return "Bajo"
 
 
-def ibex_daily():
+def index_daily(ticker, nombre):
     import yfinance as yf
-    df = yf.download("^IBEX", period="max", interval="1d", auto_adjust=False, progress=False)
+    df = yf.download(ticker, period="max", interval="1d", auto_adjust=False, progress=False)
     if df is None or df.empty:
-        raise RuntimeError("Yahoo sin datos del IBEX")
+        raise RuntimeError(f"Yahoo sin datos de {nombre}")
     c = df["Close"]
     if hasattr(c, "columns"):
         c = c.iloc[:, 0]
-    out = [(d.date(), float(v)) for d, v in c.dropna().items() if v > 0]
+    out = [(d.date(), float(v)) for d, v in c.dropna().items() if v > 0 and d.year >= 1960]
     if len(out) < 2000:
-        raise RuntimeError(f"historia corta del IBEX ({len(out)} sesiones)")
+        raise RuntimeError(f"historia corta de {nombre} ({len(out)} sesiones)")
     return out
 
 
-def thermometer(raw, daily):
-    """raw: {clave: (meta, obs)}; daily: [(fecha, cierre)] del IBEX."""
+def thermometer(raw, daily, nombre="IBEX 35"):
+    """raw: {clave: (meta, obs)}; daily: [(fecha, cierre)] del índice."""
     last_m = ym(daily[-1][0])
+    first_m = max("1990-01", ym(daily[0][0]))
+    inicio_wf = max(INICIO_WF, ym_add(first_m, 96))   # al menos 8 años de historia antes de la primera previsión
     months = []
     m = "1990-01"
     while m <= last_m:
@@ -406,13 +436,14 @@ def thermometer(raw, daily):
         m = ym_add(m, 1)
     feats, metas = [], []
     for k, (meta, obs) in raw.items():
+        meta = dict(meta)
         ser = ffill(monthly(obs, meta["retraso"]), months)
         meta["pcts"] = pct_point_in_time(ser, months, meta["sentido"])
         metas.append(meta)
         if meta["modelo"]:
             feats.append(meta)
     y = labels(daily, months)
-    eps = [e for e in episodes(daily) if e[0] >= "1993-01"]
+    eps = [e for e in episodes(daily) if e[0] >= first_m]
 
     def xrow(mo):
         return np.array([(f["pcts"].get(mo) if f["pcts"].get(mo) is not None else 0.5) - 0.5 for f in feats])
@@ -421,7 +452,7 @@ def thermometer(raw, daily):
     hist = []
     wf_p, wf_y, wf_base = [], [], []
     for mo in months:
-        if mo < INICIO_WF:
+        if mo < inicio_wf:
             continue
         train = [s for s in months if s < mo and y.get(s) is not None and months_between(s, mo) >= HORIZONTE]
         ys = np.array([y[s] for s in train], dtype=float)
@@ -494,7 +525,7 @@ def thermometer(raw, daily):
     for d, c in daily:
         ibex_m[ym(d)] = c
     return {
-        "objetivo": f"Probabilidad de que el IBEX 35 caiga más de un {int(CAIDA * 100)} % en algún momento de los {HORIZONTE} meses siguientes",
+        "objetivo": f"Probabilidad de que el {nombre} caiga más de un {int(CAIDA * 100)} % en algún momento de los {HORIZONTE} meses siguientes",
         "actual": {"mes": last_m, "p": p_now, "lo": lo_now, "hi": hi_now, "base": base_now, "regimen": regimen,
                    "validado": validado,
                    "motivo": "Mejora a la tasa base fuera de muestra y está calibrada" if validado else
@@ -506,11 +537,11 @@ def thermometer(raw, daily):
                       "antelacion": trk["antelacion"] if trk else None, "falsas": sorted(set(falsas_y)),
                       "caidas_total": len(eps)},
         "hist": hist,
-        "ibex": [[k, round(v, 1)] for k, v in sorted(ibex_m.items()) if k >= "1993-01"],
+        "indice": [[k, round(v, 1)] for k, v in sorted(ibex_m.items()) if k >= first_m],
         "caidas": [[a, b, c] for a, b, c in eps],
         "senales": senales,
         "metodo": ("Percentil «a fecha» de cada señal (con su retraso de publicación) → regresión logística con penalización L2. "
-                   "Estimación «walk-forward» desde 2001: cada mes solo usa meses cuyo resultado a 12 meses ya se conocía. "
+                   f"Estimación «walk-forward» desde {inicio_wf[:4]}: cada mes solo usa meses cuyo resultado a 12 meses ya se conocía. "
                    "Intervalo del 90 % por remuestreo de bloques de 12 meses. Señales sin dato en un mes cuentan como neutras."),
     }
 
@@ -664,30 +695,152 @@ def amplitude():
     return out
 
 
-def derivadas(daily, raw):
-    """Señales calculadas: tendencia y volatilidad del propio IBEX (clásicas en la literatura de riesgo de caídas)
-    y cambio a 6 meses del EBP (el crédito que se encarece rápido avisa antes que su nivel)."""
+def derivadas(daily, nombre, ticker):
+    """Señales del propio índice: tendencia (frente a su media de 200 sesiones) y volatilidad de 3 meses,
+    clásicas en la literatura de riesgo de caídas."""
     c = np.array([x[1] for x in daily])
     dts = [x[0] for x in daily]
+    tend = [(dts[i], (c[i] / c[i - 200:i].mean() - 1) * 100) for i in range(200, len(c))]
+    r = np.diff(np.log(c))
+    vol = [(dts[i + 1], float(r[i - 62:i + 1].std() * math.sqrt(252) * 100)) for i in range(62, len(r))]
+    url = f"https://finance.yahoo.com/quote/{urllib.parse.quote(ticker)}/"
+    meta = lambda k, n, s, o: {"k": k, "nombre": n, "vel": "rapida", "fuente": f"Cálculo propio · {nombre} de Yahoo", "url": url, "frec": "diario",
+                               "retraso": 0, "sentido": s, "modelo": True, "desde": o[0][0].isoformat()[:7],
+                               "ultimo": {"fecha": o[-1][0].isoformat(), "valor": round(o[-1][1], 3)}}
+    return {"tendencia": (meta("tendencia", f"{nombre} frente a su media de 200 sesiones", -1, tend), tend),
+            "vol_idx": (meta("vol_idx", f"Volatilidad del {nombre} (3 meses)", +1, vol), vol)}
 
-    def tendencia():
-        out = []
-        for i in range(200, len(c)):
-            out.append((dts[i], (c[i] / c[i - 200:i].mean() - 1) * 100))
-        return out
 
-    def vol():
-        r = np.diff(np.log(c))
-        return [(dts[i + 1], float(r[i - 62:i + 1].std() * math.sqrt(252) * 100)) for i in range(62, len(r))]
+def ebp_change(raw):
+    if "ebp" not in raw:
+        return None
+    o = raw["ebp"][1]
+    ch = [(o[i][0], o[i][1] - o[i - 6][1]) for i in range(6, len(o))]
+    m = dict(raw["ebp"][0])
+    m.update({"k": "ebp_6m", "nombre": "Cambio del EBP en 6 meses", "fuente": "Cálculo propio · EBP de la Fed", "desde": ch[0][0].isoformat()[:7],
+              "ultimo": {"fecha": ch[-1][0].isoformat(), "valor": round(ch[-1][1], 3)}})
+    return m, ch
 
-    def ebp6():
-        if "ebp" not in raw:
-            return []
-        o = raw["ebp"][1]
-        return [(o[i][0], o[i][1] - o[i - 6][1]) for i in range(6, len(o))]
-    return [("tendencia", "IBEX frente a su media de 200 sesiones", "rapida", -1, tendencia, "%"),
-            ("vol_ibex", "Volatilidad del IBEX (3 meses)", "rapida", +1, vol, "%"),
-            ("ebp_6m", "Cambio del EBP en 6 meses", "media", +1, ebp6, "pp")]
+
+# ---------------------------------------------------------------- interpretación (reglas explícitas sobre los datos)
+CREDITO = ("ebp", "ebp_6m", "baa", "ciss", "prima_es", "prima_it", "margen")
+TECNO = ("sp500", "ndx", "n225", "hsi", "eem")
+
+
+def _pct(T, k):
+    s = next((x for x in T["senales"] if x["k"] == k), None)
+    return None if s is None else s.get("pct")
+
+
+def _val(T, k):
+    s = next((x for x in T["senales"] if x["k"] == k), None)
+    return None if s is None else s["ultimo"]["valor"]
+
+
+def _f(x, d=0):
+    return f"{x:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def interpret(T, ia, nombre, clave):
+    """Lectura del termómetro (3 frases) y lectura conjunta de la página para una bolsa. Solo usa los datos de T e ia."""
+    a, P = T["actual"], T["precision"]
+    p, base, alerta = a["p"], a["base"], T["umbrales"]["alerta"]
+    # 1 · nivel
+    if p >= alerta:
+        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses está en zona de alerta: {_f(p)} % frente al {_f(base)} % habitual en este índice."
+    elif p > base * 1.2:
+        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses es mayor de lo habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
+    elif p >= base * 0.8:
+        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses es similar al habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
+    else:
+        nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses es menor de lo habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
+    # 2 · confianza
+    if a["validado"]:
+        mejora = (1 - P["brier"] / P["brier_base"]) * 100 if P["brier_base"] else 0
+        conf = (f"El modelo está validado en este índice: fuera de muestra mejora a la media un {_f(mejora)} % y avisó de {P['avisadas']} de {P['caidas']} caídas desde {P['desde'][:4]}, "
+                f"con {len(P['falsas'])} falsas alarmas. Aun así, el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza.") if P.get("caidas") else                f"El modelo está validado en este índice, pero el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza."
+    else:
+        conf = (f"En este índice el modelo no demuestra ventaja ({a['motivo'].lower()}), así que la referencia fiable es la media histórica: {_f(base)} %. "
+                f"La cifra del modelo es solo orientativa.")
+    # 3 · qué la mueve
+    contr = [s for s in T["senales"] if s.get("modelo") and s.get("aporta") is not None]
+    up = sorted([s for s in contr if s["aporta"] > 0.02], key=lambda s: -s["aporta"])[:2]
+    dn = sorted([s for s in contr if s["aporta"] < -0.02], key=lambda s: s["aporta"])[:2]
+    nm = lambda s: f"{s['nombre']}, percentil {s['pct']}" if s.get("pct") is not None else s["nombre"]
+    mueve = []
+    if up:
+        mueve.append("Lo que más empuja el riesgo al alza: " + " y ".join(nm(s) for s in up) + ".")
+    if dn:
+        mueve.append("Lo que más lo contiene: " + " y ".join(nm(s) for s in dn) + ".")
+    termo = [nivel, conf, " ".join(mueve) or "Ninguna señal se aparta lo bastante de lo normal como para mover la cifra."]
+
+    # lectura conjunta
+    cred = [_pct(T, k) for k in CREDITO if k != "ebp_6m" and _pct(T, k) is not None]
+    cm = sum(cred) / len(cred) if cred else None
+    d_ebp = _val(T, "ebp_6m")
+    if cm is None:
+        c_txt, c_est = "Sin datos de crédito.", None
+    elif cm >= 70:
+        c_txt, c_est = f"El crédito está tenso (percentil medio {_f(cm)}): financiarse es caro para las empresas, la señal que más ha anticipado caídas.", "tenso"
+    elif cm >= 45:
+        c_txt, c_est = f"El crédito está en niveles normales (percentil medio {_f(cm)}).", "normal"
+    else:
+        c_txt, c_est = f"El crédito está tranquilo (percentil medio {_f(cm)}): las empresas se financian sin tensión.", "tranquilo"
+    if d_ebp is not None and cm is not None:
+        c_txt += " El EBP sube en los últimos 6 meses: conviene vigilarlo." if d_ebp > 0.1 else (" El EBP baja en los últimos 6 meses." if d_ebp < -0.1 else "")
+    vp = _pct(T, "cap_pib")
+    v_txt = (f"La valoración de la bolsa de EE. UU. está en el percentil {vp} de su historia: " + ("muy cara. " if vp >= 85 else "cara. " if vp >= 65 else "en niveles normales. ") +
+             "Esto predice rentabilidades más bajas a varios años, pero casi no anticipa el momento de una caída.") if vp is not None else ""
+    tend, vol = _val(T, "tendencia"), _pct(T, "vol_idx")
+    m_txt = ""
+    if tend is not None:
+        m_txt = (f"El {nombre} cotiza un {_f(abs(tend), 1)} % " + ("por encima" if tend >= 0 else "por debajo") + " de su media de 200 sesiones (" +
+                 ("tendencia alcista" if tend >= 2 else "tendencia bajista" if tend <= -2 else "sin tendencia clara") + ")")
+        if vol is not None:
+            m_txt += f" y su volatilidad está en el percentil {vol}" + (" (alta)" if vol >= 70 else " (baja)" if vol < 30 else "")
+        m_txt += "."
+    i_txt = ""
+    if ia and ia.get("fase"):
+        i_txt = f"Ciclo IA en {ia['fase']}: los grandes de la nube invierten un {_f(ia['g_capex'])} % más que hace un año"
+        if ia.get("g_fcf") is not None:
+            i_txt += f" y su flujo de caja libre cambia un {_f(ia['g_fcf'])} %"
+        i_txt += "." + (" Pesa mucho en este índice por su exposición a tecnología." if clave in TECNO else " Afecta a este índice de forma indirecta (energía, industria, semiconductores europeos).")
+    # conclusión
+    riesgo_txt = ("en alerta" if p >= alerta else "por encima de lo habitual" if p > base * 1.2 else "en línea con lo habitual" if p >= base * 0.8 else "por debajo de lo habitual")
+    puntos = []
+    if c_est == "tenso":
+        puntos.append("el crédito tenso")
+    if vp is not None and vp >= 85:
+        puntos.append("la valoración muy alta")
+    if ia and ia.get("fase") in ("Digestión", "Contracción") and clave in TECNO:
+        puntos.append(f"la fase de {ia['fase']} del ciclo IA")
+    if tend is not None and tend <= -2:
+        puntos.append("la tendencia bajista")
+    concl = f"Riesgo a 12 meses {riesgo_txt}" + (", sostenido por un crédito tranquilo" if c_est == "tranquilo" else "") + "."
+    if puntos:
+        concl += " Los puntos débiles son " + ", ".join(puntos[:-1]) + (" y " if len(puntos) > 1 else "") + puntos[-1] +                  ("; la valoración y el ciclo IA pesan más a varios años que en los próximos 12 meses." if any("valoración" in x or "ciclo" in x for x in puntos) else ".")
+    if not a["validado"]:
+        concl += f" Como el modelo no está validado aquí, apóyate más en la media histórica ({_f(base)} %) que en la cifra del termómetro."
+    vig = []
+    for s in sorted([s for s in T["senales"] if s.get("modelo") and s.get("pct") is not None], key=lambda s: -(s.get("peso") or 0)):
+        if 60 <= s["pct"] < 80 and (s.get("peso") or 0) >= 5:
+            vig.append(f"{s['nombre']}: percentil {s['pct']}, cerca de zona de aviso (80).")
+        if len(vig) >= 2:
+            break
+    if d_ebp is not None and d_ebp > 0.1:
+        vig.append("El EBP sube: si pasa del percentil 70, el crédito empezaría a avisar.")
+    if tend is not None and abs(tend) < 3:
+        vig.append(f"El {nombre} está a menos de un 3 % de su media de 200 sesiones: un cruce a la baja cambiaría la tendencia.")
+    if ia and ia.get("fase") == "Digestión":
+        vig.append("Resultados de los grandes de la nube: un recorte de inversión llevaría el ciclo IA a Contracción.")
+    if not vig:
+        vig.append("Ninguna señal está cerca de su zona de aviso.")
+    camb = [f"La lectura pasaría a «Tensión» si la probabilidad supera la media histórica ({_f(base)} %) y a «Alerta» por encima del {_f(alerta)} %."]
+    top = sorted([s for s in T["senales"] if s.get("modelo") and s.get("peso")], key=lambda s: -s["peso"])[:2]
+    if top:
+        camb.append("Las señales que más mueven el termómetro de este índice son " + " y ".join(f"{s['nombre']} ({_f(s['peso'])} % del peso)" for s in top) + ".")
+    return {"termometro": termo, "conjunta": {"conclusion": concl, "bloques": [x for x in (c_txt, v_txt, m_txt, i_txt) if x],
+                                              "vigilar": vig[:4], "cambiaria": camb}}
 
 
 def main():
@@ -707,42 +860,46 @@ def main():
         except Exception as e:  # noqa: BLE001
             ERRORS.append({"fuente": fuente, "serie": nombre, "motivo": str(e)[:200]})
             log(f"ERROR {k}: {e}")
+    e6 = ebp_change(raw)
+    if e6:
+        raw["ebp_6m"] = e6
     out = {"generado": NOW.isoformat(timespec="seconds"), "errores": ERRORS}
-    try:
-        daily = ibex_daily()
-        log("IBEX:", len(daily), "sesiones", daily[0][0], "→", daily[-1][0])
-        for k, nombre, vel, sentido, fn, unid in derivadas(daily, raw):
-            obs = fn()
-            if obs:
-                raw[k] = ({"k": k, "nombre": nombre, "vel": vel, "fuente": "Cálculo propio · IBEX de Yahoo" if k != "ebp_6m" else "Cálculo propio · EBP de la Fed",
-                           "url": "https://finance.yahoo.com/quote/%5EIBEX/" if k != "ebp_6m" else raw["ebp"][0]["url"], "frec": "diario" if k != "ebp_6m" else "mensual",
-                           "retraso": 0 if k != "ebp_6m" else 1, "sentido": sentido, "modelo": True, "desde": obs[0][0].isoformat()[:7],
-                           "ultimo": {"fecha": obs[-1][0].isoformat(), "valor": round(obs[-1][1], 3)}}, obs)
-                log(f"{k}: {len(obs)} obs = {obs[-1][1]:.3f}")
-        if sum(1 for v in raw.values() if v[0]["modelo"]) < 5:
-            raise RuntimeError("menos de 5 señales disponibles: no se estima")
-        out["termometro"] = thermometer(raw, daily)
-        a = out["termometro"]["actual"]
-        p = out["termometro"]["precision"]
-        log("Termómetro:", a, "· Brier", p["brier"], "vs", p["brier_base"], "· ECE", p["ece"], "· avisadas", p["avisadas"], "de", p["caidas"], "· falsas", p["falsas"])
-    except Exception as e:  # noqa: BLE001
-        import traceback
-        traceback.print_exc()
-        ERRORS.append({"fuente": "Cálculo", "serie": "Termómetro", "motivo": str(e)[:200]})
     try:
         out["ia"] = ai_cycle()
         log("Ciclo IA:", out["ia"]["fase"], out["ia"]["trimestre"], "capex 12m", out["ia"]["capex_12m"], "g", out["ia"]["g_capex"], "FCF", out["ia"]["fcf_12m"], out["ia"]["g_fcf"])
     except Exception as e:  # noqa: BLE001
         ERRORS.append({"fuente": "SEC", "serie": "Ciclo IA", "motivo": str(e)[:200]})
         log("ERROR ciclo IA:", e)
+    mercados, orden = {}, []
+    for clave, nombre, ticker, region in MERCADOS:
+        t0 = time.time()
+        try:
+            daily = index_daily(ticker, nombre)
+            sub = {k: v for k, v in raw.items() if usa_senal(k, region)}
+            sub.update(derivadas(daily, nombre, ticker))
+            if sum(1 for v in sub.values() if v[0]["modelo"]) < 5:
+                raise RuntimeError("menos de 5 señales disponibles")
+            T = thermometer(sub, daily, nombre)
+            T.update({"clave": clave, "nombre": nombre, "ticker": ticker, "region": region, "inicio": daily[0][0].isoformat()})
+            T["lectura"] = interpret(T, out.get("ia"), nombre, clave)
+            mercados[clave] = T
+            orden.append(clave)
+            a, P = T["actual"], T["precision"]
+            log(f"{nombre}: {a['p']} % [{a['lo']}-{a['hi']}] base {a['base']} · {a['regimen']} · {'validado' if a['validado'] else 'SIN ventaja'} · "
+                f"Brier {P['brier']} vs {P['brier_base']} · ECE {P['ece']} · avisadas {P['avisadas']}/{P['caidas']} · falsas {len(P['falsas'])} · {time.time() - t0:.0f} s")
+        except Exception as e:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
+            ERRORS.append({"fuente": "Yahoo / cálculo", "serie": f"Termómetro {nombre}", "motivo": str(e)[:200]})
+    out["mercados"], out["orden"] = mercados, orden
     out["concentracion"] = concentration()
     out["amplitud"] = amplitude()
-    if "termometro" not in out:
-        log("Sin termómetro: no se escribe risk.json (se conserva el publicado)")
+    if not mercados:
+        log("Sin termómetros: no se escribe risk.json (se conserva el publicado)")
         sys.exit(0)
     os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(os.path.join(DATA, "risk.json"), "w"), ensure_ascii=False, separators=(",", ":"))
-    log("risk.json escrito ·", len(ERRORS), "errores")
+    log("risk.json escrito ·", len(mercados), "bolsas ·", len(ERRORS), "errores")
 
 
 if __name__ == "__main__":

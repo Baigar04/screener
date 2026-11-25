@@ -192,18 +192,22 @@ def v_amplitud(d, prev):
 
 def v_risk(d, prev):
     check_generado(d, "risk.json")
-    T = d.get("termometro") or {}
-    a = T.get("actual") or {}
-    check(finite(a.get("p")) and 0 <= a["p"] <= 100, f"risk.json: probabilidad fuera de 0-100 ({a.get('p')!r})")
-    check(finite(a.get("base")) and 0 < a["base"] < 100, "risk.json: tasa base no válida")
-    check(isinstance(T.get("hist"), list) and len(T["hist"]) >= 60, "risk.json: histórico corto")
-    S = T.get("senales") or []
-    check(sum(1 for s in S if s.get("modelo")) >= 5, "risk.json: menos de 5 señales en el modelo")
-    for s in S:
-        check(s.get("fuente") and s.get("ultimo", {}).get("fecha"), f"risk.json: señal {s.get('k')} sin fuente o fecha")
-    if prev and (prev.get("termometro") or {}).get("hist"):
-        check(len(T["hist"]) >= 0.9 * len(prev["termometro"]["hist"]), "risk.json: ha perdido histórico")
-    return f"{a.get('p')} % ({a.get('regimen')}) · base {a.get('base')} % · {'validado' if a.get('validado') else 'sin ventaja demostrada'}"
+    M = d.get("mercados") or {}
+    check(len(M) >= 6, f"risk.json: solo {len(M)} bolsas con termómetro")
+    for k, T in M.items():
+        a = T.get("actual") or {}
+        check(finite(a.get("p")) and 0 <= a["p"] <= 100, f"risk.json {k}: probabilidad fuera de 0-100 ({a.get('p')!r})")
+        check(finite(a.get("base")) and 0 < a["base"] < 100, f"risk.json {k}: tasa base no válida")
+        check(isinstance(T.get("hist"), list) and len(T["hist"]) >= 36, f"risk.json {k}: histórico corto")
+        check(sum(1 for s in T.get("senales") or [] if s.get("modelo")) >= 5, f"risk.json {k}: menos de 5 señales en el modelo")
+        L = T.get("lectura") or {}
+        check(len(L.get("termometro") or []) == 3 and (L.get("conjunta") or {}).get("conclusion"), f"risk.json {k}: sin lectura")
+        for s in T.get("senales") or []:
+            check(s.get("fuente") and s.get("ultimo", {}).get("fecha"), f"risk.json {k}: señal {s.get('k')} sin fuente o fecha")
+    if prev and prev.get("mercados"):
+        check(len(M) >= len(prev["mercados"]) - 2, "risk.json: ha perdido bolsas")
+    v = sum(1 for T in M.values() if T["actual"].get("validado"))
+    return f"{len(M)} bolsas · {v} validadas · " + " · ".join(f"{T['nombre']} {T['actual']['p']} %" for T in list(M.values())[:4])
 
 
 def v_insiders(d, prev):

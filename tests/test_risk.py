@@ -103,7 +103,7 @@ def test_termometro_con_datos_sinteticos():
     meta = lambda k, m: {"k": k, "nombre": k, "vel": "media", "fuente": "x", "url": "", "frec": "diario", "retraso": 0, "sentido": 1,
                          "modelo": m, "desde": "1993-01", "ultimo": {"fecha": "2026-01-01", "valor": 1}}
     raw = {f"s{i}": (meta(f"s{i}", True), obs_a if i == 0 else obs_b) for i in range(5)}
-    out = R.thermometer(raw, daily)
+    out = R.thermometer(raw, daily, "Índice de prueba")
     a = out["actual"]
     assert 0 <= a["p"] <= 100 and a["regimen"] in ("Normal", "Tensión", "Alerta")
     assert out["precision"]["caidas_total"] >= 3
@@ -111,3 +111,40 @@ def test_termometro_con_datos_sinteticos():
     assert w["s0"] == max(w.values())     # la señal informativa es la que más pesa
     assert abs(sum(w.values()) - 100) < 1
     assert months[-1] == a["mes"]
+
+
+def test_ambito_de_las_senales():
+    assert R.usa_senal("vix", "asia") and R.usa_senal("ebp", "us")
+    assert R.usa_senal("ciss", "es") and R.usa_senal("ciss", "europa") and not R.usa_senal("ciss", "us")
+    assert R.usa_senal("prima_es", "es") and not R.usa_senal("prima_es", "it")
+    assert R.usa_senal("prima_it", "it") and not R.usa_senal("prima_it", "europa")
+    assert len({m[0] for m in R.MERCADOS}) == 11
+
+
+def _T(p, base, validado=True, pct_cred=20, tend=5.0):
+    sen = [{"k": "ebp", "nombre": "Prima de exceso de bonos (EBP)", "modelo": True, "pct": pct_cred, "peso": 30, "aporta": -0.3, "ultimo": {"valor": -0.2}},
+           {"k": "baa", "nombre": "Diferencial Baa", "modelo": True, "pct": pct_cred, "peso": 20, "aporta": -0.1, "ultimo": {"valor": 1.5}},
+           {"k": "vix", "nombre": "VIX", "modelo": True, "pct": 88, "peso": 10, "aporta": 0.2, "ultimo": {"valor": 26}},
+           {"k": "cap_pib", "nombre": "Capitalización / PIB", "modelo": True, "pct": 99, "peso": 1, "aporta": 0.0, "ultimo": {"valor": 250}},
+           {"k": "tendencia", "nombre": "Índice frente a su media", "modelo": True, "pct": 40, "peso": 8, "aporta": 0.0, "ultimo": {"valor": tend}},
+           {"k": "ebp_6m", "nombre": "Cambio del EBP", "modelo": True, "pct": 50, "peso": 5, "aporta": 0.0, "ultimo": {"valor": 0.0}}]
+    return {"actual": {"p": p, "lo": p - 8, "hi": p + 8, "base": base, "validado": validado, "motivo": "No mejora a la tasa base fuera de muestra"},
+            "umbrales": {"alerta": base + 12}, "senales": sen,
+            "precision": {"brier": 0.23, "brier_base": 0.25, "avisadas": 5, "caidas": 11, "desde": "2001-01", "falsas": ["2002", "2011"]}}
+
+
+def test_lectura_del_termometro_y_conjunta():
+    ia = {"fase": "Digestión", "g_capex": 87.0, "g_fcf": -70.0}
+    L = R.interpret(_T(25, 36), ia, "S&P 500", "sp500")
+    t = L["termometro"]
+    assert len(t) == 3 and "menor de lo habitual" in t[0] and "validado" in t[1]
+    assert "VIX" in t[2] and "EBP" in t[2]                     # empuja: VIX; contiene: EBP
+    c = L["conjunta"]
+    assert "por debajo de lo habitual" in c["conclusion"] and "crédito tranquilo" in c["conclusion"]
+    assert any("Digestión" in b for b in c["bloques"]) and "Pesa mucho" in " ".join(c["bloques"])
+    assert c["vigilar"] and c["cambiaria"]
+    # alerta y modelo sin ventaja
+    L2 = R.interpret(_T(60, 36, validado=False, pct_cred=80, tend=-6), ia, "IBEX 35", "ibex")
+    assert "zona de alerta" in L2["termometro"][0] and "no demuestra ventaja" in L2["termometro"][1]
+    assert "crédito tenso" in L2["conjunta"]["conclusion"] and "media histórica" in L2["conjunta"]["conclusion"]
+    assert "indirecta" in " ".join(L2["conjunta"]["bloques"])
