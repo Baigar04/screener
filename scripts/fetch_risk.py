@@ -40,6 +40,7 @@ INICIO_WF = "2001-01"  # primer mes con previsión fuera de muestra
 MIN_HIST = 36         # meses mínimos de historia de una señal para dar percentil
 L2 = 10.0             # penalización de la logística (fuerte: solo ~18 caídas independientes desde 1993)
 N_BOOT = 60           # remuestreos para el intervalo
+MIN_SKILL = 0.03      # mejora mínima del Brier sobre la tasa base para darlo por validado (3 %)
 
 
 def log(*a):
@@ -504,7 +505,8 @@ def thermometer(raw, daily, nombre="IBEX 35"):
                 if months_between(cur, last_m) >= 12 and not any(0 <= months_between(cur, pk) <= 12 for pk, _, _ in eps):
                     falsas_y.append(cur[:4])
                 cur = None
-    validado = bool(brier < brier_b and ece < 0.10)
+    skill = 1 - brier / brier_b if brier_b else 0.0
+    validado = bool(skill >= MIN_SKILL and ece < 0.10)
     regimen = "Alerta" if p_now >= t_alert else "Tensión" if p_now >= t_tens else "Normal"
     since = next((m for m in months if hist and m == hist[0][0]), None)
     senales = []
@@ -519,7 +521,6 @@ def thermometer(raw, daily, nombre="IBEX 35"):
             "aporta": None if j is None else round(float(w[1 + j] * xnow[j]), 3),
             "lectura": lectura(cur, f["sentido"]) if cur is not None or f["modelo"] else "Dato desactualizado",
             "historial": signal_track(f["pcts"], eps, months) if f["modelo"] else None,
-            "serie": [[mo, round(f["pcts"][mo] * 100)] for mo in months[-60:] if f["pcts"].get(mo) is not None],
         })
     ibex_m = {}
     for d, c in daily:
@@ -529,7 +530,9 @@ def thermometer(raw, daily, nombre="IBEX 35"):
         "actual": {"mes": last_m, "p": p_now, "lo": lo_now, "hi": hi_now, "base": base_now, "regimen": regimen,
                    "validado": validado,
                    "motivo": "Mejora a la tasa base fuera de muestra y está calibrada" if validado else
-                   ("No mejora a la tasa base fuera de muestra" if brier >= brier_b else "Descalibrada (error medio > 10 pp)")},
+                   ("No mejora a la tasa base fuera de muestra" if brier >= brier_b else
+                    f"Mejora a la tasa base solo un {skill * 100:.1f} % (mínimo exigido: {MIN_SKILL * 100:.0f} %)".replace(".", ",") if skill < MIN_SKILL else
+                    "Descalibrada (error medio > 10 pp)")},
         "umbrales": {"tension": t_tens, "alerta": t_alert},
         "precision": {"brier": round(brier, 3), "brier_base": round(brier_b, 3), "ece": round(ece * 100, 1), "calibracion": tabla,
                       "meses_fuera_muestra": int(len(wf_p)), "desde": hist[0][0],

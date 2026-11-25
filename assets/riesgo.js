@@ -1,10 +1,14 @@
-/* Screener · Mercado › Riesgo (hoja de ruta definitiva, fase 1): termómetro de caída del IBEX, señales con fuente y peso,
+/* Screener · Mercado › Riesgo (hoja de ruta definitiva, fases 1 y 1b): termómetro de caída para 11 bolsas con selector,
+   comparativa, interpretación del termómetro y lectura conjunta adaptada a la bolsa elegida, señales con fuente y peso,
    ciclo IA desde la SEC y validación histórica. Datos: data/risk.json (scripts/fetch_risk.py). */
 (() => {
 "use strict";
 const H = window.SCR;
-const { esc, nf, sgn, fmtDate } = H;
+const { esc, nf, sgn, fmtDate, store } = H;
 const R = { d: undefined, loading: false };
+const DEF_SEG = ["sp500", "ndx", "sx5e", "ibex"];
+const segs = () => { const D = R.d; const v = store.get("rsk_bolsas", DEF_SEG).filter((k) => D?.mercados?.[k]); return v.length ? v : (D?.orden || []).slice(0, 1); };
+const selK = () => { const D = R.d, s = segs(), k = store.get("rsk_sel", s[0]); return D?.mercados?.[k] ? k : s[0]; };
 
 async function ensure() {
   if (R.loading || R.d !== undefined) return;
@@ -20,7 +24,7 @@ const fd = (iso) => (iso ? (iso.length <= 7 ? fm(iso) : `${+iso.slice(8, 10)}-${
 const pc = (v, d = 0) => (v == null ? "—" : `${nf(v, d)} %`);
 const exp = (t) => (X() ? `<div class="rsk-exp">${t}</div>` : "");
 const VEL = { lenta: ["Lenta · valoración", "predice la rentabilidad de años, no el momento de la caída"], media: ["Media · crédito y ciclo", "la de más evidencia histórica, de 3 a 12 meses vista"], rapida: ["Rápida · mercado", "confirma el estrés más que anticiparlo"] };
-const UNIT = { cape: ["", 1], cap_pib: [" %", 0], ebp: [" pp", 2], baa: [" pp", 2], hy: [" pp", 2], ciss: ["", 3], prima_es: [" pb", 0], margen: [" %", 2], curva: [" pp", 2], sahm: [" pp", 2], vix: ["", 1], nfci: ["", 2] };
+const UNIT = { cape: ["", 1], cap_pib: [" %", 0], ebp: [" pp", 2], ebp_6m: [" pp", 2], baa: [" pp", 2], hy: [" pp", 2], ciss: ["", 3], prima_es: [" pb", 0], prima_it: [" pb", 0], margen: [" %", 2], curva: [" pp", 2], sahm: [" pp", 2], vix: ["", 1], nfci: ["", 2], tendencia: [" %", 1], vol_idx: [" %", 1] };
 const DEF = {
   cape: "Precio del S&P 500 dividido entre el beneficio medio de 10 años, ajustado por inflación. Alto = bolsa cara frente a su historia.",
   cap_pib: "Valor en bolsa de las empresas de EE. UU. frente al tamaño de su economía (el «indicador Buffett»).",
@@ -29,6 +33,10 @@ const DEF = {
   hy: "Diferencial de los bonos de alto rendimiento. Solo como lectura: FRED publica pocos años de historia.",
   ciss: "Indicador del BCE que combina tensiones en bolsa, bonos, divisas, bancos y dinero en la zona euro.",
   prima_es: "Diferencia entre el bono español a 10 años y el alemán. Sube cuando se teme por España o por el euro.",
+  prima_it: "Diferencia entre el bono italiano a 10 años y el alemán. Termómetro clásico de las crisis del euro.",
+  ebp_6m: "Cuánto ha subido o bajado el EBP en 6 meses: el crédito que se encarece rápido avisa antes que su nivel.",
+  tendencia: "Distancia del índice a su media de 200 sesiones. Por debajo de la media, la tendencia es bajista y las caídas grandes son más frecuentes.",
+  vol_idx: "Volatilidad realizada del índice en los últimos 3 meses, anualizada.",
   margen: "Dinero prestado por los brókeres para comprar acciones, frente al valor de la bolsa. Alto = más apalancamiento.",
   curva: "Bono a 10 años menos letra a 3 meses. Cuando se invierte (negativa) ha precedido a las recesiones de EE. UU.",
   sahm: "Subida del paro (media de 3 meses) frente a su mínimo del último año. Por encima de 0,5 suele indicar recesión.",
@@ -69,7 +77,7 @@ function probChart(T) {
   let s = "";
   for (const [a, b] of T.caidas.map((c) => [c[0], c[1]]).filter((c) => c[1] >= m0)) {
     const x0 = xs(a < m0 ? m0 : a), x1 = xs(b > m1 ? m1 : b);
-    s += `<rect x="${x0.toFixed(1)}" y="${Tp}" width="${Math.max(2, x1 - x0).toFixed(1)}" height="${H - Tp - B}" fill="var(--neg)" opacity=".13"><title>Caída real del IBEX: ${fm(a)} → ${fm(b)}</title></rect>`;
+    s += `<rect x="${x0.toFixed(1)}" y="${Tp}" width="${Math.max(2, x1 - x0).toFixed(1)}" height="${H - Tp - B}" fill="var(--neg)" opacity=".13"><title>Caída real de ${esc(T.nombre)}: ${fm(a)} → ${fm(b)}</title></rect>`;
   }
   for (let v = 0; v <= top; v += 20) s += `<text x="${L - 6}" y="${(ys(v) + 3.5).toFixed(1)}" font-size="10" fill="var(--faint)" text-anchor="end">${v} %</text>`;
   const hl = (v, col, t) => `<line x1="${L}" x2="${W - Rr}" y1="${ys(v).toFixed(1)}" y2="${ys(v).toFixed(1)}" stroke="${col}" stroke-dasharray="3 3"/><text x="${L + 4}" y="${(ys(v) - 4).toFixed(1)}" font-size="10" fill="${col}">${t}</text>`;
@@ -85,16 +93,16 @@ function probChart(T) {
   s += `<line x1="${L}" x2="${W - Rr}" y1="${H - B}" y2="${H - B}" stroke="var(--border-strong)"/>`;
   const last = h[h.length - 1];
   s += `<circle cx="${xs(last[0]).toFixed(1)}" cy="${ys(last[1]).toFixed(1)}" r="3.5" fill="var(--accent)"/>`;
-  /* IBEX debajo, escala logarítmica */
-  const ib = T.ibex.filter((x) => x[0] >= m0), H2 = 110, T2 = 6, B2 = 6;
+  /* índice debajo, escala logarítmica */
+  const ib = T.indice.filter((x) => x[0] >= m0), H2 = 110, T2 = 6, B2 = 6;
   const lv = ib.map((x) => Math.log(x[1])), mn = Math.min(...lv), mx = Math.max(...lv);
   const y2 = (v) => T2 + (1 - (Math.log(v) - mn) / (mx - mn || 1)) * (H2 - T2 - B2);
   let s2 = "";
   for (const [a, b] of T.caidas.filter((c) => c[1] >= m0)) { const x0 = xs(a < m0 ? m0 : a), x1 = xs(b > m1 ? m1 : b); s2 += `<rect x="${x0.toFixed(1)}" y="${T2}" width="${Math.max(2, x1 - x0).toFixed(1)}" height="${H2 - T2 - B2}" fill="var(--neg)" opacity=".13"/>`; }
   s2 += `<polyline points="${ib.map((x) => `${xs(x[0]).toFixed(1)},${y2(x[1]).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--good)" stroke-width="1.2"/>`;
   for (const v of [Math.exp(mn), Math.exp(mx)]) s2 += `<text x="${L - 6}" y="${(y2(v) + 3.5).toFixed(1)}" font-size="10" fill="var(--faint)" text-anchor="end">${nf(v, 0)}</text>`;
-  s2 += `<text x="${L + 4}" y="${T2 + 10}" font-size="10" fill="var(--good)">IBEX 35</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" class="rsk-chart" role="img" aria-label="Probabilidad histórica">${s}</svg><svg viewBox="0 0 ${W} ${H2}" class="rsk-chart" role="img" aria-label="IBEX 35">${s2}</svg>`;
+  s2 += `<text x="${L + 4}" y="${T2 + 10}" font-size="10" fill="var(--good)">${esc(T.nombre)}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="rsk-chart" role="img" aria-label="Probabilidad histórica">${s}</svg><svg viewBox="0 0 ${W} ${H2}" class="rsk-chart" role="img" aria-label="${esc(T.nombre)}">${s2}</svg>`;
 }
 
 function iaChart(I) {
@@ -123,17 +131,19 @@ function thermoBox(T) {
     ? `<div class="rsk-big num">${nf(a.p, 0)} %</div><div class="rsk-sub">intervalo 90 %: ${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"} · base ${nf(a.base, 0)} %</div><div class="rsk-reg"><span class="rsk-pill ${cls}">${reg}</span></div>`
     : `<div class="rsk-big num rsk-mute">${nf(a.p, 0)} %</div><div class="rsk-sub">base ${nf(a.base, 0)} % · el modelo no demuestra ventaja</div><div class="rsk-reg"><span class="rsk-pill nu">Sin ventaja demostrada</span></div>`;
   const falsas = P.falsas?.length ? `<span data-tip="Años: ${esc(P.falsas.join(", "))}">${P.falsas.length}</span>` : "0";
-  return `<section class="rsk-p"><h3>Termómetro</h3>${gauge(a.p, a.lo, a.hi, a.base, T.umbrales.alerta, ok)}${head}
+  const L = T.lectura?.termometro || [];
+  const lect = L.length ? `<div class="rsk-lect-box"><b>Lectura</b>${L.map((x) => `<p>${esc(x)}</p>`).join("")}</div>` : "";
+  return `<section class="rsk-p"><h3>Termómetro · ${esc(T.nombre)}</h3>${gauge(a.p, a.lo, a.hi, a.base, T.umbrales.alerta, ok)}${head}${lect}
     <h3 class="rsk-h2">Precisión <span>fuera de muestra desde ${fm(P.desde)}</span></h3>
     <table class="rsk-kv"><tr><td>Intervalo del 90 %</td><td class="num">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td></tr>
-      <tr><td>Caídas &gt;15 % del IBEX en el periodo</td><td class="num">${P.caidas ?? "—"}</td></tr>
+      <tr><td>Caídas &gt;15 % en el periodo</td><td class="num">${P.caidas ?? "—"}</td></tr>
       <tr><td>Avisadas (1-12 meses antes)</td><td class="num">${P.avisadas ?? "—"} de ${P.caidas ?? "—"}${P.antelacion != null ? ` · ${nf(P.antelacion, 0)} m` : ""}</td></tr>
       <tr><td>Falsas alarmas</td><td class="num">${falsas}</td></tr>
       <tr><td>Brier · modelo frente a base</td><td class="num">${nf(P.brier, 3)} · ${nf(P.brier_base, 3)}</td></tr>
       <tr><td>Error medio de calibración</td><td class="num">${nf(P.ece, 1)} pp</td></tr>
       <tr><td>Meses evaluados</td><td class="num">${P.meses_fuera_muestra}</td></tr></table>
     <div class="rsk-verdict ${ok ? "ok" : "nu"}">${ok ? "Validado: " : "Sin ventaja demostrada: "}${esc(a.motivo)}.</div>
-    ${exp(`<b>Cómo de preciso es.</b> Desde 1993 el IBEX ha tenido ${P.caidas_total} caídas de más del 15 %: es una muestra pequeña, por eso el intervalo es ancho. El número sirve para comparar el riesgo de hoy con su media (${nf(a.base, 0)} %), no como certeza. Brier: error medio al cuadrado de las previsiones (más bajo, mejor); si no mejora al de la tasa base, el termómetro no aporta y se dice.`)}</section>`;
+    ${exp(`<b>Cómo de preciso es.</b> Desde ${(T.indice[0]?.[0] || "").slice(0, 4)} el ${esc(T.nombre)} ha tenido ${P.caidas_total} caídas de más del 15 %: es una muestra pequeña, por eso el intervalo es ancho. El número sirve para comparar el riesgo de hoy con su media (${nf(a.base, 0)} %), no como certeza. Brier: error medio al cuadrado de las previsiones (más bajo, mejor); si no mejora al de la tasa base, el termómetro no aporta y se dice.`)}</section>`;
 }
 
 function signalsBox(T, D) {
@@ -183,42 +193,93 @@ function trackBox(T) {
   const rows = T.senales.filter((s) => s.modelo && s.historial && s.historial.n).sort((a, b) => b.historial.avisadas / b.historial.n - a.historial.avisadas / a.historial.n);
   const P = T.precision;
   const r = (n, h, b = false) => `<tr${b ? ' class="rsk-b"' : ""}><td>${n}</td><td class="num ${h.avisadas / h.n >= 0.6 ? "pos" : "warn"}">${h.avisadas} de ${h.n}</td><td class="num">${h.antelacion != null ? `${nf(h.antelacion, 0)} m` : "—"}</td><td class="num">${h.falsas ?? "—"}</td></tr>`;
-  return `<section class="rsk-p"><h3>¿Ha funcionado antes? <span>caídas del IBEX &gt;15 %</span></h3>
+  return `<section class="rsk-p"><h3>¿Ha funcionado antes? <span>caídas &gt;15 % del ${esc(T.nombre)}</span></h3>
     <div class="rsk-scroll"><table class="rsk-t"><thead><tr><th>Señal</th><th class="num">Avisadas</th><th class="num">Antel.</th><th class="num">Falsas</th></tr></thead><tbody>
     ${rows.map((s) => r(esc(s.nombre), s.historial)).join("")}
     ${P.caidas ? r(`Termómetro &gt; ${nf(T.umbrales.alerta, 0)} %`, { avisos: null, avisadas: P.avisadas, n: P.caidas, antelacion: P.antelacion, falsas: P.falsas?.length }, true) : ""}</tbody></table></div>
     <div class="method">Aviso = la señal en su 20 % más alto de la historia (o el termómetro sobre el umbral) entre 12 y 1 meses antes del máximo previo a la caída. Antelación: mediana en meses. Falsa alarma: tramo de aviso sin caída en los 12 meses siguientes.</div></section>`;
 }
 
+function spark(T) {
+  const h = T.hist.slice(-60), W = 120, Hh = 26;
+  if (h.length < 2) return "";
+  const mx = Math.max(...h.map((x) => x[1]), T.actual.base) * 1.05;
+  const pts = h.map((x, i) => `${(i / (h.length - 1) * W).toFixed(1)},${(Hh - (x[1] / mx) * Hh).toFixed(1)}`).join(" ");
+  const yb = (Hh - (T.actual.base / mx) * Hh).toFixed(1);
+  return `<svg viewBox="0 0 ${W} ${Hh}" class="rsk-spark" aria-hidden="true"><line x1="0" x2="${W}" y1="${yb}" y2="${yb}" stroke="var(--faint)" stroke-dasharray="2 2"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.3"/></svg>`;
+}
+const pillOf = (a) => { const cls = !a.validado ? "nu" : a.regimen === "Alerta" ? "ko" : a.regimen === "Tensión" ? "te" : "ok"; return `<span class="rsk-pill ${cls}">${a.validado ? a.regimen : "Sin ventaja"}</span>`; };
+
+function marketsBox(D) {
+  const S = segs(), sel = selK();
+  const chips = (D.orden || []).map((k) => `<button class="rsk-chip${S.includes(k) ? " on" : ""}" data-rskseg="${k}" aria-pressed="${S.includes(k)}">${esc(D.mercados[k].nombre)}</button>`).join("");
+  const rows = S.map((k) => {
+    const T = D.mercados[k], a = T.actual, P = T.precision;
+    return `<tr class="${k === sel ? "sel" : ""}" data-rsksel="${k}" tabindex="0"><td><b>${esc(T.nombre)}</b></td><td class="num">${nf(a.p, 0)} %</td><td class="num rsk-fa">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td><td class="num">${nf(a.base, 0)} %</td>
+      <td>${pillOf(a)}</td><td class="num">${P.caidas ? `${P.avisadas} de ${P.caidas}` : "—"}</td><td class="num">${P.falsas?.length ?? "—"}</td><td>${spark(T)}</td></tr>`;
+  }).join("");
+  return `<section class="rsk-p rsk-mk"><h3>Bolsas <span>elige las que quieres seguir · pulsa una fila para ver su detalle</span></h3><div class="rsk-chips">${chips}</div>
+    <div class="rsk-scroll"><table class="rsk-t rsk-cmp"><thead><tr><th>Bolsa</th><th class="num">Prob. caída &gt;15 %</th><th class="num">Intervalo 90 %</th><th class="num">Media histórica</th><th>Régimen</th><th class="num">Caídas avisadas</th><th class="num">Falsas alarmas</th><th>5 años</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${exp("<b>Cómo comparar.</b> Cada bolsa tiene su propia media histórica: en unas las caídas de más del 15 % son mucho más frecuentes que en otras. Por eso importa más la cifra frente a su media que la cifra sola. «Sin ventaja» significa que en esa bolsa el modelo no mejora a la media fuera de muestra.")}</section>`;
+}
+
+function readingBox(T) {
+  const C = T.lectura?.conjunta;
+  if (!C) return "";
+  return `<section class="rsk-p rsk-read"><h3>Lectura conjunta · ${esc(T.nombre)} <span>generada con reglas a partir de los datos de esta página</span></h3>
+    <p class="rsk-concl">${esc(C.conclusion)}</p>
+    <ul class="rsk-bl">${C.bloques.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+    <div class="rsk-2c"><div><h4>Qué vigilar</h4><ul>${C.vigilar.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></div>
+      <div><h4>Qué cambiaría la lectura</h4><ul>${C.cambiaria.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></div></div>
+    <div class="method">Lectura informativa, no es una recomendación de inversión. Si un dato falta o el modelo no está validado en esta bolsa, la lectura lo dice.</div></section>`;
+}
+
 function render() {
   ensure();
   if (R.d === undefined) return `<div class="skel" style="height:420px"></div>`;
-  const D = R.d, T = D?.termometro;
-  if (!T) return `<div class="pg-head"><h1>Riesgo de mercado</h1></div><div class="box">Todavía no hay datos del termómetro: se generan en la próxima actualización automática.</div>`;
+  const D = R.d;
+  if (!D?.mercados || !Object.keys(D.mercados).length) return `<div class="pg-head"><h1>Riesgo de mercado</h1></div><div class="box">Todavía no hay datos del termómetro: se generan en la próxima actualización automática.</div>`;
+  const T = D.mercados[selK()];
   const nfu = new Set(T.senales.map((s) => s.fuente.split(/[,(·]/)[0].trim())).size;
-  return `<div class="pg-head"><h1>Riesgo de mercado</h1><div class="pg-sub">${esc(T.objetivo)} · datos del ${fmtDate(D.generado.slice(0, 10))} · ${T.senales.length} señales · ${nfu} fuentes${D.errores?.length ? ` · <span class="stale-txt" data-tip="${esc(D.errores.map((e) => `${e.serie}: ${e.motivo}`).join(" · "))}">${D.errores.length} fuente(s) con error</span>` : ""}</div></div>
+  return `<div class="pg-head"><h1>Riesgo de mercado</h1><div class="pg-sub">Probabilidad de que cada bolsa caiga más de un 15 % en algún momento de los próximos 12 meses · datos del ${fmtDate(D.generado.slice(0, 10))} · ${Object.keys(D.mercados).length} bolsas · ${nfu} fuentes${D.errores?.length ? ` · <span class="stale-txt" data-tip="${esc(D.errores.map((e) => `${e.serie}: ${e.motivo}`).join(" · "))}">${D.errores.length} aviso(s) de fuentes</span>` : ""}</div></div>
+    ${marketsBox(D)}
     <div class="rsk-top">${thermoBox(T)}
-      <div class="rsk-col"><section class="rsk-p"><h3>Probabilidad de caída &gt;15 % del IBEX 35 <span>banda: intervalo del 90 % · sombreado: caídas reales</span></h3>${probChart(T)}
+      <div class="rsk-col"><section class="rsk-p"><h3>Probabilidad de caída &gt;15 % · ${esc(T.nombre)} <span>banda: intervalo del 90 % · sombreado: caídas reales</span></h3>${probChart(T)}
         ${exp(`<b>Cómo se calcula.</b> ${esc(T.metodo)} Cada punto de la línea es la previsión que se habría hecho ese mes con lo que se sabía entonces.`)}</section>${trackBox(T)}</div></div>
-    <div class="rsk-bot">${signalsBox(T, D)}<div class="rsk-col">${iaBox(D.ia, D.concentracion)}</div></div>`;
+    <div class="rsk-bot">${signalsBox(T, D)}<div class="rsk-col">${iaBox(D.ia, D.concentracion)}</div></div>
+    ${readingBox(T)}`;
+}
+
+function onClick(t) {
+  let b;
+  if ((b = t.closest("[data-rskseg]"))) {
+    const k = b.dataset.rskseg, cur = segs();
+    const nx = cur.includes(k) ? cur.filter((x) => x !== k) : (R.d.orden || []).filter((x) => x === k || cur.includes(x));
+    if (!nx.length) return true;
+    store.set("rsk_bolsas", nx);
+    if (!cur.includes(k)) store.set("rsk_sel", k); else if (selK() === k) store.set("rsk_sel", nx[0]);
+    H.render(); return true;
+  }
+  if ((b = t.closest("[data-rsksel]"))) { store.set("rsk_sel", b.dataset.rsksel); if (b.dataset.sub) return false; H.render(); return true; }
+  return false;
 }
 
 /* franja para «Hoy» */
 function strip() {
   ensure();
-  const T = R.d?.termometro;
-  if (!T) return "";
-  const a = T.actual, ebp = T.senales.find((s) => s.k === "ebp"), vix = T.senales.find((s) => s.k === "vix"), I = R.d.ia;
-  const cls = !a.validado ? "nu" : a.regimen === "Alerta" ? "ko" : a.regimen === "Tensión" ? "te" : "ok";
-  const it = [`<div><span>Régimen de mercado</span><b><span class="rsk-pill ${cls}">${a.validado ? a.regimen : "Sin ventaja demostrada"}</span></b></div>`,
-    `<div><span>Prob. caída IBEX &gt;15 % en 12 m</span><b class="num">${nf(a.p, 0)} %</b><small class="num">base ${nf(a.base, 0)} %</small></div>`];
-  if (ebp) it.push(`<div><span>Crédito (EBP)</span><b class="num">${nf(ebp.ultimo.value ?? ebp.ultimo.valor, 2)}</b><small class="num">percentil ${ebp.pct ?? "—"}</small></div>`);
+  const D = R.d;
+  if (!D?.mercados || !Object.keys(D.mercados).length) return "";
+  const S = segs().slice(0, 4), any = D.mercados[S[0]];
+  const ebp = any.senales.find((s) => s.k === "ebp"), vix = any.senales.find((s) => s.k === "vix"), I = D.ia;
+  const it = S.map((k) => { const T = D.mercados[k], a = T.actual; return `<div class="rsk-sm" data-sub="riesgo" data-rsksel="${k}"><span>${esc(T.nombre)}</span><b class="num">${nf(a.p, 0)} %</b><small>${pillOf(a)} <span class="num">media ${nf(a.base, 0)} %</span></small></div>`; });
+  if (ebp) it.push(`<div><span>Crédito (EBP)</span><b class="num">${nf(ebp.ultimo.valor, 2)}</b><small class="num">percentil ${ebp.pct ?? "—"}</small></div>`);
   if (I?.fase) it.push(`<div><span>Ciclo IA</span><b class="${I.fase === "Digestión" || I.fase === "Contracción" ? "warn" : ""}">${esc(I.fase)}</b><small>${esc(I.trimestre)}</small></div>`);
   if (vix) it.push(`<div><span>VIX</span><b class="num">${nf(vix.ultimo.valor, 1)}</b><small class="num">percentil ${vix.pct ?? "—"}</small></div>`);
-  const gl = X() ? `<div class="rsk-exp hoy-gl"><b>Cómo leer esta franja.</b> <b>Régimen</b>: fase del mercado según el termómetro (normal, tensión o alerta); si el modelo no mejora a la media histórica, se dice «sin ventaja demostrada». <b>Prob. caída</b>: probabilidad estimada de que el IBEX caiga más de un 15 % en algún momento de los próximos 12 meses; «base» es la frecuencia histórica. <b>Crédito (EBP)</b>: lo que se cobra de más por prestar a empresas por encima de su riesgo de quiebra; cuando sube, el crédito se encarece y suele anticipar caídas. <b>Ciclo IA</b>: ${I?.fase ? esc(FASE_TXT[I.fase]) : "fase de la inversión en IA de las grandes tecnológicas."} <b>VIX</b>: volatilidad esperada del S&amp;P 500.</div>` : "";
+  const gl = X() ? `<div class="rsk-exp hoy-gl"><b>Cómo leer esta franja.</b> Para cada bolsa que sigues: probabilidad estimada de que caiga más de un 15 % en algún momento de los próximos 12 meses, comparada con su media histórica, y su régimen (normal, tensión o alerta; «sin ventaja» si el modelo no mejora a la media en esa bolsa). Las bolsas se eligen en Mercado › Riesgo. <b>Crédito (EBP)</b>: lo que se cobra de más por prestar a empresas por encima de su riesgo de quiebra; cuando sube, el crédito se encarece y suele anticipar caídas. <b>Ciclo IA</b>: ${I?.fase ? esc(FASE_TXT[I.fase]) : "fase de la inversión en IA de las grandes tecnológicas."} <b>VIX</b>: volatilidad esperada del S&amp;P 500.</div>` : "";
   return `<div class="rsk-strip">${it.join("")}<button class="link-btn" data-sub="riesgo">Ver Riesgo →</button></div>${gl}`;
 }
 
 H.modules.riesgo = render;
+H.handlers.unshift(onClick);
 window.SCRRisk = { ensure, strip, data: () => R.d };
 })();

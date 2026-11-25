@@ -380,14 +380,28 @@ def riesgo(pg, base):
     t = pg.text_content("#view") or ""
     n = pg.locator("#view table.rsk-t tbody tr:not(.rsk-grp)").count()
     check("riesgo: termómetro, precisión y veredicto", all(x in t for x in ("Termómetro", "Precisión", "Brier")) and ("Validado" in t or "Sin ventaja demostrada" in t))
-    check("riesgo: señales con fuente y peso", n >= 15 and "Fed" in t and "BCE" in t, f"{n} filas")
+    check("riesgo: señales con fuente y peso", n >= 15 and "Fed" in t and "FRED" in t, f"{n} filas")
     check("riesgo: ciclo IA con fase", any(f in t for f in ("Expansión", "Euforia", "Digestión", "Contracción")) and "SEC" in t)
     check("riesgo: historial «¿Ha funcionado antes?»", "¿Ha funcionado antes?" in t and "de " in t)
     w = pg.evaluate("document.querySelector('.rsk-bot').scrollWidth <= document.querySelector('.rsk-bot').clientWidth + 2")
     check("riesgo: sin desbordes a 1440 px", w)
+    nchips = pg.locator("[data-rskseg]").count()
+    check("riesgo: selector con las bolsas principales", nchips >= 8, f"{nchips} bolsas")
+    lect = pg.locator(".rsk-lect-box p").count()
+    conj = pg.text_content(".rsk-read") or ""
+    check("riesgo: lectura del termómetro y lectura conjunta", lect == 3 and "Qué vigilar" in conj and "Qué cambiaría" in conj)
+    alt = pg.evaluate("[...document.querySelectorAll('[data-rskseg]')].map(b => b.dataset.rskseg).find(k => !document.querySelector(`[data-rskseg='${k}']`).classList.contains('on'))")
+    if alt:
+        pg.click(f"[data-rskseg='{alt}']")
+        pg.wait_for_timeout(600)
+        h = pg.text_content(".rsk-top h3") or ""
+        nm = pg.text_content(f"[data-rskseg='{alt}']") or ""
+        check("riesgo: elegir otra bolsa cambia el detalle y la lectura", nm.strip() in h and nm.strip() in (pg.text_content(".rsk-read h3") or ""), h)
+        pg.click(f"[data-rskseg='{alt}']")
+        pg.wait_for_timeout(400)
     pg.goto(base + "#/hoy")
     pg.wait_for_timeout(2500)
-    check("«Hoy»: franja de riesgo", pg.locator(".rsk-strip").count() == 1 and "Prob. caída IBEX" in (pg.text_content("#view") or ""))
+    check("«Hoy»: franja de riesgo con las bolsas seguidas", pg.locator(".rsk-strip").count() == 1 and pg.locator(".rsk-strip .rsk-sm").count() >= 1)
     pg.set_viewport_size({"width": 390, "height": 844})
     pg.goto(base + "#/riesgo")
     pg.wait_for_timeout(2000)

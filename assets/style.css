@@ -1168,3 +1168,22 @@ table.rsk-kv{table-layout:fixed}.rsk-kv td{background:none!important;position:st
 .rsk-t td,.rsk-t th{position:static!important;background:none!important}
 .rsk-t td{white-space:normal}.rsk-t td.num,.rsk-t th.num{white-space:nowrap}
 .rsk-col .rsk-p{flex:0 0 auto}
+/* Riesgo 1b · bolsas, lectura */
+.rsk-mk{margin-bottom:12px}
+.rsk-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.rsk-chip{border:1px solid var(--border-strong);background:none;color:var(--muted);padding:3px 10px;font:inherit;font-size:12px;cursor:pointer}
+.rsk-chip.on{color:var(--text);border-color:var(--accent);background:var(--accent-soft)}
+.rsk-cmp tr[data-rsksel]{cursor:pointer}.rsk-cmp tr[data-rsksel]:hover td{background:var(--surface-2)!important}
+.rsk-cmp tr.sel td{background:var(--accent-soft)!important}.rsk-cmp tr.sel td:first-child{box-shadow:inset 2px 0 var(--accent)}
+.rsk-cmp td{vertical-align:middle}
+.rsk-spark{width:120px;height:26px;display:block}
+.rsk-lect-box{margin-top:12px;border-top:1px solid var(--border);padding-top:10px;font-size:12.5px;line-height:1.5}
+.rsk-lect-box b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.rsk-lect-box p{margin:0 0 6px;color:color-mix(in srgb,var(--text) 88%,var(--muted))}
+.rsk-read{margin-top:12px}
+.rsk-concl{font-size:15px;line-height:1.5;margin:0 0 10px;color:var(--text);font-weight:500}
+.rsk-bl{margin:0 0 12px;padding-left:18px;line-height:1.55;color:color-mix(in srgb,var(--text) 86%,var(--muted))}.rsk-bl li{margin-bottom:4px}
+.rsk-2c{display:grid;grid-template-columns:1fr 1fr;gap:16px}.rsk-2c h4{margin:0 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.rsk-2c ul{margin:0;padding-left:18px;line-height:1.5;font-size:12.5px}.rsk-2c li{margin-bottom:4px}
+.rsk-strip>.rsk-sm{cursor:pointer}.rsk-strip>.rsk-sm:hover{background:var(--surface-2)}.rsk-sm small{display:flex;gap:6px;align-items:center}
+@media (max-width:900px){.rsk-2c{grid-template-columns:1fr}}
