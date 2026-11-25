@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-25T01:36:29+00:00",
+ "generado": "2026-11-25T09:06:07+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -27,15 +27,15 @@
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 46.0 % > SMA50, Europa: 49.2 % > SMA50"
+   "detalle": "EE. UU.: 48.3 % > SMA50, Europa: 49.4 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
-   "detalle": "11226 operaciones · 68 días · pendientes 4"
+   "detalle": "11576 operaciones · 69 días · pendientes 3"
   },
   "risk.json": {
    "estado": "ok",
-   "detalle": "20.9 % (Normal) · base 36.5 % · sin ventaja demostrada"
+   "detalle": "22.0 % (Normal) · base 36.5 % · sin ventaja demostrada"
   },
   "smart.json": {
    "estado": "ok",
