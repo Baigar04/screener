@@ -37,7 +37,7 @@ CAIDA = 0.15          # caída que define el «evento»
 HORIZONTE = 12        # meses
 INICIO_WF = "2001-01"  # primer mes con previsión fuera de muestra
 MIN_HIST = 36         # meses mínimos de historia de una señal para dar percentil
-L2 = 2.0              # penalización de la logística
+L2 = 10.0             # penalización de la logística (fuerte: solo ~18 caídas independientes desde 1993)
 N_BOOT = 60           # remuestreos para el intervalo
 
 
