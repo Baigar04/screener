@@ -1224,3 +1224,26 @@ table.rsk-kv{table-layout:fixed}.rsk-kv td{background:none!important;position:st
 body.one-sec .tabsbar #side{visibility:hidden}
 @media (max-width:900px){.top .nav{grid-template-columns:repeat(6,1fr)!important}.top .nav button{font-size:10.5px!important;padding:6px 0!important;min-width:0}.top .nav button .lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .rsk-plazo{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}.rsk-plazo>span{color:var(--muted);font-size:11.5px;margin-right:4px}
+/* ===== Geopolítica (fase 2) ===== */
+.geo-pistas{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px}
+.geo-pista{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--muted);padding:10px 12px}
+.geo-pista.ok{border-left-color:var(--pos)}.geo-pista.te{border-left-color:var(--warn)}.geo-pista.ko{border-left-color:var(--neg)}
+.geo-ph{display:flex;gap:8px;align-items:baseline;margin-bottom:6px}.geo-ph .ui-pill{margin-left:auto}
+.geo-pista .rsk-kv td{vertical-align:top;font-size:12px;line-height:1.45}.geo-pista .rsk-kv td:first-child{width:86px}
+.geo-acc{color:var(--accent)}
+.geo-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.geo-flow>div{background:var(--surface-2);border:1px solid var(--border);padding:8px 10px}
+.geo-flow b{display:block;color:var(--accent);font-size:12.5px;margin-bottom:3px}.geo-flow span{font-size:12px;color:color-mix(in srgb,var(--text) 85%,var(--muted))}
+.geo-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:12px 0}
+.geo-k{background:var(--surface);border:1px solid var(--border);padding:10px 14px;display:flex;flex-direction:column;gap:2px}
+.geo-k span{color:var(--muted);font-size:11.5px}.geo-k b{font:500 22px var(--mono)}.geo-k small{color:var(--faint);font-size:11px}
+.geo-top{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+.geo-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+.geo-ev{display:flex;flex-direction:column;gap:10px}.geo-ev h4{margin:0 0 4px;font-size:12px;color:var(--muted);font-weight:600}.geo-ev h4 span{color:var(--faint);font-weight:400;margin-left:6px}
+.geo-heat td.num{color:var(--text)}
+.geo-facts{margin:0;padding-left:18px;font-size:12.5px;line-height:1.5}.geo-facts li{margin-bottom:8px}
+.rsk-p+.rsk-p{margin-top:12px}
+@media (max-width:1100px){.geo-3{grid-template-columns:1fr}.geo-flow,.geo-kpis{grid-template-columns:1fr 1fr}}
+@media (max-width:640px){.geo-flow,.geo-kpis{grid-template-columns:1fr}}
+.geo-pista .rsk-kv td{text-align:left!important;white-space:normal}
+.geo-3{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr)}
+@media (max-width:1100px){.geo-3{grid-template-columns:1fr}}

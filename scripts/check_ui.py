@@ -59,7 +59,7 @@ def fichas(pg, base):
     check("«adelante» la vuelve a abrir", True)
 
 
-AREAS = {"hoy": "hoy", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "riesgo": "contexto",
+AREAS = {"hoy": "hoy", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "riesgo": "contexto", "geopolitica": "contexto",
          "screener": "screener", "comparar": "screener", "smart": "screener",
          "seguimiento": "cartera", "carteras": "cartera", "laboratorio": "investigacion", "diario": "investigacion"}
 
@@ -383,7 +383,7 @@ def riesgo(pg, base):
         return
     t = pg.text_content("#view") or ""
     n = pg.locator("#view table.rsk-t tbody tr:not(.rsk-grp)").count()
-    check("riesgo: termómetro, precisión y veredicto", all(x in t for x in ("Termómetro", "Precisión", "Brier")) and ("Validado" in t or "Sin ventaja demostrada" in t))
+    check("riesgo: termómetro, precisión y veredicto", all(x in t for x in ("Termómetro", "Precisión", "Examen")) and ("Validado" in t or "Sin ventaja demostrada" in t))
     check("riesgo: señales con fuente y peso", n >= 15 and "Fed" in t and "FRED" in t, f"{n} filas")
     check("riesgo: ciclo IA con fase", any(f in t for f in ("Expansión", "Euforia", "Digestión", "Contracción")) and "SEC" in t)
     check("riesgo: historial «¿Ha funcionado antes?»", "¿Ha funcionado antes?" in t and "de " in t)
@@ -410,6 +410,25 @@ def riesgo(pg, base):
     pg.goto(base + "#/riesgo")
     pg.wait_for_timeout(2000)
     check("riesgo: móvil sin desborde horizontal", pg.evaluate("document.documentElement.scrollWidth") <= 392)
+
+
+def geopolitica(pg, base):
+    """Fase 2: Contexto › Geopolítica (pistas, GPR, países, sensibilidad, eventos, rearme, lectura conjunta)."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/geopolitica")
+    try:
+        pg.wait_for_selector(".geo-kpis", timeout=30000)
+    except Exception:  # noqa: BLE001
+        check("geopolítica: página", False, "sin .geo-kpis (¿falta data/geo.json?)")
+        return
+    t = pg.text_content("#view") or ""
+    check("geopolítica: pistas, GPR y países", "Pistas activas" in t and "Por país" in t and pg.locator(".geo-k").count() >= 3)
+    check("geopolítica: sensibilidad, eventos y rearme con fuente", all(x in t for x in ("Sensibilidad", "Escaladas", "Rearme europeo", "Agencia Europea de Defensa")))
+    check("geopolítica: lectura conjunta", "Lectura conjunta" in t and "Qué vigilar" in t)
+    check("geopolítica: en el área Contexto", "Geopolítica" in (pg.text_content(".tabsbar") or ""))
+    pg.set_viewport_size({"width": 390, "height": 844})
+    pg.wait_for_timeout(800)
+    check("geopolítica: móvil sin desborde horizontal", pg.evaluate("document.documentElement.scrollWidth") <= 392)
 
 
 def diseno3(pg, base):
@@ -457,7 +476,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

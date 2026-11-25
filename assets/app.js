@@ -7,6 +7,7 @@ const NAV = [
   ["pulso", "Pulso del mercado", true],
   ["sectores", "Sectores", true],
   ["riesgo", "Riesgo", true],
+  ["geopolitica", "Geopolítica", true],
   ["screener", "Screener", true],
   ["smart", "Smart money", true],
   ["comparar", "Comparar", true],
@@ -21,7 +22,7 @@ const NAV = [
 const AREAS = [
   ["hoy", "Hoy", ["hoy"]],
   ["mercado", "Mercado", ["pulso", "sectores", "adelantarse"]],
-  ["contexto", "Contexto", ["riesgo"]],
+  ["contexto", "Contexto", ["riesgo", "geopolitica"]],
   ["screener", "Screener", ["screener", "comparar", "smart"]],
   ["cartera", "Cartera", ["seguimiento", "carteras"]],
   ["investigacion", "Investigación", ["diario", "laboratorio"]],
@@ -164,6 +165,7 @@ const ICONS = {
   laboratorio: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9",
 };
 ICONS.mercado = ICONS.pulso; ICONS.watchlists = "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"; ICONS.seguimiento = ICONS.watchlists;
+ICONS.geopolitica = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18";
 ICONS.cartera = "M3 7h18v13H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18";
 ICONS.contexto = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9M12 3c-2.5 2.5-3.8 5.5-3.8 9s1.3 6.5 3.8 9";
 ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4";

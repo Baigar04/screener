@@ -263,7 +263,7 @@ function valores(uni, Q) {
     const c = Q.changeOf(r.sym);
     return `<tr><td>${link(r.sym)} <span class="hy-nm">${esc((r.nombre || "").slice(0, 22))}</span></td><td class="num">${r.score ?? "s. d."}${c?.d ? ` <span class="chg ${c.d > 0 ? "p" : "n"}">${sgn(c.d, 0)}</span>` : ""}</td>
       <td class="num">${chg(r.r1d, 1)}</td><td class="num hy-fa">${r.resultados && r.resultados >= today() ? fmtDate(r.resultados) : "—"}</td>
-      <td class="hy-fa" ${tip(5)}>—</td><td class="hy-fa" ${tip(3)}>—</td><td class="hy-fa" ${tip(2)}>—</td></tr>`;
+      <td class="hy-fa" ${tip(5)}>—</td><td class="hy-fa" ${tip(3)}>—</td><td>${window.SCRGeo?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin datos suficientes (menos de 3 años)">—</span>`}</td></tr>`;
   }).join("");
   return `<div class="hy-scroll"><table class="hy-t"><thead><tr><th>Valor</th><th class="num">Nota</th><th class="num">Hoy</th><th class="num">Resultados</th><th>Probabilidad</th><th>Estrés</th><th>Geopolítica</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${w.length > 12 ? `<div class="hint">y ${w.length - 12} más en Cartera › Watchlist</div>` : ""}`;
@@ -289,6 +289,7 @@ function render() {
   ensure();
   window.SCREnsureUni?.();
   window.SCRRisk?.ensure?.();
+  window.SCRGeo?.ensure?.();
   if (!window.SCRSmart?.data?.()) window.SCRSmart?.ensure?.();
   const uni = window.SCRUni?.() || [], Q = window.SCREq, ok = uni.length && Q;
   const wait = `<div class="skel" style="height:120px"></div>`;

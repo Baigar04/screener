@@ -38,7 +38,8 @@ def test_precedente_de_la_cesta():
 def test_pistas_y_lectura():
     Gd = {"global": {"pct": 92, "pct7": 95, "tendencia": "sube", "amenazas": 180, "actos": 120},
           "defensa": {"dd3m": -16.0, "r1a": 20.0, "valores": ["IDR.MC"], "precedente": {"n": 6, "media6m": 14.2, "positivos": 83, "fechas": ["2022-03-01"]}},
-          "paises": [{"code": "TWN", "nombre": "Taiwán", "pct": 96, "d3": 25}, {"code": "ESP", "nombre": "España", "pct": 40, "d3": 5}],
+          "paises": [{"code": "TWN", "nombre": "Taiwán", "pct": 96, "d3": 25}, {"code": "ESP", "nombre": "España", "pct": 40, "d3": 5},
+                     {"code": "NOR", "nombre": "Noruega", "pct": 98, "d3": 170}],
           "eventos": {"escalada": {"ndx": {"nombre": "Nasdaq 100", "m5": -1.2, "m20": 0.8, "pos20": 60}, "hsi": {"nombre": "Hang Seng", "m5": -2.0, "m20": -0.5, "pos20": 45}},
                       "relajacion": {}},
           "sens_bolsas": {"dax": {"nombre": "DAX", "beta2": -1.1}, "sp500": {"nombre": "S&P 500", "beta2": -0.4}},
@@ -46,6 +47,19 @@ def test_pistas_y_lectura():
     pistas, L = G.lectura_y_pistas(Gd)
     ids = [p["id"] for p in pistas]
     assert ids[0] == "defensa" and pistas[0]["estado"] == "Oportunidad" and "+14,2 %" in pistas[0]["precedente"]
-    assert "pais-TWN" in ids and "nivel" in ids and "pais-ESP" not in ids
+    assert "pais-TWN" in ids and "nivel" in ids and "pais-ESP" not in ids and "pais-NOR" not in ids   # sin exposición conocida
     assert "muy alto" in L["conclusion"] and "amenazas" in L["conclusion"]
     assert any("Taiwán" in b for b in L["bloques"]) and L["vigilar"] and L["cambiaria"]
+
+
+def test_cesta_empieza_con_cinco_valores_y_filtra_saltos():
+    d0 = date(2000, 1, 3)
+    px = {}
+    for k, (t, _) in enumerate(G.DEFENSA[:6]):
+        start = 0 if k < 4 else 300 + k
+        s = [(d0 + timedelta(days=i), 100.0 + i * 0.01) for i in range(start, 800)]
+        if k == 0:
+            s[500] = (s[500][0], 1000.0)   # error de datos
+        px[t] = s
+    lv, miembros = G.basket(px)
+    assert lv[0][0] >= d0 + timedelta(days=304) and max(v for _, v in lv) < 200

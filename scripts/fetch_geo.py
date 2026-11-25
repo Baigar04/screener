@@ -291,9 +291,14 @@ def basket(px):
     """Cesta de defensa europea equiponderada (rentabilidades diarias medias de los valores con dato)."""
     ser = {t: dict(px[t]) for t, _ in DEFENSA if t in px}
     days = sorted({d for s in ser.values() for d in s})
+    # empieza cuando hay al menos 5 valores con cotización (antes, la «cesta» sería uno o dos valores)
+    first = {t: min(s) for t, s in ser.items()}
+    start = next((d for d in days if sum(1 for t in ser if first[t] <= d) >= 5), None)
+    days = [d for d in days if start and d >= start]
     lv, val, prev = [], 100.0, {}
     for d in days:
         rs = [ser[t][d] / prev[t] - 1 for t in ser if d in ser[t] and t in prev]
+        rs = [r for r in rs if abs(r) < 0.4]   # saltos imposibles en un día = error de datos
         for t in ser:
             if d in ser[t]:
                 prev[t] = ser[t][d]
@@ -331,7 +336,8 @@ def lectura_y_pistas(G):
                        "accion": "Revisar entrada escalonada en los valores de defensa que sigas. Invalida: recortes de presupuesto o retrasos de SAFE." if op else "Vigilar: el precedente no es concluyente.",
                        "syms": B.get("valores", []), "bolsas": []})
     P = G.get("paises") or []
-    sub = sorted([p for p in P if p.get("pct") is not None and p["pct"] >= 80 and (p.get("d3") or 0) > 0], key=lambda p: -(p.get("d3") or 0))[:2]
+    sub = sorted([p for p in P if p["code"] in EXPOSICION and p.get("pct") is not None and p["pct"] >= 80 and (p.get("d3") or 0) > 0],
+                 key=lambda p: (-(p["pct"] or 0), -(p.get("d3") or 0)))[:2]
     E = G.get("eventos", {}).get("escalada", {})
     for p in sub:
         bol = EXPOSICION.get(p["code"], [])
@@ -379,7 +385,9 @@ def lectura_y_pistas(G):
     if ST:
         top = sorted(ST.items(), key=lambda x: -x[1]["mediana"])
         bloques.append(f"Por sectores, el que mejor aguanta un sobresalto es {top[0][0]} ({sf(top[0][1]['mediana'])} % de mediana) y el que peor, {top[-1][0]} ({sf(top[-1][1]['mediana'])} %).")
-    vig = [f"{p['nombre']}: si su GPR supera el percentil 95, revisar las bolsas expuestas ({', '.join(EXPOSICION.get(p['code'], [])) or '—'})." for p in sub][:2]
+    nm = {c: n for c, n, _, _ in MERCADOS}
+    vig = [f"{p['nombre']}: si su GPR " + ("sigue por encima del percentil 95" if p["pct"] >= 95 else "supera el percentil 95") +
+           f", revisar las bolsas expuestas ({', '.join(nm.get(b, b) for b in EXPOSICION[p['code']])})." for p in sub][:2]
     vig.append("Titulares de paz o escalada en Ucrania: mueven la defensa europea más que los presupuestos.")
     camb = ["Una escalada (GPR diario por encima del percentil 98 de 3 años) activaría la pista de riesgo global.",
             "Un recorte de los presupuestos de defensa invalidaría la pista de defensa."]
