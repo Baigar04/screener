@@ -148,3 +148,45 @@ def test_lectura_del_termometro_y_conjunta():
     assert "zona de alerta" in L2["termometro"][0] and "no demuestra ventaja" in L2["termometro"][1]
     assert "crédito tenso" in L2["conjunta"]["conclusion"] and "media histórica" in L2["conjunta"]["conclusion"]
     assert "indirecta" in " ".join(L2["conjunta"]["bloques"])
+
+
+def test_cambio_y_empalme():
+    from datetime import date as D
+    obs = [(D(2020, 1, 1) + timedelta(days=i), 100.0 + i * 0.1) for i in range(800)]
+    ch = R.change(obs, 365)
+    assert ch and abs(ch[-1][1] - ((obs[-1][1] / obs[-366][1] - 1) * 100)) < 0.2
+    old = [(D(2000, 1, 1) + timedelta(days=i), 50.0) for i in range(100)]
+    new = [(D(2000, 1, 1) + timedelta(days=i), 100.0) for i in range(50, 150)]
+    sp = R.splice(old, new)
+    assert sp[0][1] == 100.0 and len(sp) == 150
+
+
+def test_modelo_conjunto_con_examen():
+    rng = np.random.default_rng(3)
+    preps = {}
+    for c, shift in (("a", 0), ("b", 300), ("c", 700)):
+        n = 34 * 260
+        ret = rng.normal(0.0003, 0.012, n)
+        crashes = [900 + shift + k * 1500 for k in range(5) if 900 + shift + k * 1500 + 400 < n]
+        for s0 in crashes:
+            ret[s0:s0 + 120] -= 0.003
+            ret[s0 + 120:s0 + 360] += 0.0025
+        daily = _daily(list(100 * np.exp(np.cumsum(ret))))
+        sig = []
+        for i, (d, _) in enumerate(daily):
+            near = any(0 <= s0 - i <= 200 for s0 in crashes)
+            sig.append((d, (2.0 if near else 0.0) + rng.normal(0, 0.5)))
+        noise = [(d, float(rng.normal())) for d, _ in daily[::20]]
+        meta = lambda k: {"k": k, "nombre": k, "vel": "media", "fuente": "x", "url": "", "frec": "diario", "retraso": 0, "sentido": 1,
+                          "modelo": True, "desde": "1993-01", "ultimo": {"fecha": "2026-01-01", "valor": 1}}
+        raw = {"s0": (meta("s0"), sig), "s1": (meta("s1"), noise)}
+        preps[c] = R.prep_market(raw, daily)
+    res = R.pooled(preps)
+    assert set(res) == {"a", "b", "c"}
+    T = R.assemble(preps["a"], res["a"], "Bolsa A")
+    assert 0 <= T["actual"]["p"] <= 100 and T["precision"]["examen_desde"] == R.EXAMEN
+    w = {s["k"]: s["peso"] for s in T["senales"]}
+    assert w["s0"] > w["s1"]
+    assert all(h[0] >= R.INICIO_WF for h in T["hist"])
+    ex = T["precision"]["examen"]
+    assert ex is None or all(isinstance(ex[k], (int, float)) for k in ("brier", "brier_base", "ece"))

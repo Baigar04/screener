@@ -185,6 +185,31 @@ def shiller_cape():
     return sorted(obs)
 
 
+def change(obs, days, log=True):
+    """Cambio de una serie frente a su valor de hace `days` días naturales (en %, o en diferencia si log=False)."""
+    out, j = [], 0
+    for i, (d, v) in enumerate(obs):
+        while j < i and (d - obs[j][0]).days > days:
+            j += 1
+        if j > 0 and (d - obs[j - 1][0]).days >= days - 10 and obs[j - 1][1]:
+            b = obs[j - 1][1]
+            out.append((d, (v / b - 1) * 100 if log else v - b))
+    if not out:
+        raise RuntimeError("serie corta para calcular el cambio")
+    return out
+
+
+def splice(old, new):
+    """Empalma una serie antigua (descatalogada) con su sustituta, escalando la antigua en la primera fecha común."""
+    nm = dict(new)
+    common = [d for d, _ in old if d in nm]
+    if not common:
+        return new
+    d0 = common[0]
+    k = nm[d0] / dict(old)[d0]
+    return [(d, v * k) for d, v in old if d < d0] + new
+
+
 def ratio(a, b, k=1.0):
     bm = dict(b)
     out = []
@@ -203,7 +228,7 @@ def diff(a, b):
 
 # Catálogo: clave, nombre, velocidad, fuente, url, frecuencia, retraso (meses), sentido (+1 = más alto, más riesgo),
 #           en_modelo, función de descarga. Ámbito (AMBITO): «global» entra en todas las bolsas; «europa», «es» e «it» solo donde aplican.
-AMBITO = {"ciss": "europa", "prima_es": "es", "prima_it": "it"}
+AMBITO = {"ciss": "europa", "prima_es": "es", "prima_it": "it", "jgb": "jp", "yen": "jp", "yuan": ("cn", "em")}
 
 # Bolsas: clave, nombre, ticker de Yahoo, región (para las señales propias), sesiones mínimas
 MERCADOS = [
@@ -215,8 +240,8 @@ MERCADOS = [
     ("ftse", "FTSE 100", "^FTSE", "uk"),
     ("ibex", "IBEX 35", "^IBEX", "es"),
     ("mib", "FTSE MIB", "FTSEMIB.MI", "it"),
-    ("n225", "Nikkei 225", "^N225", "asia"),
-    ("hsi", "Hang Seng", "^HSI", "asia"),
+    ("n225", "Nikkei 225", "^N225", "jp"),
+    ("hsi", "Hang Seng", "^HSI", "cn"),
     ("eem", "MSCI Emergentes (EEM)", "EEM", "em"),
 ]
 
@@ -227,7 +252,7 @@ def usa_senal(k, region):
         return True
     if a == "europa":
         return region in ("europa", "es", "it")
-    return a == region
+    return region in a if isinstance(a, tuple) else a == region
 def catalogo():
     return [
         ("cape", "CAPE de Shiller (EE. UU.)", "lenta", "Robert Shiller, Yale (vía multpl.com)", "https://shillerdata.com/", "mensual", 1, +1, True,
@@ -252,6 +277,18 @@ def catalogo():
          lambda: fred("T10Y3M")),
         ("sahm", "Regla de Sahm (paro EE. UU.)", "media", "FRED", "https://fred.stlouisfed.org/series/SAHMREALTIME", "mensual", 1, +1, True,
          lambda: fred("SAHMREALTIME")),
+        ("dolar", "Dólar: cambio en 12 meses", "media", "Fed, índice amplio del dólar (FRED; empalmado con el índice antiguo)", "https://fred.stlouisfed.org/series/DTWEXBGS", "diario", 0, +1, True,
+         lambda: change(splice(fred("TWEXB"), fred("DTWEXBGS")), 365)),
+        ("petroleo", "Petróleo WTI: cambio en 12 meses", "media", "EIA vía FRED", "https://fred.stlouisfed.org/series/DCOILWTICO", "diario", 0, +1, True,
+         lambda: change(fred("DCOILWTICO"), 365)),
+        ("cobre", "Cobre: cambio en 12 meses", "media", "FMI vía FRED", "https://fred.stlouisfed.org/series/PCOPPUSDM", "mensual", 1, -1, True,
+         lambda: change(fred("PCOPPUSDM"), 365)),
+        ("jgb", "Bono japonés 10 a: cambio en 12 meses", "media", "OCDE vía FRED", "https://fred.stlouisfed.org/series/IRLTLT01JPM156N", "mensual", 1, +1, True,
+         lambda: change(fred("IRLTLT01JPM156N"), 365, log=False)),
+        ("yen", "Yen: dólares por yen, cambio en 3 meses (USD/JPY)", "rapida", "Fed vía FRED", "https://fred.stlouisfed.org/series/DEXJPUS", "diario", 0, -1, True,
+         lambda: change(fred("DEXJPUS"), 91)),
+        ("yuan", "Yuan: USD/CNY, cambio en 6 meses", "media", "Fed vía FRED", "https://fred.stlouisfed.org/series/DEXCHUS", "diario", 0, +1, True,
+         lambda: change(fred("DEXCHUS"), 182)),
         ("vix", "VIX", "rapida", "Cboe vía FRED", "https://fred.stlouisfed.org/series/VIXCLS", "diario", 0, +1, True,
          lambda: fred("VIXCLS")),
         ("nfci", "Condiciones financieras (NFCI)", "rapida", "Fed de Chicago (FRED)", "https://fred.stlouisfed.org/series/NFCI", "semanal", 0, +1, True,
@@ -316,12 +353,11 @@ def episodes(daily):
 
 
 def logit_fit(X, y, l2=L2, iters=50):
-    """Regresión logística con penalización L2 (sin penalizar la constante), por Newton."""
+    """Regresión logística con penalización L2 (sin penalizar la constante), por Newton. l2 puede ser un vector (una por columna)."""
     n, k = X.shape
     Xb = np.hstack([np.ones((n, 1)), X])
     w = np.zeros(k + 1)
-    P = np.eye(k + 1) * l2
-    P[0, 0] = 0
+    P = np.diag(np.concatenate([[0.0], np.broadcast_to(np.asarray(l2, dtype=float), (k,))]))
     for _ in range(iters):
         z = np.clip(Xb @ w, -30, 30)
         p = 1 / (1 + np.exp(-z))
@@ -549,6 +585,198 @@ def thermometer(raw, daily, nombre="IBEX 35"):
     }
 
 
+# ---------------------------------------------------------------- termómetro conjunto (fase 1c)
+EXAMEN = "2016-01"     # examen único: las previsiones desde este mes no se usaron para diseñar nada
+L2_FE = 0.5            # penalización suave de los efectos fijos por bolsa (cada bolsa conserva su media)
+
+
+def prep_market(raw, daily):
+    """Prepara una bolsa: meses, percentiles «a fecha» de cada señal, etiquetas y caídas."""
+    last_m = ym(daily[-1][0])
+    first_m = max("1990-01", ym(daily[0][0]))
+    months, m = [], "1990-01"
+    while m <= last_m:
+        months.append(m)
+        m = ym_add(m, 1)
+    metas = []
+    for k, (meta, obs) in raw.items():
+        meta = dict(meta)
+        meta["pcts"] = pct_point_in_time(ffill(monthly(obs, meta["retraso"]), months), months, meta["sentido"])
+        metas.append(meta)
+    return {"months": months, "first_m": first_m, "last_m": last_m, "inicio_wf": max(INICIO_WF, ym_add(first_m, 96)),
+            "metas": metas, "y": labels(daily, months), "eps": [e for e in episodes(daily) if e[0] >= first_m], "daily": daily}
+
+
+def _metrics(p, y, base):
+    p, y, base = np.asarray(p), np.asarray(y), np.asarray(base)
+    if len(p) == 0:
+        return None
+    b, bb = float(np.mean((p - y) ** 2)), float(np.mean((base - y) ** 2))
+    ece, tabla = calib_error(p, y)
+    return {"brier": round(b, 3), "brier_base": round(bb, 3), "skill": round((1 - b / bb) * 100, 1) if bb else 0.0,
+            "ece": round(ece * 100, 1), "meses": int(len(p)), "eventos": int(np.sum(y)), "calibracion": tabla}
+
+
+def pooled(preps, rng=None):
+    """Modelo conjunto: una logística para todas las bolsas (señales comunes + propias, efectos fijos por bolsa).
+    Walk-forward con embargo de 12 meses; examen único desde EXAMEN. Devuelve el termómetro de cada bolsa."""
+    rng = rng or np.random.default_rng(20261125)
+    C = list(preps)
+    keys = sorted({m["k"] for P in preps.values() for m in P["metas"] if m["modelo"]})
+    kidx = {k: i for i, k in enumerate(keys)}
+    nk, nc = len(keys), len(C)
+    pen = np.concatenate([np.full(nk, L2), np.full(nc, L2_FE)])
+    rows = {}   # (c, mes) → vector
+
+    def xrow(ci, mo):
+        key = (ci, mo)
+        if key not in rows:
+            v = np.zeros(nk + nc)
+            for m in preps[C[ci]]["metas"]:
+                if m["modelo"]:
+                    x = m["pcts"].get(mo)
+                    v[kidx[m["k"]]] = (x if x is not None else 0.5) - 0.5
+            v[nk + ci] = 1.0
+            rows[key] = v
+        return rows[key]
+
+    lab = [(ci, mo, preps[c]["y"][mo]) for ci, c in enumerate(C) for mo in preps[c]["months"]
+           if mo >= preps[c]["first_m"] and preps[c]["y"].get(mo) is not None]
+    allm = sorted({mo for P in preps.values() for mo in P["months"]})
+    out = {c: {"hist": [], "wf": []} for c in C}
+    for mo in allm:
+        if mo < INICIO_WF:
+            continue
+        tr = [(ci, s, yv) for ci, s, yv in lab if months_between(s, mo) >= HORIZONTE]
+        if len(tr) < 200 or sum(t[2] for t in tr) < 20:
+            continue
+        X = np.array([xrow(ci, s) for ci, s, _ in tr])
+        ys = np.array([t[2] for t in tr], dtype=float)
+        w = logit_fit(X, ys, l2=pen)
+        targets = [ci for ci, c in enumerate(C) if preps[c]["inicio_wf"] <= mo <= preps[c]["last_m"]]
+        if not targets:
+            continue
+        do_int = mo[5:7] in ("01", "04", "07", "10") or mo == max(preps[C[ci]]["last_m"] for ci in targets)
+        boot = []
+        if do_int:
+            tm = sorted({s for _, s, _ in tr})
+            blocks = [tm[i:i + 12] for i in range(0, len(tm) - 11)]
+            reps = N_BOOT if mo >= max(P["last_m"] for P in preps.values()) else 20
+            byM = {}
+            for i, (ci, s, _) in enumerate(tr):
+                byM.setdefault(s, []).append(i)
+            for _ in range(reps):
+                pick = [blocks[j] for j in rng.integers(0, len(blocks), size=max(1, len(tm) // 12))]
+                idx = [i for b in pick for s in b for i in byM.get(s, [])]
+                yb = ys[idx]
+                if yb.sum() < 10:
+                    continue
+                boot.append(logit_fit(X[idx], yb, l2=pen))
+        for ci in targets:
+            c = C[ci]
+            yc = [t[2] for t in tr if t[0] == ci]
+            if len(yc) < 36:
+                continue
+            xr = xrow(ci, mo)[None, :]
+            p = float(logit_pred(w, xr)[0])
+            base = float(np.mean(yc))
+            lo = hi = None
+            if len(boot) >= 10:
+                pb = [float(logit_pred(wb, xr)[0]) for wb in boot]
+                lo, hi = float(np.percentile(pb, 5)), float(np.percentile(pb, 95))
+            out[c]["hist"].append([mo, round(p * 100, 1), None if lo is None else round(lo * 100, 1), None if hi is None else round(hi * 100, 1), round(base * 100, 1)])
+            if preps[c]["y"].get(mo) is not None:
+                out[c]["wf"].append((mo, p, preps[c]["y"][mo], base))
+    # modelo final con todo lo etiquetado (pesos y aportaciones de hoy)
+    X = np.array([xrow(ci, s) for ci, s, _ in lab])
+    ys = np.array([t[2] for t in lab], dtype=float)
+    w = logit_fit(X, ys, l2=pen)
+    res = {}
+    for ci, c in enumerate(C):
+        P, H = preps[c], out[c]
+        if not H["hist"]:
+            continue
+        wf = H["wf"]
+        dis = _metrics([x[1] for x in wf if x[0] < EXAMEN], [x[2] for x in wf if x[0] < EXAMEN], [x[3] for x in wf if x[0] < EXAMEN])
+        exa = _metrics([x[1] for x in wf if x[0] >= EXAMEN], [x[2] for x in wf if x[0] >= EXAMEN], [x[3] for x in wf if x[0] >= EXAMEN])
+        rows_c = np.array([xrow(ci, s) for cj, s, _ in lab if cj == ci])
+        sd = rows_c[:, :nk].std(axis=0)
+        xnow = xrow(ci, P["last_m"])
+        res[c] = {"hist": H["hist"], "diseno": dis, "examen": exa, "w": w, "sd": sd, "xnow": xnow, "kidx": kidx,
+                  "base": round(float(np.mean([t[2] for t in lab if t[0] == ci])) * 100, 1)}
+    return res
+
+
+def assemble(P, R, nombre):
+    """Termómetro de una bolsa con el formato publicado (igual que el modelo por bolsa) a partir del modelo conjunto."""
+    hist, last_m, eps, months = R["hist"], P["last_m"], P["eps"], P["months"]
+    a_p, lo_now, hi_now, base_now = hist[-1][1], hist[-1][2], hist[-1][3], R["base"]
+    t_alert = round(base_now + max(10.0, 0.4 * base_now))
+    t_tens = base_now
+    E = R["examen"]
+    validado = bool(E and E["skill"] >= MIN_SKILL * 100 and E["ece"] < 10 and E["meses"] >= 60)
+    if validado:
+        motivo = f"En el examen {EXAMEN[:4]}-{last_m[:4]} mejora a la media un {E['skill']:.1f} % y está calibrada".replace(".", ",")
+    elif not E or E["meses"] < 60:
+        motivo = "Sin meses suficientes en el examen"
+    elif E["skill"] <= 0:
+        motivo = f"En el examen {EXAMEN[:4]}-{last_m[:4]} no mejora a la media histórica"
+    elif E["skill"] < MIN_SKILL * 100:
+        motivo = f"En el examen {EXAMEN[:4]}-{last_m[:4]} mejora a la media solo un {E['skill']:.1f} % (mínimo exigido: {MIN_SKILL * 100:.0f} %)".replace(".", ",")
+    else:
+        motivo = f"Descalibrada en el examen (error medio {E['ece']:.1f} pp)".replace(".", ",")
+    hp = {h[0]: h[1] / 100 for h in hist}
+    trk = signal_track(hp, eps, months, thr=t_alert / 100)
+    falsas_y, cur = [], None
+    for mo in months:
+        on = hp.get(mo, 0) >= t_alert / 100
+        if on and cur is None:
+            cur = mo
+        if not on and cur is not None:
+            if months_between(cur, last_m) >= 12 and not any(0 <= months_between(cur, pk) <= 12 for pk, _, _ in eps):
+                falsas_y.append(cur[:4])
+            cur = None
+    w, sd, xnow, kidx = R["w"], R["sd"], R["xnow"], R["kidx"]
+    imp = {k: abs(w[1 + j]) * sd[j] for k, j in kidx.items() if sd[j] > 0}
+    tot = sum(imp.values()) or 1
+    senales = []
+    for f in P["metas"]:
+        curp = f["pcts"].get(last_m)
+        j = kidx.get(f["k"]) if f["modelo"] else None
+        senales.append({k: f[k] for k in ("k", "nombre", "vel", "fuente", "url", "frec", "sentido", "modelo")} | {
+            "ultimo": f["ultimo"], "desde": f["desde"],
+            "pct": None if curp is None else round(curp * 100),
+            "peso": None if j is None else round(imp.get(f["k"], 0) / tot * 100, 1),
+            "signo": None if j is None else (1 if w[1 + j] > 0 else -1),
+            "aporta": None if j is None else round(float(w[1 + j] * xnow[j]), 3),
+            "lectura": lectura(curp, f["sentido"]) if curp is not None or f["modelo"] else "Dato desactualizado",
+            "historial": signal_track(f["pcts"], eps, months) if f["modelo"] else None,
+        })
+    idx_m = {}
+    for d, c in P["daily"]:
+        idx_m[ym(d)] = c
+    D = R["diseno"]
+    return {
+        "objetivo": f"Probabilidad de que el {nombre} caiga más de un {int(CAIDA * 100)} % en algún momento de los {HORIZONTE} meses siguientes",
+        "actual": {"mes": last_m, "p": a_p, "lo": lo_now, "hi": hi_now, "base": base_now,
+                   "regimen": "Alerta" if a_p >= t_alert else "Tensión" if a_p >= t_tens else "Normal", "validado": validado, "motivo": motivo},
+        "umbrales": {"tension": t_tens, "alerta": t_alert},
+        "precision": {"brier": E["brier"] if E else None, "brier_base": E["brier_base"] if E else None, "ece": E["ece"] if E else None,
+                      "calibracion": E["calibracion"] if E else [], "meses_fuera_muestra": E["meses"] if E else 0,
+                      "desde": hist[0][0], "examen_desde": EXAMEN, "examen": E, "diseno": D,
+                      "caidas": trk["n"] if trk else None, "avisadas": trk["avisadas"] if trk else None,
+                      "antelacion": trk["antelacion"] if trk else None, "falsas": sorted(set(falsas_y)), "caidas_total": len(eps)},
+        "hist": hist,
+        "indice": [[k, round(v, 1)] for k, v in sorted(idx_m.items()) if k >= P["first_m"]],
+        "caidas": [[a, b, c] for a, b, c in eps],
+        "senales": senales,
+        "metodo": ("Modelo conjunto de las 11 bolsas: percentil «a fecha» de cada señal (con su retraso de publicación) → una regresión logística "
+                   "con penalización L2 que aprende de todas las caídas a la vez; cada bolsa conserva su media propia y sus señales locales. "
+                   f"Estimación «walk-forward» con embargo de 12 meses. Validación: examen único con las previsiones desde {EXAMEN[:4]}, "
+                   "que no se usaron para diseñar el modelo. Intervalo del 90 % por remuestreo de bloques de 12 meses."),
+    }
+
+
 # ---------------------------------------------------------------- ciclo IA (SEC)
 HYPER = {"MSFT": 789019, "GOOGL": 1652044, "AMZN": 1018724, "META": 1326801}
 CAPEX_TAGS = ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"]
@@ -758,12 +986,17 @@ def interpret(T, ia, nombre, clave):
     else:
         nivel = f"El riesgo de una caída de más del 15 % en el {nombre} en los próximos 12 meses es menor de lo habitual: {_f(p)} % frente al {_f(base)} % de media histórica."
     # 2 · confianza
+    E = P.get("examen") or {}
+    ex = f"en el examen {P.get('examen_desde', '2016')[:4]}-{a['mes'][:4]}, con datos que no se usaron para diseñarlo," if E else "fuera de muestra"
     if a["validado"]:
-        mejora = (1 - P["brier"] / P["brier_base"]) * 100 if P["brier_base"] else 0
-        conf = (f"El modelo está validado en este índice: fuera de muestra mejora a la media un {_f(mejora)} % y avisó de {P['avisadas']} de {P['caidas']} caídas desde {P['desde'][:4]}, "
-                f"con {len(P['falsas'])} falsas alarmas. Aun así, el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza.") if P.get("caidas") else                f"El modelo está validado en este índice, pero el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza."
+        mejora = E.get("skill") if E else ((1 - P["brier"] / P["brier_base"]) * 100 if P.get("brier_base") else 0)
+        conf = (f"El modelo está validado en este índice: {ex} mejora a la media un {_f(mejora, 1)} % y está calibrado. "
+                f"Desde {P['desde'][:4]} avisó de {P['avisadas']} de {P['caidas']} caídas con {len(P['falsas'])} falsas alarmas. "
+                f"Aun así, el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza.") if P.get("caidas") else \
+               f"El modelo está validado en este índice, pero el intervalo va del {_f(a['lo'] or p)} % al {_f(a['hi'] or p)} %: es una orientación, no una certeza."
     else:
-        conf = (f"En este índice el modelo no demuestra ventaja ({a['motivo'].lower()}), así que la referencia fiable es la media histórica: {_f(base)} %. "
+        m = a["motivo"]
+        conf = (f"En este índice el modelo no demuestra ventaja ({m[0].lower() + m[1:]}), así que la referencia fiable es la media histórica: {_f(base)} %. "
                 f"La cifra del modelo es solo orientativa.")
     # 3 · qué la mueve
     contr = [s for s in T["senales"] if s.get("modelo") and s.get("aporta") is not None]
@@ -876,27 +1109,39 @@ def main():
     except Exception as e:  # noqa: BLE001
         ERRORS.append({"fuente": "SEC", "serie": "Ciclo IA", "motivo": str(e)[:200]})
         log("ERROR ciclo IA:", e)
-    mercados, orden = {}, []
+    preps, meta_m = {}, {}
     for clave, nombre, ticker, region in MERCADOS:
-        t0 = time.time()
         try:
             daily = index_daily(ticker, nombre)
             sub = {k: v for k, v in raw.items() if usa_senal(k, region)}
             sub.update(derivadas(daily, nombre, ticker))
-            if sum(1 for v in sub.values() if v[0]["modelo"]) < 5:
-                raise RuntimeError("menos de 5 señales disponibles")
-            T = thermometer(sub, daily, nombre)
-            T.update({"clave": clave, "nombre": nombre, "ticker": ticker, "region": region, "inicio": daily[0][0].isoformat()})
+            preps[clave] = prep_market(sub, daily)
+            meta_m[clave] = (nombre, ticker, region, daily[0][0].isoformat())
+        except Exception as e:  # noqa: BLE001
+            ERRORS.append({"fuente": "Yahoo", "serie": f"Índice {nombre}", "motivo": str(e)[:200]})
+            log(f"ERROR {nombre}: {e}")
+    mercados, orden = {}, []
+    t0 = time.time()
+    try:
+        R = pooled(preps)
+        log(f"Modelo conjunto: {len(R)} bolsas · {time.time() - t0:.0f} s")
+        for clave in [m[0] for m in MERCADOS]:
+            if clave not in R:
+                continue
+            nombre, ticker, region, inicio = meta_m[clave]
+            T = assemble(preps[clave], R[clave], nombre)
+            T.update({"clave": clave, "nombre": nombre, "ticker": ticker, "region": region, "inicio": inicio})
             T["lectura"] = interpret(T, out.get("ia"), nombre, clave)
             mercados[clave] = T
             orden.append(clave)
-            a, P = T["actual"], T["precision"]
-            log(f"{nombre}: {a['p']} % [{a['lo']}-{a['hi']}] base {a['base']} · {a['regimen']} · {'validado' if a['validado'] else 'SIN ventaja'} · "
-                f"Brier {P['brier']} vs {P['brier_base']} · ECE {P['ece']} · avisadas {P['avisadas']}/{P['caidas']} · falsas {len(P['falsas'])} · {time.time() - t0:.0f} s")
-        except Exception as e:  # noqa: BLE001
-            import traceback
-            traceback.print_exc()
-            ERRORS.append({"fuente": "Yahoo / cálculo", "serie": f"Termómetro {nombre}", "motivo": str(e)[:200]})
+            a, P, E, Dd = T["actual"], T["precision"], T["precision"]["examen"] or {}, T["precision"]["diseno"] or {}
+            log(f"{nombre}: {a['p']} % [{a['lo']}-{a['hi']}] base {a['base']} · {a['regimen']} · {'VALIDADO' if a['validado'] else 'sin ventaja'} · "
+                f"examen: mejora {E.get('skill')} % · ECE {E.get('ece')} · {E.get('meses')} meses · {E.get('eventos')} meses con caída · "
+                f"diseño: mejora {Dd.get('skill')} % · ECE {Dd.get('ece')} · avisadas {P['avisadas']}/{P['caidas']}")
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+        ERRORS.append({"fuente": "Cálculo", "serie": "Modelo conjunto", "motivo": str(e)[:200]})
     out["mercados"], out["orden"] = mercados, orden
     out["concentracion"] = concentration()
     out["amplitud"] = amplitude()

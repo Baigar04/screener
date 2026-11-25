@@ -133,16 +133,17 @@ function thermoBox(T) {
   const falsas = P.falsas?.length ? `<span data-tip="Años: ${esc(P.falsas.join(", "))}">${P.falsas.length}</span>` : "0";
   const lect = H.ui.lectura(T.lectura?.termometro);
   return `<section class="rsk-p"><h3>Termómetro · ${esc(T.nombre)}</h3>${gauge(a.p, a.lo, a.hi, a.base, T.umbrales.alerta, ok)}${head}${lect}
-    <h3 class="rsk-h2">Precisión <span>fuera de muestra desde ${fm(P.desde)}</span></h3>
+    <h3 class="rsk-h2">Precisión <span>${P.examen ? `examen ${(P.examen_desde || "").slice(0, 4)}-${(a.mes || "").slice(0, 4)}` : `fuera de muestra desde ${fm(P.desde)}`}</span></h3>
     <table class="rsk-kv"><tr><td>Intervalo del 90 %</td><td class="num">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td></tr>
-      <tr><td>Caídas &gt;15 % en el periodo</td><td class="num">${P.caidas ?? "—"}</td></tr>
-      <tr><td>Avisadas (1-12 meses antes)</td><td class="num">${P.avisadas ?? "—"} de ${P.caidas ?? "—"}${P.antelacion != null ? ` · ${nf(P.antelacion, 0)} m` : ""}</td></tr>
-      <tr><td>Falsas alarmas</td><td class="num">${falsas}</td></tr>
-      <tr><td>Brier · modelo frente a base</td><td class="num">${nf(P.brier, 3)} · ${nf(P.brier_base, 3)}</td></tr>
-      <tr><td>Error medio de calibración</td><td class="num">${nf(P.ece, 1)} pp</td></tr>
-      <tr><td>Meses evaluados</td><td class="num">${P.meses_fuera_muestra}</td></tr></table>
+      ${P.examen ? `<tr><td>Examen: mejora frente a la media</td><td class="num ${P.examen.skill >= 3 ? "pos" : ""}">${sgn(P.examen.skill, 1)} %</td></tr>
+      <tr><td>Examen: error de calibración</td><td class="num">${nf(P.examen.ece, 1)} pp</td></tr>
+      <tr><td>Examen: meses · meses con caída</td><td class="num">${P.examen.meses} · ${P.examen.eventos}</td></tr>
+      ${P.diseno ? `<tr><td>Diseño ${(P.desde || "").slice(0, 4)}-2015: mejora</td><td class="num rsk-fa">${sgn(P.diseno.skill, 1)} %</td></tr>` : ""}`
+      : `<tr><td>Brier · modelo frente a base</td><td class="num">${nf(P.brier, 3)} · ${nf(P.brier_base, 3)}</td></tr><tr><td>Error medio de calibración</td><td class="num">${nf(P.ece, 1)} pp</td></tr>`}
+      <tr><td>Avisadas desde ${(P.desde || "").slice(0, 4)} (1-12 meses antes)</td><td class="num">${P.avisadas ?? "—"} de ${P.caidas ?? "—"}${P.antelacion != null ? ` · ${nf(P.antelacion, 0)} m` : ""}</td></tr>
+      <tr><td>Falsas alarmas</td><td class="num">${falsas}</td></tr></table>
     <div class="rsk-verdict ${ok ? "ok" : "nu"}">${ok ? "Validado: " : "Sin ventaja demostrada: "}${esc(a.motivo)}.</div>
-    ${exp(`<b>Cómo de preciso es.</b> Desde ${(T.indice[0]?.[0] || "").slice(0, 4)} el ${esc(T.nombre)} ha tenido ${P.caidas_total} caídas de más del 15 %: es una muestra pequeña, por eso el intervalo es ancho. El número sirve para comparar el riesgo de hoy con su media (${nf(a.base, 0)} %), no como certeza. Brier: error medio al cuadrado de las previsiones (más bajo, mejor); si no mejora al de la tasa base, el termómetro no aporta y se dice.`)}</section>`;
+    ${exp(`<b>Cómo de preciso es.</b> Desde ${(T.indice[0]?.[0] || "").slice(0, 4)} el ${esc(T.nombre)} ha tenido ${P.caidas_total} caídas de más del 15 %: es una muestra pequeña, por eso el intervalo es ancho. El número sirve para comparar el riesgo de hoy con su media (${nf(a.base, 0)} %), no como certeza. <b>Examen</b>: el modelo se diseñó sin mirar los datos desde ${(P.examen_desde || "2016").slice(0, 4)} y se evalúa una sola vez con ellos; solo se da por validado si ahí mejora a la media al menos un 3 % y está calibrado (cuando dice 30 %, pasa más o menos 3 de cada 10 veces).`)}</section>`;
 }
 
 function signalsBox(T, D) {
@@ -215,10 +216,10 @@ function marketsBox(D) {
   const rows = S.map((k) => {
     const T = D.mercados[k], a = T.actual, P = T.precision;
     return `<tr class="${k === sel ? "sel" : ""}" data-rsksel="${k}" tabindex="0"><td><b>${esc(T.nombre)}</b></td><td class="num">${nf(a.p, 0)} %</td><td class="num rsk-fa">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td><td class="num">${nf(a.base, 0)} %</td>
-      <td>${pillOf(a)}</td><td class="num">${P.caidas ? `${P.avisadas} de ${P.caidas}` : "—"}</td><td class="num">${P.falsas?.length ?? "—"}</td><td>${spark(T)}</td></tr>`;
+      <td>${pillOf(a)}</td><td class="num ${P.examen?.skill >= 3 ? "pos" : "rsk-fa"}">${P.examen ? `${sgn(P.examen.skill, 1)} %` : "—"}</td><td class="num">${P.caidas ? `${P.avisadas} de ${P.caidas}` : "—"}</td><td>${spark(T)}</td></tr>`;
   }).join("");
   return `<section class="rsk-p rsk-mk"><h3>Bolsas <span>elige las que quieres seguir · pulsa una fila para ver su detalle</span></h3><div class="rsk-chips">${chips}</div>
-    <div class="rsk-scroll"><table class="rsk-t rsk-cmp"><thead><tr><th>Bolsa</th><th class="num">Prob. caída &gt;15 %</th><th class="num">Intervalo 90 %</th><th class="num">Media histórica</th><th>Régimen</th><th class="num">Caídas avisadas</th><th class="num">Falsas alarmas</th><th>5 años</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="rsk-scroll"><table class="rsk-t rsk-cmp"><thead><tr><th>Bolsa</th><th class="num">Prob. caída &gt;15 %</th><th class="num">Intervalo 90 %</th><th class="num">Media histórica</th><th>Régimen</th><th class="num">Examen: mejora</th><th class="num">Caídas avisadas</th><th>5 años</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${exp("<b>Cómo comparar.</b> Cada bolsa tiene su propia media histórica: en unas las caídas de más del 15 % son mucho más frecuentes que en otras. Por eso importa más la cifra frente a su media que la cifra sola. «Sin ventaja» significa que en esa bolsa el modelo no mejora a la media fuera de muestra.")}</section>`;
 }
 
