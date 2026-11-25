@@ -1,13 +1,14 @@
 {
- "generado": "2026-11-25T09:43:06+00:00",
+ "generado": "2026-11-25T17:49:09+00:00",
  "ficheros": {
   "macro.json": {
-   "estado": "ok",
-   "detalle": "29/29 series al día"
+   "estado": "no válido",
+   "motivo": "macro.json (series al día): 27 filas frente a 29 publicadas (< 95 %)",
+   "recuperado": "última versión publicada"
   },
   "universe.json": {
    "estado": "ok",
-   "detalle": "2429 valores · 2415/2424 precios al día"
+   "detalle": "2429 valores · 2416/2425 precios al día"
   },
   "sectors.json": {
    "estado": "ok",
@@ -27,7 +28,7 @@
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 48.3 % > SMA50, Europa: 46.3 % > SMA50"
+   "detalle": "EE. UU.: 48.4 % > SMA50, Europa: 43.0 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
@@ -35,7 +36,7 @@
   },
   "risk.json": {
    "estado": "ok",
-   "detalle": "25.3 % (Normal) · base 36.5 % · validado"
+   "detalle": "11 bolsas · 3 validadas · S&P 500 18.5 % · Nasdaq 100 24.0 % · Euro Stoxx 50 29.4 % · DAX 27.4 %"
   },
   "smart.json": {
    "estado": "ok",
@@ -66,6 +67,8 @@
    "detalle": "2 entradas"
   }
  },
- "recuperados": [],
+ "recuperados": [
+  "macro.json"
+ ],
  "sin_recuperar": []
 }
