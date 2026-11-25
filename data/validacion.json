@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-25T21:45:50+00:00",
+ "generado": "2026-11-25T22:24:10+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -23,11 +23,11 @@
   },
   "score_diario.json": {
    "estado": "ok",
-   "detalle": "9 fotos diarias"
+   "detalle": "10 fotos diarias"
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 48.4 % > SMA50, Europa: 42.9 % > SMA50"
+   "detalle": "EE. UU.: 51.8 % > SMA50, Europa: 42.9 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
@@ -35,7 +35,11 @@
   },
   "risk.json": {
    "estado": "ok",
-   "detalle": "11 bolsas · 0 validadas · S&P 500 18.4 % · Nasdaq 100 24.0 % · Euro Stoxx 50 29.4 % · DAX 27.4 %"
+   "detalle": "11 bolsas · 0 validadas · S&P 500 18.5 % · Nasdaq 100 24.0 % · Euro Stoxx 50 29.4 % · DAX 27.4 %"
+  },
+  "geo.json": {
+   "estado": "ok",
+   "detalle": "GPR 150.5 (p91) · 44 países · 5 pistas · 2375 valores"
   },
   "smart.json": {
    "estado": "ok",
