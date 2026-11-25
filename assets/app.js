@@ -10,17 +10,20 @@ const NAV = [
   ["screener", "Screener", true],
   ["smart", "Smart money", true],
   ["comparar", "Comparar", true],
-  ["seguimiento", "Seguimiento", true],
+  ["seguimiento", "Watchlist", true],
   ["carteras", "Carteras", true],
   ["adelantarse", "Adelantarse", true],
   ["laboratorio", "Laboratorio", true],
   ["diario", "Diario de decisiones", true],
 ];
-/* 4 áreas en la barra lateral (o inferior en móvil); dentro de cada área, sus secciones en una barra superior */
+/* 6 áreas con un propósito cada una (reorganización del 25-nov-2026); dentro de cada área, sus secciones.
+   Hoy: lo que miras cada día · Mercado: corto plazo · Contexto: el entorno de fondo · Screener: empresas · Cartera: lo que tienes · Investigación: tu registro */
 const AREAS = [
-  ["mercado", "Mercado", ["hoy", "pulso", "sectores", "riesgo", "adelantarse"]],
+  ["hoy", "Hoy", ["hoy"]],
+  ["mercado", "Mercado", ["pulso", "sectores", "adelantarse"]],
+  ["contexto", "Contexto", ["riesgo"]],
   ["screener", "Screener", ["screener", "comparar", "smart"]],
-  ["watchlists", "Watchlists", ["seguimiento", "carteras"]],
+  ["cartera", "Cartera", ["seguimiento", "carteras"]],
   ["investigacion", "Investigación", ["diario", "laboratorio"]],
 ];
 const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
@@ -161,6 +164,8 @@ const ICONS = {
   laboratorio: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.5 15h9",
 };
 ICONS.mercado = ICONS.pulso; ICONS.watchlists = "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"; ICONS.seguimiento = ICONS.watchlists;
+ICONS.cartera = "M3 7h18v13H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18";
+ICONS.contexto = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9M12 3c-2.5 2.5-3.8 5.5-3.8 9s1.3 6.5 3.8 9";
 ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4";
 ICONS.diario = "M6 3h10l3 3v15H6zM9 8h7M9 12h7M9 16h4";
 Object.assign(ICONS, { resumen: "M4 6h16M4 12h16M4 18h10", grafico: "M3 3v18h18M7 15l4-4 3 3 5-6", fund: "M5 21V10M10 21V4M15 21v-7M20 21v-11",
@@ -175,7 +180,7 @@ function subnav() {
 }
 function renderTop() {
   const F = S.ficha;
-  const [cur, curName, secs] = F ? AREAS[1] : areaOf(S.view);
+  const [cur, curName, secs] = F ? AREAS.find((x) => x[0] === "screener") : areaOf(S.view);
   const vname = NAV.find((x) => x[0] === S.view)[1];
   /* cabecera: las 4 áreas (en móvil, barra inferior) */
   $("#nav").innerHTML = AREAS.map(([k, n, ss]) => `<button data-area="${k}" class="${cur === k ? "on" : ""}" title="${n}: ${ss.map((s) => NAV.find((x) => x[0] === s)[1]).join(", ")}" aria-current="${cur === k ? "page" : "false"}">
@@ -187,9 +192,10 @@ function renderTop() {
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[k]}"/></svg><span>${NAV.find((x) => x[0] === k)[1]}</span></button>`).join("");
   /* migas de pan */
   $("#crumbs").innerHTML = `<button class="crumb-home" data-sub="hoy" aria-label="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></button><span class="c-sep">›</span>
-    <button data-area="${cur}" class="crumb">${esc(curName)}</button><span class="c-sep">/</span>${F
+    ${!F && secs.length < 2 ? `<b>${esc(curName)}</b>` : `<button data-area="${cur}" class="crumb">${esc(curName)}</button><span class="c-sep">/</span>${F
       ? `<button data-sub="screener" class="crumb">Empresas</button><span class="c-sep">/</span><b>${esc(window.SCRFicha?.title?.(F.sym) || F.sym)}</b>`
-      : `<b>${esc(vname)}</b>`}`;
+      : `<b>${esc(vname)}</b>`}`}`;
+  document.body.classList.toggle("one-sec", !F && secs.length < 2 && S.view === "hoy");
   const tn = $("#themeName"); if (tn) tn.textContent = document.documentElement.dataset.theme === "light" ? "Claro" : "Oscuro";
   const dn = $("#densName"); if (dn) dn.textContent = document.documentElement.dataset.dens === "amplia" ? "Amplia" : "Compacta";
   $("#level").innerHTML = MODES.map(([k, t, tip]) => `<button role="radio" aria-checked="${S.mode === k}" data-mode="${k}" class="${S.mode === k ? "on" : ""}" title="${tip}">${t}</button>`).join("");

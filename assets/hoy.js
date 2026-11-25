@@ -201,25 +201,113 @@ function diaryRows() {
   return (L.length ? "" : `<div class="hint">Aún no has registrado decisiones. Pulsa «Registrar decisión» en una ficha.</div>`) + out.join("");
 }
 
+/* ---------- portada de síntesis (reorganización del 25-nov-2026) ---------- */
+const regOf = (T, p) => (p >= T.umbrales.alerta ? "Alerta" : p >= T.actual.base ? "Tensión" : "Normal");
+const dot = (c) => `<span class="hy-dot ${c}">●</span>`;
+const item = (when, c, txt, sub = "") => `<li><span class="hy-when">${when}</span>${dot(c)}<span>${txt}${sub ? `<i>${sub}</i>` : ""}</span></li>`;
+function riskList() {
+  const D = window.SCRRisk?.data?.();
+  if (!D?.mercados) return [];
+  return (window.SCRRisk.followed?.() || []).map((k) => D.mercados[k]).filter(Boolean);
+}
+function cambios(uni, Q) {
+  const out = [];
+  for (const T of riskList()) {
+    const h = T.hist, a = T.actual;
+    if (h.length < 2) continue;
+    const r0 = regOf(T, h[h.length - 2][1]), r1 = regOf(T, a.p);
+    if (r0 !== r1) out.push([2, item("Este mes", r1 === "Normal" ? "p" : r1 === "Alerta" ? "n" : "w", `${esc(T.nombre)} pasa de «${r0}» a «${r1}»: ${nf(a.p, 0)} % frente al ${nf(a.base, 0)} % de su media.`, a.validado ? "" : " · modelo sin ventaja en esta bolsa")]);
+  }
+  if (Q?.sc()?.anterior) {
+    const w = new Set(Q.watch());
+    uni.map((r) => ({ r, c: Q.changeOf(r.sym) })).filter((x) => x.c?.d).sort((a, b) => (w.has(b.r.sym) - w.has(a.r.sym)) || Math.abs(b.c.d) - Math.abs(a.c.d)).slice(0, 3)
+      .forEach(({ r, c }) => out.push([w.has(r.sym) ? 3 : 1, item("Hoy", c.d > 0 ? "p" : "n", `${link(r.sym)}: la nota ${c.d > 0 ? "sube" : "baja"} de ${c.n0} a ${c.n1 ?? "s. d."}${w.has(r.sym) ? " ★" : ""}.`)]));
+  }
+  const I = T.ins;
+  const rac = I ? Object.entries(I.por_valor || {}).filter(([, x]) => x.racimo).map(([s]) => s) : [];
+  if (rac.length) out.push([2, item("7 días", "p", `Compras en racimo de directivos: ${rac.slice(0, 3).map((s) => link(s)).join(", ")}.`)]);
+  const S = window.SCRSmart?.data?.();
+  if (S) {
+    const g = (S.gestores || []).filter((x) => x.actualizado_iso && x.actualizado_iso >= addDays(today(), -10));
+    if (g.length) out.push([1, item("10 días", "p", `${g.length} ${g.length === 1 ? "superinversor publica" : "superinversores publican"} cartera nueva.`, " · Screener › Smart money")]);
+  }
+  if (!out.length) return `<div class="hint">Sin cambios relevantes desde la última sesión.</div>`;
+  return `<ul class="hy-list">${out.sort((a, b) => b[0] - a[0]).slice(0, 6).map((x) => x[1]).join("")}</ul>`;
+}
+function avisos(uni, Q) {
+  const out = [];
+  for (const T of riskList()) {
+    const a = T.actual;
+    if (a.validado && a.p >= T.umbrales.alerta) out.push(["n", `${esc(T.nombre)} en zona de alerta de riesgo (${nf(a.p, 0)} %)`, "riesgo", T.clave]);
+    else if (a.validado && a.p >= a.base) out.push(["w", `${esc(T.nombre)} por encima de su media histórica de riesgo`, "riesgo", T.clave]);
+    const tnd = T.senales.find((s) => s.k === "tendencia")?.ultimo?.valor;
+    if (tnd != null && tnd < 0) out.push(["n", `${esc(T.nombre)} cotiza un ${nf(-tnd, 1)} % por debajo de su media de 200 sesiones`, "riesgo", T.clave]);
+  }
+  if (Q) {
+    const lim = addDays(today(), 14);
+    for (const s of Q.watch()) {
+      const r = uni.find((x) => x.sym === s); if (!r) continue;
+      if (r.resultados && r.resultados >= today() && r.resultados <= lim) out.push(["g", `Resultados de ${esc(s)} el ${fmtDate(r.resultados)}: está en tu Watchlist`, null, null, s]);
+      const c = Q.changeOf(s); if (c?.d && c.d <= -5) out.push(["n", `${esc(s)}: la nota cae ${-c.d} puntos`, null, null, s]);
+    }
+  }
+  if (!out.length) return `<div class="hint">Ninguna señal cruza hoy su umbral.</div>`;
+  return out.slice(0, 6).map(([c, t, sub, k, sym]) => `<button class="hy-alert" ${sym ? `data-sym="${esc(sym)}"` : `data-sub="${sub}" data-rsksel="${k}"`}><i class="${c}"></i><span>${t}<small>${sym ? "Abrir ficha" : "Contexto › Riesgo"} →</small></span></button>`).join("");
+}
+function valores(uni, Q) {
+  const w = Q.watch();
+  if (!w.length) return `<div class="hint">No sigues ningún valor. Márcalos con ☆ en el screener o pulsa W sobre una fila.</div>`;
+  const tip = (f) => `data-tip="Llega con la fase ${f} de la hoja de ruta"`;
+  const rows = w.map((s) => uni.find((r) => r.sym === s)).filter(Boolean).slice(0, 12).map((r) => {
+    const c = Q.changeOf(r.sym);
+    return `<tr><td>${link(r.sym)} <span class="hy-nm">${esc((r.nombre || "").slice(0, 22))}</span></td><td class="num">${r.score ?? "s. d."}${c?.d ? ` <span class="chg ${c.d > 0 ? "p" : "n"}">${sgn(c.d, 0)}</span>` : ""}</td>
+      <td class="num">${chg(r.r1d, 1)}</td><td class="num hy-fa">${r.resultados && r.resultados >= today() ? fmtDate(r.resultados) : "—"}</td>
+      <td class="hy-fa" ${tip(5)}>—</td><td class="hy-fa" ${tip(3)}>—</td><td class="hy-fa" ${tip(2)}>—</td></tr>`;
+  }).join("");
+  return `<div class="hy-scroll"><table class="hy-t"><thead><tr><th>Valor</th><th class="num">Nota</th><th class="num">Hoy</th><th class="num">Resultados</th><th>Probabilidad</th><th>Estrés</th><th>Geopolítica</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${w.length > 12 ? `<div class="hint">y ${w.length - 12} más en Cartera › Watchlist</div>` : ""}`;
+}
+function lecturaDia() {
+  const L = riskList();
+  if (!L.length) return `<div class="hint">${window.SCRRisk?.data?.() === undefined ? "Cargando…" : "Sin datos de riesgo todavía."}</div>`;
+  const pos = (T) => T.actual.p / T.actual.base;
+  const arriba = L.filter((T) => T.actual.validado && T.actual.p >= T.actual.base).map((T) => T.nombre);
+  const valid = L.filter((T) => T.actual.validado).length;
+  const peor = L.slice().sort((a, b) => pos(b) - pos(a))[0];
+  const frases = [];
+  frases.push(arriba.length ? `De tus ${L.length} bolsas, ${arriba.length} ${arriba.length === 1 ? "está" : "están"} por encima de su media histórica de riesgo: ${arriba.join(", ")}.`
+    : `Ninguna de tus ${L.length} bolsas con modelo validado está por encima de su media histórica de riesgo.`);
+  if (valid < L.length) frases.push(`En ${L.length - valid} de ellas el modelo no demuestra ventaja: ahí la referencia es su media histórica.`);
+  const C = peor.lectura?.conjunta;
+  if (C) frases.push(`La que más se aparta de lo habitual es ${peor.nombre}: ${C.conclusion.charAt(0).toLowerCase()}${C.conclusion.slice(1)}`);
+  const vig = C?.vigilar?.[0];
+  return `${H.ui.lectura(frases, "Lectura del día")}${vig ? `<div class="method">Qué vigilar: ${esc(vig)}</div>` : ""}`;
+}
+
 function render() {
   ensure();
   window.SCREnsureUni?.();
+  window.SCRRisk?.ensure?.();
+  if (!window.SCRSmart?.data?.()) window.SCRSmart?.ensure?.();
   const uni = window.SCRUni?.() || [], Q = window.SCREq, ok = uni.length && Q;
   const wait = `<div class="skel" style="height:120px"></div>`;
   const fecha = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   return `<div class="pg-head"><h1>Hoy</h1><div class="pg-sub">${fecha.charAt(0).toUpperCase() + fecha.slice(1)} · ${dataStatus().replace(/<\/?div[^>]*>/g, "")}</div></div>
-    ${strip()}
     ${window.SCRRisk?.strip?.() || ""}
+    ${strip()}
+    <div class="hgrid hy2">
+      ${sec("Qué ha cambiado", "riesgo · notas · smart money", ok ? cambios(uni, Q) : wait)}
+      ${sec("Avisos", "señales que cruzan su umbral", ok ? avisos(uni, Q) : wait)}
+      ${sec("Tus valores", ok ? `${Q.watch().length} en tu Watchlist · las columnas nuevas llegan con cada fase` : "", ok ? valores(uni, Q) : wait)}
+      ${sec("Lectura del día", "conjunta · tus bolsas", lecturaDia())}
+    </div>
     <div class="hgrid">
-      ${sec("Pulso del mercado", "amplitud y liquidez", pulse())}
-      ${sec("Tu Watchlist hoy", ok ? `${Q.watch().length} valores` : "", ok ? watchToday(uni, Q) : wait)}
       ${sec("Próximos resultados", "tu Watchlist y top 50 por nota", ok ? earn(uni, Q) : wait)}
-      ${sec("Movimientos de la nota", "desde la sesión anterior · tus pesos", ok ? moves(uni, Q) : wait)}
       ${sec(`Smart money ${H.evid("h")}`, `<button class="link-btn" data-goranking="1">ver ranking</button>`, smartRows())}
       ${sec("Tu Diario", "decisiones abiertas", diaryRows())}
     </div>
-    <details class="hoy-more"><summary>Más: detalle de directivos, superinversores y copia de seguridad</summary>
-      <div class="hoy-grid"><div class="box"><b>Compras de directivos</b>${insiders()}</div><div class="box"><b>Smart money reciente</b>${smart()}</div>${backupBox()}</div></details>`;
+    <details class="hoy-more"><summary>Más: pulso del mercado, directivos, superinversores y copia de seguridad</summary>
+      <div class="hoy-grid"><div class="box"><b>Pulso del mercado</b>${pulse()}</div><div class="box"><b>Compras de directivos</b>${insiders()}</div><div class="box"><b>Smart money reciente</b>${smart()}</div>${backupBox()}</div></details>`;
 }
 
 function onClick(t) {

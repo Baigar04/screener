@@ -128,11 +128,10 @@ function thermoBox(T) {
   const a = T.actual, P = T.precision, ok = a.validado;
   const reg = a.regimen, cls = reg === "Alerta" ? "ko" : reg === "Tensión" ? "te" : "ok";
   const head = ok
-    ? `<div class="rsk-big num">${nf(a.p, 0)} %</div><div class="rsk-sub">intervalo 90 %: ${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"} · base ${nf(a.base, 0)} %</div><div class="rsk-reg"><span class="rsk-pill ${cls}">${reg}</span></div>`
-    : `<div class="rsk-big num rsk-mute">${nf(a.p, 0)} %</div><div class="rsk-sub">base ${nf(a.base, 0)} % · el modelo no demuestra ventaja</div><div class="rsk-reg"><span class="rsk-pill nu">Sin ventaja demostrada</span></div>`;
+    ? `<div class="rsk-big num">${nf(a.p, 0)} %</div><div class="rsk-sub">intervalo 90 %: ${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"} · base ${nf(a.base, 0)} %</div><div class="rsk-reg">${H.ui.pill(reg, true)}</div>`
+    : `<div class="rsk-big num rsk-mute">${nf(a.p, 0)} %</div><div class="rsk-sub">base ${nf(a.base, 0)} % · el modelo no demuestra ventaja</div><div class="rsk-reg">${H.ui.pill(reg, false)}</div>`;
   const falsas = P.falsas?.length ? `<span data-tip="Años: ${esc(P.falsas.join(", "))}">${P.falsas.length}</span>` : "0";
-  const L = T.lectura?.termometro || [];
-  const lect = L.length ? `<div class="rsk-lect-box"><b>Lectura</b>${L.map((x) => `<p>${esc(x)}</p>`).join("")}</div>` : "";
+  const lect = H.ui.lectura(T.lectura?.termometro);
   return `<section class="rsk-p"><h3>Termómetro · ${esc(T.nombre)}</h3>${gauge(a.p, a.lo, a.hi, a.base, T.umbrales.alerta, ok)}${head}${lect}
     <h3 class="rsk-h2">Precisión <span>fuera de muestra desde ${fm(P.desde)}</span></h3>
     <table class="rsk-kv"><tr><td>Intervalo del 90 %</td><td class="num">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td></tr>
@@ -208,7 +207,7 @@ function spark(T) {
   const yb = (Hh - (T.actual.base / mx) * Hh).toFixed(1);
   return `<svg viewBox="0 0 ${W} ${Hh}" class="rsk-spark" aria-hidden="true"><line x1="0" x2="${W}" y1="${yb}" y2="${yb}" stroke="var(--faint)" stroke-dasharray="2 2"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.3"/></svg>`;
 }
-const pillOf = (a) => { const cls = !a.validado ? "nu" : a.regimen === "Alerta" ? "ko" : a.regimen === "Tensión" ? "te" : "ok"; return `<span class="rsk-pill ${cls}">${a.validado ? a.regimen : "Sin ventaja"}</span>`; };
+const pillOf = (a) => H.ui.pill(a.regimen, a.validado);
 
 function marketsBox(D) {
   const S = segs(), sel = selK();
@@ -224,14 +223,7 @@ function marketsBox(D) {
 }
 
 function readingBox(T) {
-  const C = T.lectura?.conjunta;
-  if (!C) return "";
-  return `<section class="rsk-p rsk-read"><h3>Lectura conjunta · ${esc(T.nombre)} <span>generada con reglas a partir de los datos de esta página</span></h3>
-    <p class="rsk-concl">${esc(C.conclusion)}</p>
-    <ul class="rsk-bl">${C.bloques.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
-    <div class="rsk-2c"><div><h4>Qué vigilar</h4><ul>${C.vigilar.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></div>
-      <div><h4>Qué cambiaría la lectura</h4><ul>${C.cambiaria.map((b) => `<li>${esc(b)}</li>`).join("")}</ul></div></div>
-    <div class="method">Lectura informativa, no es una recomendación de inversión. Si un dato falta o el modelo no está validado en esta bolsa, la lectura lo dice.</div></section>`;
+  return T.lectura?.conjunta ? `<div class="rsk-read">${H.ui.conjunta(T.lectura.conjunta, T.nombre)}</div>` : "";
 }
 
 function render() {
@@ -281,5 +273,5 @@ function strip() {
 
 H.modules.riesgo = render;
 H.handlers.unshift(onClick);
-window.SCRRisk = { ensure, strip, data: () => R.d };
+window.SCRRisk = { ensure, strip, data: () => R.d, followed: segs };
 })();

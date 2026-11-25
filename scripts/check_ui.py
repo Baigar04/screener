@@ -59,16 +59,16 @@ def fichas(pg, base):
     check("«adelante» la vuelve a abrir", True)
 
 
-AREAS = {"hoy": "mercado", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado",
+AREAS = {"hoy": "hoy", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "riesgo": "contexto",
          "screener": "screener", "comparar": "screener", "smart": "screener",
-         "seguimiento": "watchlists", "carteras": "watchlists", "laboratorio": "investigacion", "diario": "investigacion"}
+         "seguimiento": "cartera", "carteras": "cartera", "laboratorio": "investigacion", "diario": "investigacion"}
 
 
 def navegacion(pg, base):
     pg.goto(base + "#/pulso")
     pg.wait_for_timeout(1500)
     n = pg.locator("#nav button").count()
-    check("barra con 4 áreas", n == 4, f"{n} botones")
+    check("barra con 6 áreas", n == 6, f"{n} botones")
     worst = 0
     for start in ("pulso", "smart", "laboratorio"):
         for v, area in AREAS.items():
@@ -113,7 +113,7 @@ def movil(pg, base):
         nh = pg.evaluate("document.getElementById('nav').getBoundingClientRect().height")
         check(f"móvil: contenido visible en #/{v} (barra inferior de {nh:.0f} px)", hit and nh < 100)
     vis = pg.evaluate("[...document.querySelectorAll('#nav button')].filter(b => b.getBoundingClientRect().width > 0).length")
-    check("móvil: 4-5 accesos en la barra inferior", 4 <= vis <= 5, f"{vis}")
+    check("móvil: 6 accesos en la barra inferior", vis == 6, f"{vis}")
     pg.set_viewport_size({"width": 1366, "height": 900})
 
 
@@ -279,8 +279,12 @@ def diseno1(pg, base):
     check("tipografía IBM Plex cargada", pg.evaluate("document.fonts.check(\"13px 'IBM Plex Sans'\") && [...document.fonts].some(f => f.family.includes('IBM Plex Sans') && f.status === 'loaded')"))
     wsp = pg.text_content("#wsp") or ""
     check("panel de trabajo con la Watchlist", "Watchlist" in wsp and pg.evaluate("getComputedStyle(document.getElementById('wsp')).display") != "none")
+    areas = [b.inner_text().strip() for b in pg.locator("#nav button").all()]
+    check("seis áreas en la cabecera", areas == ["Hoy", "Mercado", "Contexto", "Screener", "Cartera", "Investigación"], " · ".join(areas))
+    pg.goto(base + "#/pulso")
+    pg.wait_for_timeout(1500)
     tabs = [b.inner_text().strip() for b in pg.locator(".tabsbar #side button").all()]
-    check("pestañas de sección bajo la cabecera", len(tabs) >= 2 and tabs[0] == "Hoy" and tabs[1].startswith("Pulso"), " · ".join(tabs))
+    check("pestañas de sección bajo la cabecera", len(tabs) >= 2 and tabs[0].startswith("Pulso"), " · ".join(tabs))
     pg.click("#gear")
     pg.click("#dens")
     d = pg.evaluate("document.documentElement.dataset.dens")
@@ -387,7 +391,7 @@ def riesgo(pg, base):
     check("riesgo: sin desbordes a 1440 px", w)
     nchips = pg.locator("[data-rskseg]").count()
     check("riesgo: selector con las bolsas principales", nchips >= 8, f"{nchips} bolsas")
-    lect = pg.locator(".rsk-lect-box p").count()
+    lect = pg.locator(".rsk-top .ui-lect p").count()
     conj = pg.text_content(".rsk-read") or ""
     check("riesgo: lectura del termómetro y lectura conjunta", lect == 3 and "Qué vigilar" in conj and "Qué cambiaría" in conj)
     alt = pg.evaluate("[...document.querySelectorAll('[data-rskseg]')].map(b => b.dataset.rskseg).find(k => !document.querySelector(`[data-rskseg='${k}']`).classList.contains('on'))")
@@ -396,7 +400,7 @@ def riesgo(pg, base):
         pg.wait_for_timeout(600)
         h = pg.text_content(".rsk-top h3") or ""
         nm = pg.text_content(f"[data-rskseg='{alt}']") or ""
-        check("riesgo: elegir otra bolsa cambia el detalle y la lectura", nm.strip() in h and nm.strip() in (pg.text_content(".rsk-read h3") or ""), h)
+        check("riesgo: elegir otra bolsa cambia el detalle y la lectura", nm.strip() in h and nm.strip() in (pg.text_content(".rsk-read .ui-conj h3") or ""), h)
         pg.click(f"[data-rskseg='{alt}']")
         pg.wait_for_timeout(400)
     pg.goto(base + "#/hoy")
@@ -413,7 +417,10 @@ def diseno3(pg, base):
     pg.set_viewport_size({"width": 1440, "height": 900})
     pg.goto(base + "#/hoy")
     pg.wait_for_timeout(3000)
-    check("«Hoy»: 6 bloques y tira de índices", pg.locator(".hgrid .hs").count() == 6 and pg.locator(".ixs > div").count() >= 1, f"{pg.locator('.ixs > div').count()} índices")
+    t = pg.text_content("#view") or ""
+    check("«Hoy»: portada de síntesis (qué ha cambiado, avisos, tus valores, lectura del día) y tira de índices",
+          pg.locator(".hy2 .hs").count() == 4 and all(x in t for x in ("Qué ha cambiado", "Avisos", "Tus valores", "Lectura del día")) and pg.locator(".ixs > div").count() >= 1,
+          f"{pg.locator('.ixs > div').count()} índices")
     pg.goto(base + "#/screener")
     pg.wait_for_selector("table.scr tbody tr[data-sym]", timeout=20000)
     check("Screener: cabecera de página", (pg.text_content(".pg-head h1") or "").strip() == "Screener")
