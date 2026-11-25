@@ -156,7 +156,7 @@ def shiller_cape():
         req = urllib.request.Request("http://www.econ.yale.edu/~shiller/data/ie_data.xls", headers={"User-Agent": UA_WEB})
         with urllib.request.urlopen(req, timeout=60) as r:
             raw = r.read()
-        t = pd.read_excel(io.BytesIO(raw), sheet_name="Data", header=7)
+        t = pd.read_excel(io.BytesIO(raw), sheet_name="Data", header=7, engine="xlrd")
         obs = []
         for d, v in zip(t["Date"], t["CAPE"]):
             try:
@@ -457,7 +457,7 @@ def thermometer(raw, daily):
     brier = float(np.mean((wf_p - wf_y) ** 2))
     brier_b = float(np.mean((wf_base - wf_y) ** 2))
     ece, tabla = calib_error(wf_p, wf_y)
-    t_alert = max(30.0, round(base_now * 1.67))
+    t_alert = round(base_now + max(10.0, 0.4 * base_now))   # alerta: claramente por encima de la frecuencia histórica
     t_tens = base_now
     # avisos del termómetro (fuera de muestra)
     hp = {h[0]: h[1] / 100 for h in hist}
@@ -664,6 +664,32 @@ def amplitude():
     return out
 
 
+def derivadas(daily, raw):
+    """Señales calculadas: tendencia y volatilidad del propio IBEX (clásicas en la literatura de riesgo de caídas)
+    y cambio a 6 meses del EBP (el crédito que se encarece rápido avisa antes que su nivel)."""
+    c = np.array([x[1] for x in daily])
+    dts = [x[0] for x in daily]
+
+    def tendencia():
+        out = []
+        for i in range(200, len(c)):
+            out.append((dts[i], (c[i] / c[i - 200:i].mean() - 1) * 100))
+        return out
+
+    def vol():
+        r = np.diff(np.log(c))
+        return [(dts[i + 1], float(r[i - 62:i + 1].std() * math.sqrt(252) * 100)) for i in range(62, len(r))]
+
+    def ebp6():
+        if "ebp" not in raw:
+            return []
+        o = raw["ebp"][1]
+        return [(o[i][0], o[i][1] - o[i - 6][1]) for i in range(6, len(o))]
+    return [("tendencia", "IBEX frente a su media de 200 sesiones", "rapida", -1, tendencia, "%"),
+            ("vol_ibex", "Volatilidad del IBEX (3 meses)", "rapida", +1, vol, "%"),
+            ("ebp_6m", "Cambio del EBP en 6 meses", "media", +1, ebp6, "pp")]
+
+
 def main():
     raw = {}
     for k, nombre, vel, fuente, url, frec, lag, sentido, modelo, fn in catalogo():
@@ -680,6 +706,14 @@ def main():
     try:
         daily = ibex_daily()
         log("IBEX:", len(daily), "sesiones", daily[0][0], "→", daily[-1][0])
+        for k, nombre, vel, sentido, fn, unid in derivadas(daily, raw):
+            obs = fn()
+            if obs:
+                raw[k] = ({"k": k, "nombre": nombre, "vel": vel, "fuente": "Cálculo propio · IBEX de Yahoo" if k != "ebp_6m" else "Cálculo propio · EBP de la Fed",
+                           "url": "https://finance.yahoo.com/quote/%5EIBEX/" if k != "ebp_6m" else raw["ebp"][0]["url"], "frec": "diario" if k != "ebp_6m" else "mensual",
+                           "retraso": 0 if k != "ebp_6m" else 1, "sentido": sentido, "modelo": True, "desde": obs[0][0].isoformat()[:7],
+                           "ultimo": {"fecha": obs[-1][0].isoformat(), "valor": round(obs[-1][1], 3)}}, obs)
+                log(f"{k}: {len(obs)} obs = {obs[-1][1]:.3f}")
         if sum(1 for v in raw.values() if v[0]["modelo"]) < 5:
             raise RuntimeError("menos de 5 señales disponibles: no se estima")
         out["termometro"] = thermometer(raw, daily)
