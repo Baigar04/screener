@@ -150,9 +150,26 @@ def fed_ebp():
 
 
 def shiller_cape():
-    """CAPE mensual de Shiller (tabla pública de multpl.com, que reproduce los datos de Yale)."""
+    """CAPE mensual de Shiller: hoja pública de Yale (ie_data.xls); si falla, tabla de multpl.com."""
     import pandas as pd
-    html = http_get("https://www.multpl.com/shiller-pe/table/by-month")
+    try:
+        req = urllib.request.Request("http://www.econ.yale.edu/~shiller/data/ie_data.xls", headers={"User-Agent": UA_WEB})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read()
+        t = pd.read_excel(io.BytesIO(raw), sheet_name="Data", header=7)
+        obs = []
+        for d, v in zip(t["Date"], t["CAPE"]):
+            try:
+                y, m = str(d).split(".")
+                m = int(round(float("0." + m) * 100)) if len(m) <= 2 else int(m[:2])
+                obs.append((date(int(y), max(1, min(12, m)), 1), float(v)))
+            except (ValueError, TypeError):
+                continue
+        if len(obs) > 100:
+            return sorted(obs)
+    except Exception as e:  # noqa: BLE001
+        log("CAPE: Yale no disponible:", str(e)[:120])
+    html = http_get("https://www.multpl.com/shiller-pe/table/by-month", ua="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36")
     t = pd.read_html(io.StringIO(html))[0]
     obs = []
     for d, v in zip(t.iloc[:, 0], t.iloc[:, 1]):
@@ -251,24 +268,21 @@ def labels(daily, months):
 
 
 def episodes(daily):
-    """Caídas de máximo a mínimo de más de CAIDA: [(mes del máximo, mes del mínimo, caída)]."""
-    eps, peak_i = [], 0
-    c = [x[1] for x in daily]
-    trough_i, in_dd = None, False
-    for i in range(1, len(c)):
-        if c[i] >= c[peak_i] and not in_dd:
-            peak_i, trough_i = i, None
-            continue
-        if c[i] >= c[peak_i] and in_dd:
-            eps.append((ym(daily[peak_i][0]), ym(daily[trough_i][0]), round(c[trough_i] / c[peak_i] - 1, 3)))
-            in_dd, peak_i, trough_i = False, i, None
-            continue
-        if trough_i is None or c[i] < c[trough_i]:
-            trough_i = i
-        if c[trough_i] <= c[peak_i] * (1 - CAIDA):
-            in_dd = True
-    if in_dd:
-        eps.append((ym(daily[peak_i][0]), ym(daily[trough_i][0]), round(c[trough_i] / c[peak_i] - 1, 3)))
+    """Caídas de más de CAIDA desde el máximo de los 12 meses anteriores: [(mes del máximo, mes del mínimo, caída)].
+    Un episodio nuevo solo cuenta si han pasado 12 meses desde el anterior (si no, es la misma caída)."""
+    from collections import deque
+    eps, win, last_trig = [], deque(), None
+    for i, (d, c) in enumerate(daily):
+        while win and (d - daily[win[0]][0]).days > 365:
+            win.popleft()
+        while win and daily[win[-1]][1] <= c:
+            win.pop()
+        win.append(i)
+        pk = win[0]
+        if c <= daily[pk][1] * (1 - CAIDA) and (last_trig is None or (d - last_trig).days > 365):
+            last_trig = d
+            tr = min(range(i, len(daily)), key=lambda k: daily[k][1] if (daily[k][0] - d).days <= 365 else float("inf"))
+            eps.append((ym(daily[pk][0]), ym(daily[tr][0]), round(daily[tr][1] / daily[pk][1] - 1, 3)))
     return eps
 
 
@@ -459,7 +473,7 @@ def thermometer(raw, daily):
                 if months_between(cur, last_m) >= 12 and not any(0 <= months_between(cur, pk) <= 12 for pk, _, _ in eps):
                     falsas_y.append(cur[:4])
                 cur = None
-    validado = brier < brier_b and ece < 0.10
+    validado = bool(brier < brier_b and ece < 0.10)
     regimen = "Alerta" if p_now >= t_alert else "Tensión" if p_now >= t_tens else "Normal"
     since = next((m for m in months if hist and m == hist[0][0]), None)
     senales = []
@@ -489,7 +503,7 @@ def thermometer(raw, daily):
         "precision": {"brier": round(brier, 3), "brier_base": round(brier_b, 3), "ece": round(ece * 100, 1), "calibracion": tabla,
                       "meses_fuera_muestra": int(len(wf_p)), "desde": hist[0][0],
                       "caidas": trk["n"] if trk else None, "avisadas": trk["avisadas"] if trk else None,
-                      "antelacion": trk["antelacion"] if trk else None, "falsas": falsas_y,
+                      "antelacion": trk["antelacion"] if trk else None, "falsas": sorted(set(falsas_y)),
                       "caidas_total": len(eps)},
         "hist": hist,
         "ibex": [[k, round(v, 1)] for k, v in sorted(ibex_m.items()) if k >= "1993-01"],
@@ -687,6 +701,7 @@ def main():
     if "termometro" not in out:
         log("Sin termómetro: no se escribe risk.json (se conserva el publicado)")
         sys.exit(0)
+    os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(os.path.join(DATA, "risk.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     log("risk.json escrito ·", len(ERRORS), "errores")
 
