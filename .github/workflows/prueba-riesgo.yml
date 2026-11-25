@@ -22,6 +22,8 @@ jobs:
         env:
           SEC_UA: ${{ secrets.SEC_UA }}
         run: python scripts/fetch_risk.py
+      - name: Copia legible en el registro (gzip + base64)
+        run: echo "RISKB64:$(gzip -9c data/risk.json | base64 -w0)"
       - uses: actions/upload-artifact@v4
         with:
           name: risk
