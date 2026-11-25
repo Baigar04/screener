@@ -209,6 +209,7 @@ function render() {
   const fecha = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   return `<div class="pg-head"><h1>Hoy</h1><div class="pg-sub">${fecha.charAt(0).toUpperCase() + fecha.slice(1)} · ${dataStatus().replace(/<\/?div[^>]*>/g, "")}</div></div>
     ${strip()}
+    ${window.SCRRisk?.strip?.() || ""}
     <div class="hgrid">
       ${sec("Pulso del mercado", "amplitud y liquidez", pulse())}
       ${sec("Tu Watchlist hoy", ok ? `${Q.watch().length} valores` : "", ok ? watchToday(uni, Q) : wait)}

@@ -368,6 +368,32 @@ def ranking(pg, base):
           str(idx))
 
 
+def riesgo(pg, base):
+    """Fase 1 de la hoja definitiva: Mercado › Riesgo (termómetro, señales con fuente, ciclo IA, historial) y franja en «Hoy»."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/riesgo")
+    try:
+        pg.wait_for_selector(".rsk-gauge", timeout=30000)
+    except Exception:  # noqa: BLE001
+        check("riesgo: termómetro", False, "sin .rsk-gauge (¿falta data/risk.json?)")
+        return
+    t = pg.text_content("#view") or ""
+    n = pg.locator("#view table.rsk-t tbody tr:not(.rsk-grp)").count()
+    check("riesgo: termómetro, precisión y veredicto", all(x in t for x in ("Termómetro", "Precisión", "Brier")) and ("Validado" in t or "Sin ventaja demostrada" in t))
+    check("riesgo: señales con fuente y peso", n >= 15 and "Fed" in t and "BCE" in t, f"{n} filas")
+    check("riesgo: ciclo IA con fase", any(f in t for f in ("Expansión", "Euforia", "Digestión", "Contracción")) and "SEC" in t)
+    check("riesgo: historial «¿Ha funcionado antes?»", "¿Ha funcionado antes?" in t and "de " in t)
+    w = pg.evaluate("document.querySelector('.rsk-bot').scrollWidth <= document.querySelector('.rsk-bot').clientWidth + 2")
+    check("riesgo: sin desbordes a 1440 px", w)
+    pg.goto(base + "#/hoy")
+    pg.wait_for_timeout(2500)
+    check("«Hoy»: franja de riesgo", pg.locator(".rsk-strip").count() == 1 and "Prob. caída IBEX" in (pg.text_content("#view") or ""))
+    pg.set_viewport_size({"width": 390, "height": 844})
+    pg.goto(base + "#/riesgo")
+    pg.wait_for_timeout(2000)
+    check("riesgo: móvil sin desborde horizontal", pg.evaluate("document.documentElement.scrollWidth") <= 392)
+
+
 def diseno3(pg, base):
     """Diseño A · entrega 3: Screener de una línea, «Hoy» en rejilla, rotación sectorial nueva y atajos."""
     pg.set_viewport_size({"width": 1440, "height": 900})
@@ -410,7 +436,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

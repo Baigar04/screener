@@ -6,6 +6,7 @@ const NAV = [
   ["hoy", "Hoy", true],
   ["pulso", "Pulso del mercado", true],
   ["sectores", "Sectores", true],
+  ["riesgo", "Riesgo", true],
   ["screener", "Screener", true],
   ["smart", "Smart money", true],
   ["comparar", "Comparar", true],
@@ -17,7 +18,7 @@ const NAV = [
 ];
 /* 4 áreas en la barra lateral (o inferior en móvil); dentro de cada área, sus secciones en una barra superior */
 const AREAS = [
-  ["mercado", "Mercado", ["hoy", "pulso", "sectores", "adelantarse"]],
+  ["mercado", "Mercado", ["hoy", "pulso", "sectores", "riesgo", "adelantarse"]],
   ["screener", "Screener", ["screener", "comparar", "smart"]],
   ["watchlists", "Watchlists", ["seguimiento", "carteras"]],
   ["investigacion", "Investigación", ["diario", "laboratorio"]],
@@ -150,6 +151,7 @@ function freshness(s) {
 const ICONS = {
   pulso: "M3 12h4l3-8 4 16 3-8h4",
   sectores: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  riesgo: "M4 18a8 8 0 0 1 16 0M12 18l4-6M7 10.5l1 1M17 10.5l-1 1M12 8v1.5",
   screener: "M3 5h18l-7 8v6l-4 2v-8z",
   comparar: "M8 3v18M16 3v18M3 8h5M16 16h5M3 16h5M16 8h5",
   hoy: "M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",

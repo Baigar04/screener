@@ -374,12 +374,12 @@ def lectura(p, sentido):
         return "Sin historia suficiente"
     q = p * 100
     if q >= 90:
-        return "Extremo: en zona de riesgo frente a su historia"
+        return "Extremo"
     if q >= 70:
-        return "Alto frente a su historia"
+        return "Alto"
     if q >= 30:
         return "Normal"
-    return "Bajo: no señala riesgo"
+    return "Bajo"
 
 
 def ibex_daily():
@@ -486,7 +486,7 @@ def thermometer(raw, daily):
             "peso": None if j is None else round(float(pesos[j]) * 100, 1),
             "signo": None if j is None else (1 if w[1 + j] > 0 else -1),
             "aporta": None if j is None else round(float(w[1 + j] * xnow[j]), 3),
-            "lectura": lectura(cur, f["sentido"]),
+            "lectura": lectura(cur, f["sentido"]) if cur is not None or f["modelo"] else "Dato desactualizado",
             "historial": signal_track(f["pcts"], eps, months) if f["modelo"] else None,
             "serie": [[mo, round(f["pcts"][mo] * 100)] for mo in months[-60:] if f["pcts"].get(mo) is not None],
         })
@@ -695,6 +695,11 @@ def main():
     for k, nombre, vel, fuente, url, frec, lag, sentido, modelo, fn in catalogo():
         try:
             obs = fn()
+            edad = (NOW.date() - obs[-1][0]).days
+            if edad > 270:   # dato desactualizado: se muestra, pero no entra en el modelo
+                log(f"{k}: último dato {obs[-1][0]} ({edad} días): fuera del modelo por desactualizado")
+                ERRORS.append({"fuente": fuente, "serie": nombre, "motivo": f"Dato desactualizado: el último es de {obs[-1][0].isoformat()[:7]}; no entra en el modelo"})
+                modelo = False
             raw[k] = ({"k": k, "nombre": nombre, "vel": vel, "fuente": fuente, "url": url, "frec": frec, "retraso": lag,
                        "sentido": sentido, "modelo": modelo, "desde": obs[0][0].isoformat()[:7],
                        "ultimo": {"fecha": obs[-1][0].isoformat(), "valor": round(obs[-1][1], 3)}}, obs)

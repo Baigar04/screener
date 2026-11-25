@@ -48,7 +48,7 @@ function gauge(p, lo, hi, base, tA, ok) {
   const W = 260, cx = 130, cy = 118, r = 96, max = Math.max(60, Math.ceil((hi || p || 0) / 10) * 10 + 10);
   const ang = (v) => Math.PI * (1 - Math.min(v, max) / max);
   const pt = (v, rr) => [cx + rr * Math.cos(ang(v)), cy - rr * Math.sin(ang(v))];
-  const arc = (a, b, col, w = 12, rr = r, op = 1) => { const p0 = [cx + rr * Math.cos(ang(a)), cy - rr * Math.sin(ang(a))], p1 = [cx + rr * Math.cos(ang(b)), cy - rr * Math.sin(ang(b))]; return `<path d="M${p0[0].toFixed(1)},${p0[1].toFixed(1)} A${rr},${rr} 0 0 1 ${p1[0].toFixed(1)},${p1[1].toFixed(1)}" stroke="${col}" stroke-width="${w}" fill="none" opacity="${op}"/>`; };
+  const arc = (a, b, col, w = 12, rr = r, op = 1) => { const p0 = [cx + rr * Math.cos(ang(a)), cy - rr * Math.sin(ang(a))], p1 = [cx + rr * Math.cos(ang(b)), cy - rr * Math.sin(ang(b))]; return `<path d="M${p0[0].toFixed(1)},${p0[1].toFixed(1)} A${rr},${rr} 0 0 1 ${p1[0].toFixed(1)},${p1[1].toFixed(1)}" style="stroke:${col};stroke-width:${w};fill:none;stroke-linecap:butt" opacity="${op}"/>`; };
   let s = arc(0, base, "var(--pos)") + arc(base, tA, "var(--warn)") + arc(tA, max, "var(--neg)");
   if (lo != null && hi != null) s += arc(lo, hi, "var(--text)", 3, r + 12, 0.6);
   const [nx, ny] = pt(p, r - 20);
@@ -122,13 +122,13 @@ function thermoBox(T) {
   const head = ok
     ? `<div class="rsk-big num">${nf(a.p, 0)} %</div><div class="rsk-sub">intervalo 90 %: ${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"} · base ${nf(a.base, 0)} %</div><div class="rsk-reg"><span class="rsk-pill ${cls}">${reg}</span></div>`
     : `<div class="rsk-big num rsk-mute">${nf(a.p, 0)} %</div><div class="rsk-sub">base ${nf(a.base, 0)} % · el modelo no demuestra ventaja</div><div class="rsk-reg"><span class="rsk-pill nu">Sin ventaja demostrada</span></div>`;
-  const falsas = P.falsas?.length ? `${P.falsas.length} · ${P.falsas.join(", ")}` : "0";
+  const falsas = P.falsas?.length ? `<span data-tip="Años: ${esc(P.falsas.join(", "))}">${P.falsas.length}</span>` : "0";
   return `<section class="rsk-p"><h3>Termómetro</h3>${gauge(a.p, a.lo, a.hi, a.base, T.umbrales.alerta, ok)}${head}
     <h3 class="rsk-h2">Precisión <span>fuera de muestra desde ${fm(P.desde)}</span></h3>
-    <table class="kvt"><tr><td>Intervalo del 90 %</td><td class="num">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td></tr>
+    <table class="rsk-kv"><tr><td>Intervalo del 90 %</td><td class="num">${a.lo != null ? `${nf(a.lo, 0)}-${nf(a.hi, 0)} %` : "—"}</td></tr>
       <tr><td>Caídas &gt;15 % del IBEX en el periodo</td><td class="num">${P.caidas ?? "—"}</td></tr>
       <tr><td>Avisadas (1-12 meses antes)</td><td class="num">${P.avisadas ?? "—"} de ${P.caidas ?? "—"}${P.antelacion != null ? ` · ${nf(P.antelacion, 0)} m` : ""}</td></tr>
-      <tr><td>Falsas alarmas</td><td class="num">${esc(falsas)}</td></tr>
+      <tr><td>Falsas alarmas</td><td class="num">${falsas}</td></tr>
       <tr><td>Brier · modelo frente a base</td><td class="num">${nf(P.brier, 3)} · ${nf(P.brier_base, 3)}</td></tr>
       <tr><td>Error medio de calibración</td><td class="num">${nf(P.ece, 1)} pp</td></tr>
       <tr><td>Meses evaluados</td><td class="num">${P.meses_fuera_muestra}</td></tr></table>
@@ -142,24 +142,23 @@ function signalsBox(T, D) {
   for (const v of ["lenta", "media", "rapida"]) {
     const g = S.filter((s) => s.vel === v);
     const extra = [];
-    if (v === "lenta" && D.concentracion) extra.push(`<tr><td>Peso de los 10 mayores del S&amp;P 500<div class="rsk-src">Cálculo propio con el universo · ${D.concentracion.n} valores</div></td><td class="num">${nf(D.concentracion.top10, 1)} %</td><td class="rsk-fa" colspan="2">solo lectura · sin historia larga</td><td class="num rsk-fa">${fd(D.concentracion.fecha)}</td><td class="num rsk-fa">—</td><td class="num rsk-fa">—</td></tr>`);
-    if (v === "rapida" && D.amplitud) for (const [reg, a] of Object.entries(D.amplitud)) extra.push(`<tr><td>Amplitud ${esc(reg)}: % sobre media de 200<div class="rsk-src">Cálculo propio con el universo</div></td><td class="num">${pc(a.valor, 0)}</td><td>${a.pct != null ? bar(100 - a.pct) : ""}<span class="rsk-fa">percentil 1 año ${a.pct ?? "—"}</span></td><td class="rsk-fa">solo lectura</td><td class="num rsk-fa">${fd(a.fecha)}</td><td class="num rsk-fa">1 a</td><td class="num rsk-fa">—</td></tr>`);
+    if (v === "lenta" && D.concentracion) extra.push(`<tr><td>Peso de los 10 mayores del S&amp;P 500<div class="rsk-src">Cálculo propio con el universo · ${D.concentracion.n} valores</div></td><td class="num">${nf(D.concentracion.top10, 1)} %</td><td class="rsk-fa" colspan="2">solo lectura · sin historia larga · ${fd(D.concentracion.fecha)}</td><td class="num rsk-fa">fuera</td></tr>`);
+    if (v === "rapida" && D.amplitud) for (const [reg, a] of Object.entries(D.amplitud)) extra.push(`<tr><td>Amplitud ${esc(reg)}: % sobre media de 200<div class="rsk-src">Cálculo propio con el universo</div></td><td class="num">${pc(a.valor, 0)}</td><td>${a.pct != null ? bar(100 - a.pct) : ""}<span class="rsk-fa">percentil 1 año ${a.pct ?? "—"}</span></td><td class="rsk-fa">solo lectura · ${fd(a.fecha)}</td><td class="num rsk-fa">fuera</td></tr>`);
     if (!g.length && !extra.length) continue;
-    rows += `<tr class="rsk-grp"><td colspan="7">${VEL[v][0]} <span>· ${VEL[v][1]}</span></td></tr>`;
+    rows += `<tr class="rsk-grp"><td colspan="5">${VEL[v][0]} <span>· ${VEL[v][1]}</span></td></tr>`;
     for (const s of g) {
       const [u, d] = UNIT[s.k] || ["", 2];
-      rows += `<tr><td><span data-tip="${esc(DEF[s.k] || "")}">${esc(s.nombre)}</span><div class="rsk-src"><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.fuente)}</a></div>${X() && DEF[s.k] ? `<div class="rsk-def">${esc(DEF[s.k])}</div>` : ""}</td>
+      rows += `<tr><td><span data-tip="${esc(DEF[s.k] || "")}">${esc(s.nombre)}</span><div class="rsk-src"><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.fuente)}</a> · ${esc(s.frec)} · ${fd(s.ultimo.fecha)} · desde ${s.desde.slice(0, 4)}</div>${X() && DEF[s.k] ? `<div class="rsk-def">${esc(DEF[s.k])}</div>` : ""}</td>
         <td class="num">${nf(s.ultimo.valor, d)}${u}</td>
         <td>${s.pct != null ? bar(s.pct) : ""}<span class="rsk-fa">${s.pct != null ? `percentil ${s.pct}` : "sin historia"}</span></td>
         <td class="rsk-lect ${s.pct >= 70 ? "warn" : s.pct != null && s.pct < 30 ? "pos" : ""}">${esc(s.lectura)}</td>
-        <td class="num rsk-fa">${esc(s.frec)} · ${fd(s.ultimo.fecha)}</td><td class="num rsk-fa">${s.desde.slice(0, 4)}</td>
         <td class="num">${s.modelo ? `${nf(s.peso, 0)} %` : '<span class="rsk-fa" data-tip="No entra en el modelo: historia corta">fuera</span>'}</td></tr>`;
     }
     rows += extra.join("");
   }
   const wv = (v) => S.filter((s) => s.vel === v && s.modelo).reduce((a, s) => a + (s.peso || 0), 0);
   return `<section class="rsk-p"><h3>Señales, fuentes y peso en el termómetro <span>percentil «a fecha» frente a su historia · más alto = más riesgo</span></h3>
-    <div class="rsk-scroll"><table class="rsk-t"><thead><tr><th>Señal y fuente</th><th class="num">Valor</th><th>Nivel de riesgo</th><th>Lectura</th><th class="num">Frecuencia · último dato</th><th class="num">Desde</th><th class="num">Peso</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="rsk-scroll"><table class="rsk-t"><thead><tr><th>Señal · fuente · último dato</th><th class="num">Valor</th><th>Nivel de riesgo</th><th>Lectura</th><th class="num">Peso</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="method">Pesos de hoy: lenta ${nf(wv("lenta"), 0)} % · media ${nf(wv("media"), 0)} % · rápida ${nf(wv("rapida"), 0)} %. El peso es la importancia de cada señal en el modelo (coeficiente × dispersión), no una opinión.</div></section>`;
 }
 const bar = (p) => `<div class="rsk-bar"><i style="width:${Math.max(2, Math.min(100, p))}%;background:${p >= 85 ? "var(--neg)" : p >= 70 ? "var(--warn)" : p < 30 ? "var(--pos)" : "var(--muted)"}"></i></div>`;
@@ -169,7 +168,7 @@ function iaBox(I, C) {
   const g = (v) => (v == null ? "—" : `<span class="chg ${v > 0 ? "p" : "n"}">${sgn(v, 0)} %</span>`);
   return `<section class="rsk-p"><h3>Ciclo IA · hiperescaladores <span>miles de M$ por trimestre · ${esc(I.empresas.join(", "))}</span></h3>${iaChart(I)}
     <div class="rsk-leg"><span><i style="background:var(--accent)"></i>Inversión (capex)</span><span><i style="background:var(--good)"></i>Flujo de caja libre</span></div>
-    <table class="kvt"><tr><td>Capex 12 meses</td><td class="num">${nf(I.capex_12m, 0)} mil M$ · ${g(I.g_capex)}</td></tr>
+    <table class="rsk-kv"><tr><td>Capex 12 meses</td><td class="num">${nf(I.capex_12m, 0)} mil M$ · ${g(I.g_capex)}</td></tr>
       <tr><td>Flujo de caja libre 12 meses</td><td class="num">${nf(I.fcf_12m, 0)} mil M$ · ${g(I.g_fcf)}</td></tr>
       <tr><td>Capex / flujo de caja operativo</td><td class="num">${nf(I.capex_cfo, 0)} %</td></tr>
       <tr><td>Deuda financiera</td><td class="num">${nf(I.deuda, 0)} mil M$ · ${sgn(I.deuda_12m, 0)} en 12 m</td></tr>
@@ -183,11 +182,11 @@ function iaBox(I, C) {
 function trackBox(T) {
   const rows = T.senales.filter((s) => s.modelo && s.historial && s.historial.n).sort((a, b) => b.historial.avisadas / b.historial.n - a.historial.avisadas / a.historial.n);
   const P = T.precision;
-  const r = (n, h, b = false) => `<tr${b ? ' class="rsk-b"' : ""}><td>${n}</td><td class="num">${h.avisos ?? "—"}</td><td class="num ${h.avisadas / h.n >= 0.6 ? "pos" : "warn"}">${h.avisadas} de ${h.n}</td><td class="num">${h.antelacion != null ? `${nf(h.antelacion, 0)} m` : "—"}</td><td class="num">${h.falsas ?? "—"}</td></tr>`;
+  const r = (n, h, b = false) => `<tr${b ? ' class="rsk-b"' : ""}><td>${n}</td><td class="num ${h.avisadas / h.n >= 0.6 ? "pos" : "warn"}">${h.avisadas} de ${h.n}</td><td class="num">${h.antelacion != null ? `${nf(h.antelacion, 0)} m` : "—"}</td><td class="num">${h.falsas ?? "—"}</td></tr>`;
   return `<section class="rsk-p"><h3>¿Ha funcionado antes? <span>caídas del IBEX &gt;15 %</span></h3>
-    <table class="rsk-t"><thead><tr><th>Señal</th><th class="num">Avisos</th><th class="num">Acierto</th><th class="num">Antelación</th><th class="num">Falsas</th></tr></thead><tbody>
-    ${rows.map((s) => r(esc(s.nombre) + ' <span class="rsk-fa">· percentil ≥ 80</span>', s.historial)).join("")}
-    ${P.caidas ? r(`Termómetro &gt; ${nf(T.umbrales.alerta, 0)} %`, { avisos: null, avisadas: P.avisadas, n: P.caidas, antelacion: P.antelacion, falsas: P.falsas?.length }, true) : ""}</tbody></table>
+    <div class="rsk-scroll"><table class="rsk-t"><thead><tr><th>Señal</th><th class="num">Avisadas</th><th class="num">Antel.</th><th class="num">Falsas</th></tr></thead><tbody>
+    ${rows.map((s) => r(esc(s.nombre), s.historial)).join("")}
+    ${P.caidas ? r(`Termómetro &gt; ${nf(T.umbrales.alerta, 0)} %`, { avisos: null, avisadas: P.avisadas, n: P.caidas, antelacion: P.antelacion, falsas: P.falsas?.length }, true) : ""}</tbody></table></div>
     <div class="method">Aviso = la señal en su 20 % más alto de la historia (o el termómetro sobre el umbral) entre 12 y 1 meses antes del máximo previo a la caída. Antelación: mediana en meses. Falsa alarma: tramo de aviso sin caída en los 12 meses siguientes.</div></section>`;
 }
 
@@ -199,9 +198,9 @@ function render() {
   const nfu = new Set(T.senales.map((s) => s.fuente.split(/[,(·]/)[0].trim())).size;
   return `<div class="pg-head"><h1>Riesgo de mercado</h1><div class="pg-sub">${esc(T.objetivo)} · datos del ${fmtDate(D.generado.slice(0, 10))} · ${T.senales.length} señales · ${nfu} fuentes${D.errores?.length ? ` · <span class="stale-txt" data-tip="${esc(D.errores.map((e) => `${e.serie}: ${e.motivo}`).join(" · "))}">${D.errores.length} fuente(s) con error</span>` : ""}</div></div>
     <div class="rsk-top">${thermoBox(T)}
-      <section class="rsk-p"><h3>Probabilidad de caída &gt;15 % del IBEX 35 <span>banda: intervalo del 90 % · sombreado: caídas reales</span></h3>${probChart(T)}
-        ${exp(`<b>Cómo se calcula.</b> ${esc(T.metodo)} Cada punto de la línea es la previsión que se habría hecho ese mes con lo que se sabía entonces.`)}</section></div>
-    <div class="rsk-bot">${signalsBox(T, D)}<div class="rsk-col">${iaBox(D.ia, D.concentracion)}${trackBox(T)}</div></div>`;
+      <div class="rsk-col"><section class="rsk-p"><h3>Probabilidad de caída &gt;15 % del IBEX 35 <span>banda: intervalo del 90 % · sombreado: caídas reales</span></h3>${probChart(T)}
+        ${exp(`<b>Cómo se calcula.</b> ${esc(T.metodo)} Cada punto de la línea es la previsión que se habría hecho ese mes con lo que se sabía entonces.`)}</section>${trackBox(T)}</div></div>
+    <div class="rsk-bot">${signalsBox(T, D)}<div class="rsk-col">${iaBox(D.ia, D.concentracion)}</div></div>`;
 }
 
 /* franja para «Hoy» */
