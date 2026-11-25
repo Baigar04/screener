@@ -929,6 +929,12 @@ def main():
     except Exception as e:  # noqa: BLE001
         ERRORS.append({"fuente": "SEC", "serie": "Ciclo IA", "motivo": str(e)[:200]})
         log("ERROR ciclo IA:", e)
+    gpr_obs = None
+    try:   # candidato de la fase 2: ¿mejora el GPR el examen del termómetro? Solo se informa; no entra en producción sin decisión.
+        from fetch_geo import gpr_monthly
+        gpr_obs = [(date(int(m[:4]), int(m[5:7]), 1), v) for m, v in gpr_monthly()["global"]]
+    except Exception as e:  # noqa: BLE001
+        log("GPR no disponible para la prueba:", e)
     mercados, orden = {}, []
     for clave, nombre, ticker, region in MERCADOS:
         t0 = time.time()
@@ -941,6 +947,18 @@ def main():
             T = thermometer(sub, daily, nombre)
             T.update({"clave": clave, "nombre": nombre, "ticker": ticker, "region": region, "inicio": daily[0][0].isoformat()})
             T["lectura"] = interpret(T, out.get("ia"), nombre, clave)
+            if gpr_obs:
+                try:
+                    g = dict(sub)
+                    g["gpr"] = ({"k": "gpr", "nombre": "Riesgo geopolítico (GPR)", "vel": "media", "fuente": "Caldara-Iacoviello", "url": "https://www.matteoiacoviello.com/gpr.htm",
+                                 "frec": "mensual", "retraso": 1, "sentido": 1, "modelo": True, "desde": gpr_obs[0][0].isoformat()[:7],
+                                 "ultimo": {"fecha": gpr_obs[-1][0].isoformat(), "valor": round(gpr_obs[-1][1], 1)}}, gpr_obs)
+                    Tg = thermometer(g, daily, nombre)
+                    Eg, E0 = Tg["precision"]["examen"] or {}, T["precision"]["examen"] or {}
+                    T["prueba_gpr"] = {"sin": E0.get("skill"), "con": Eg.get("skill"), "ece_con": Eg.get("ece"), "valida_con": Tg["actual"]["validado"]}
+                    log(f"   con GPR: examen {Eg.get('skill')} % (sin GPR {E0.get('skill')} %) · {'validaría' if Tg['actual']['validado'] else 'no validaría'}")
+                except Exception as e:  # noqa: BLE001
+                    log("   prueba GPR falló:", e)
             try:
                 with plazo(*CORTO):
                     T3 = thermometer(sub, daily, nombre, solo=SENALES_CORTO)

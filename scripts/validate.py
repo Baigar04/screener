@@ -210,6 +210,18 @@ def v_risk(d, prev):
     return f"{len(M)} bolsas · {v} validadas · " + " · ".join(f"{T['nombre']} {T['actual']['p']} %" for T in list(M.values())[:4])
 
 
+def v_geo(d, prev):
+    check_generado(d, "geo.json")
+    g = d.get("global") or {}
+    check(finite(g.get("valor")) and g["valor"] > 0, "geo.json: GPR global no válido")
+    check(len((d.get("mensual") or {}).get("global") or []) >= 300, "geo.json: serie mensual corta")
+    check(len(d.get("paises") or []) >= 20, "geo.json: menos de 20 países")
+    check((d.get("lectura") or {}).get("conclusion"), "geo.json: sin lectura conjunta")
+    for r in d.get("rearme") or []:
+        check(r.get("fuente") and r.get("url"), "geo.json: cifra de rearme sin fuente")
+    return f"GPR {g.get('valor')} (p{g.get('pct')}) · {len(d.get('paises') or [])} países · {len(d.get('pistas') or [])} pistas · {len(d.get('sens_valores') or {})} valores"
+
+
 def v_insiders(d, prev):
     check_generado(d, "insiders.json")
     O, P = d.get("ops"), d.get("por_valor")
@@ -265,6 +277,7 @@ RULES = {
     "amplitud.json": v_amplitud,
     "insiders.json": v_insiders,
     "risk.json": v_risk,
+    "geo.json": v_geo,
     "smart.json": v_smart,
     "lab.json": v_lab,
     "fund_cache.json": v_dict("fund_cache.json"),

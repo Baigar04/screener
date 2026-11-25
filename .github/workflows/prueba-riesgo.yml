@@ -17,13 +17,20 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Universo y amplitud publicados (para concentración y amplitud)
         run: |
+          mkdir -p data
           for f in universe.json amplitud.json; do curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; done
       - name: Termómetro
         env:
           SEC_UA: ${{ secrets.SEC_UA }}
         run: python scripts/fetch_risk.py
+      - name: Geopolítica
+        run: |
+          mkdir -p data/p
+          python scripts/fetch_geo.py
       - name: Copia legible en el registro (gzip + base64)
-        run: echo "RISKB64:$(gzip -9c data/risk.json | base64 -w0)"
+        run: |
+          echo "RISKB64:$(gzip -9c data/risk.json | base64 -w0)"
+          [ -f data/geo.json ] && echo "GEOB64:$(gzip -9c data/geo.json | base64 -w0)" || true
       - uses: actions/upload-artifact@v4
         with:
           name: risk
