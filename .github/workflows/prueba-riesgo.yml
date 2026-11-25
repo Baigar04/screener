@@ -1,0 +1,28 @@
+name: Prueba del termómetro de riesgo
+# Ejecuta solo scripts/fetch_risk.py y guarda risk.json como artefacto (para revisar el cálculo sin esperar a la actualización completa).
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  riesgo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Universo y amplitud publicados (para concentración y amplitud)
+        run: |
+          for f in universe.json amplitud.json; do curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; done
+      - name: Termómetro
+        env:
+          SEC_UA: ${{ secrets.SEC_UA }}
+        run: python scripts/fetch_risk.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: risk
+          path: data/risk.json

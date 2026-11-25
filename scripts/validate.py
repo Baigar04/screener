@@ -190,6 +190,22 @@ def v_amplitud(d, prev):
     return ", ".join(f"{k}: {a.get('sobre_sma50')} % > SMA50" for k, a in R.items())
 
 
+def v_risk(d, prev):
+    check_generado(d, "risk.json")
+    T = d.get("termometro") or {}
+    a = T.get("actual") or {}
+    check(finite(a.get("p")) and 0 <= a["p"] <= 100, f"risk.json: probabilidad fuera de 0-100 ({a.get('p')!r})")
+    check(finite(a.get("base")) and 0 < a["base"] < 100, "risk.json: tasa base no válida")
+    check(isinstance(T.get("hist"), list) and len(T["hist"]) >= 60, "risk.json: histórico corto")
+    S = T.get("senales") or []
+    check(sum(1 for s in S if s.get("modelo")) >= 5, "risk.json: menos de 5 señales en el modelo")
+    for s in S:
+        check(s.get("fuente") and s.get("ultimo", {}).get("fecha"), f"risk.json: señal {s.get('k')} sin fuente o fecha")
+    if prev and (prev.get("termometro") or {}).get("hist"):
+        check(len(T["hist"]) >= 0.9 * len(prev["termometro"]["hist"]), "risk.json: ha perdido histórico")
+    return f"{a.get('p')} % ({a.get('regimen')}) · base {a.get('base')} % · {'validado' if a.get('validado') else 'sin ventaja demostrada'}"
+
+
 def v_insiders(d, prev):
     check_generado(d, "insiders.json")
     O, P = d.get("ops"), d.get("por_valor")
@@ -244,6 +260,7 @@ RULES = {
     "score_diario.json": v_score_daily,
     "amplitud.json": v_amplitud,
     "insiders.json": v_insiders,
+    "risk.json": v_risk,
     "smart.json": v_smart,
     "lab.json": v_lab,
     "fund_cache.json": v_dict("fund_cache.json"),
