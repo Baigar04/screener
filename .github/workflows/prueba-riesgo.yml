@@ -7,7 +7,7 @@ permissions:
 jobs:
   riesgo:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,8 +27,11 @@ jobs:
         run: |
           mkdir -p data/p
           python scripts/fetch_geo.py
+      - name: Stress tests
+        run: python scripts/fetch_stress.py
       - name: Copia legible en el registro (gzip + base64)
         run: |
+          [ -f data/stress.json ] && echo "STRESSB64:$(gzip -9c data/stress.json | base64 -w0)" || true
           echo "RISKB64:$(gzip -9c data/risk.json | base64 -w0)"
           [ -f data/geo.json ] && echo "GEOB64:$(gzip -9c data/geo.json | base64 -w0)" || true
       - uses: actions/upload-artifact@v4

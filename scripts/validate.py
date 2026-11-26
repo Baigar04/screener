@@ -222,6 +222,24 @@ def v_geo(d, prev):
     return f"GPR {g.get('valor')} (p{g.get('pct')}) · {len(d.get('paises') or [])} países · {len(d.get('pistas') or [])} pistas · {len(d.get('sens_valores') or {})} valores"
 
 
+def v_stress(d, prev):
+    check_generado(d, "stress.json")
+    E, I, V = d.get("escenarios") or [], d.get("indices") or {}, d.get("valores") or {}
+    check(len(E) >= 10, "stress.json: faltan escenarios")
+    check(len(I) >= 8, "stress.json: menos de 8 bolsas")
+    for k, x in I.items():
+        check(len(x.get("v") or []) == len(E), f"stress.json: {k} sin todos los escenarios")
+        c = (x.get("v") or [None])[0]
+        check(c is None or (finite(c) and -90 < c < 10), f"stress.json: 2008 imposible en {k}")
+    if prev:
+        check(len(V) >= 0.8 * len(prev.get("valores") or {}), "stress.json: ha perdido muchos valores")
+    for s, x in list(V.items())[:4000]:
+        check(len(x.get("v") or []) == len(E) and all(v is None or (finite(v) and -100 < v < 400) for v in x["v"]), f"stress.json: valores imposibles en {s}")
+    for e in E:
+        check(e.get("base"), f"stress.json: escenario {e.get('id')} sin base del cálculo")
+    return f"{len(E)} escenarios · {len(I)} bolsas · {len(V)} valores · {len((d.get('divisas') or {}).get('fx') or {})} divisas"
+
+
 def v_insiders(d, prev):
     check_generado(d, "insiders.json")
     O, P = d.get("ops"), d.get("por_valor")
@@ -278,6 +296,7 @@ RULES = {
     "insiders.json": v_insiders,
     "risk.json": v_risk,
     "geo.json": v_geo,
+    "stress.json": v_stress,
     "smart.json": v_smart,
     "lab.json": v_lab,
     "fund_cache.json": v_dict("fund_cache.json"),
