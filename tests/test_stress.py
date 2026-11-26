@@ -85,3 +85,15 @@ def test_scenario_values_estima_crisis_sin_cotizacion_con_beta():
     assert q[0] == 0.5 and q[1] == 0.5 and q[2] == 1 and q[3] == 1
     assert 1.2 < b < 1.8
     assert (v[0] < 0) == (icri[0] < 0)
+
+
+def test_saltos_de_datos_no_producen_efectos_imposibles():
+    rng = np.random.default_rng(4)
+    ms = [f"{2007 + i // 12}-{i % 12 + 1:02d}" for i in range(120)]
+    mc = {m: 100 * math.exp(0.01 * i) for i, m in enumerate(ms)}
+    mc[ms[60]] = mc[ms[60]] * 100          # pence frente a libras en un mes
+    r = S.mlogret(mc, ms[-1])
+    assert ms[60] not in r and ms[61] not in r
+    x = rng.normal(0, 1, 120)
+    y = 80 * x
+    assert S.effect(dict(zip(ms, y)), dict(zip(ms, x)), 2.0) is None    # efecto > 300 %: se descarta

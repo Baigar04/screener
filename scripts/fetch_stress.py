@@ -122,7 +122,9 @@ def mlogret(mc, last_complete):
         y0, m0 = map(int, ms[i - 1].split("-"))
         y1, m1 = map(int, ms[i].split("-"))
         if (y1 * 12 + m1) - (y0 * 12 + m0) == 1 and a > 0 and b > 0:
-            out[ms[i]] = math.log(b / a) * 100
+            r = math.log(b / a) * 100
+            if abs(r) <= 100:   # saltos de más del 170 % / −63 % en un mes: cambio de unidad o error de datos
+                out[ms[i]] = r
     return out
 
 
@@ -150,7 +152,8 @@ def effect(ret, fac, shock, min_n=MIN_MESES):
     if x.std() == 0:
         return None
     b, _, r2 = ols(y, x)
-    return round(simple(b[1] * shock), 1), round(r2, 3), len(ms)
+    e = simple(b[1] * shock)
+    return (round(e, 1), round(r2, 3), len(ms)) if -90 < e < 300 else None
 
 
 def effect_asym(ret, z, min_n=MIN_MESES):
@@ -164,7 +167,8 @@ def effect_asym(ret, z, min_n=MIN_MESES):
     if X[:, 0].std() == 0 or X[:, 1].std() == 0:
         return None, None
     b, _, r2 = ols(y, X)
-    return (round(simple(b[1] * 2), 1), round(r2, 3), len(ms)), (round(simple(b[2] * -2), 1), round(r2, 3), len(ms))
+    ok = lambda e: (round(e, 1), round(r2, 3), len(ms)) if -90 < e < 300 else None  # noqa: E731
+    return ok(simple(b[1] * 2)), ok(simple(b[2] * -2))
 
 
 def beta(ret, idx, min_n=24):
@@ -318,8 +322,9 @@ def scenario_values(wk, fac, sig, idx_ret, idx_crisis, mkey):
             v.append(r)
             q.append(1)
         elif b is not None and idx_crisis and idx_crisis[i] is not None:
-            v.append(round(simple(b * math.log(1 + idx_crisis[i] / 100) * 100), 1))
-            q.append(0.5)
+            est = simple(b * math.log(1 + idx_crisis[i] / 100) * 100)
+            v.append(round(est, 1) if -99 < est < 400 else None)
+            q.append(0.5 if -99 < est < 400 else None)
         else:
             v.append(None)
             q.append(None)
@@ -405,6 +410,9 @@ def main():
             continue
         mk = mercado_de(r)
         v, q, _, b = scenario_values(W[s], fac, sig, idx_ret.get(mk), idx_cri.get(mk), mk)
+        for j, x in enumerate(v):   # última barrera: nada fuera de lo posible llega a la web
+            if x is not None and not -99 < x < 400:
+                v[j], q[j] = None, None
         if all(x is None for x in v):
             continue
         V[s] = {"m": mk, "v": v, "q": q, "b": round(b, 2) if b is not None else None}
