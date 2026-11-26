@@ -59,7 +59,7 @@ def fichas(pg, base):
     check("«adelante» la vuelve a abrir", True)
 
 
-AREAS = {"hoy": "hoy", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "riesgo": "contexto", "geopolitica": "contexto",
+AREAS = {"hoy": "hoy", "pulso": "mercado", "sectores": "mercado", "adelantarse": "mercado", "riesgo": "contexto", "geopolitica": "contexto", "escenarios": "cartera",
          "screener": "screener", "comparar": "screener", "smart": "screener",
          "seguimiento": "cartera", "carteras": "cartera", "laboratorio": "investigacion", "diario": "investigacion"}
 
@@ -190,11 +190,11 @@ def fase5(pg, base):
     check("tema oscuro por defecto", pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(13, 15, 18)")
 
 
-FSECS = ["resumen", "grafico", "fund", "valoracion", "factores", "resultados", "comparables", "smartm", "invest"]
+FSECS = ["resumen", "grafico", "fund", "valoracion", "factores", "resultados", "comparables", "smartm", "riesgo", "invest"]
 
 
 def fase6(pg, base):
-    """Fase 6: ficha 2.0 con 9 apartados, tarjetas con fuente y fecha, migas «Screener / Empresas / X»."""
+    """Fase 6: ficha 2.0 con 10 apartados (fase 3: Riesgo y escenarios), tarjetas con fuente y fecha, migas «Screener / Empresas / X»."""
     pg.set_viewport_size({"width": 1440, "height": 900})
     for sym in ("AAPL", "SAN.MC"):
         pg.goto(base + "#/empresa/" + sym)
@@ -202,7 +202,7 @@ def fase6(pg, base):
         pg.wait_for_timeout(1500)
         side = [b.get_attribute("data-fsec") for b in pg.locator("#side button").all()]
         crumbs = pg.text_content("#crumbs")
-        check(f"{sym}: barra lateral con los 9 apartados", side == FSECS, " · ".join(x or "?" for x in side))
+        check(f"{sym}: barra lateral con los 10 apartados", side == FSECS, " · ".join(x or "?" for x in side))
         check(f"{sym}: migas Screener / Empresas / empresa y área Screener", "Empresas" in crumbs and pg.get_attribute("#nav .on", "data-area") == "screener", crumbs.strip()[:80])
         srcs = [x.text_content() for x in pg.locator("#view .fs > h3 > span").all()]
         check(f"{sym}: bloques con fuente y fecha", sum(any(m in t for m in ("SEC", "Yahoo")) for t in srcs) >= 2 and pg.locator("#view .fsrc").count() >= 1, " · ".join(srcs[:3]))
@@ -219,7 +219,7 @@ def fase6(pg, base):
             pg.wait_for_timeout(1200)
             if not pg.url.endswith(f"/{k}") or "No se pudo dibujar" in pg.text_content("#view"):
                 bad.append(k)
-        check(f"{sym}: los 9 apartados abren sin error", not bad, ", ".join(bad))
+        check(f"{sym}: los 10 apartados abren sin error", not bad, ", ".join(bad))
     pg.goto(base + "#/empresa/AAPL/tesis")
     pg.wait_for_timeout(1500)
     check("enlace antiguo #/empresa/X/tesis → Valoración", pg.evaluate("window.SCR.S.ficha && window.SCR.S.ficha.tab") == "valoracion")
@@ -431,6 +431,36 @@ def geopolitica(pg, base):
     check("geopolítica: móvil sin desborde horizontal", pg.evaluate("document.documentElement.scrollWidth") <= 392)
 
 
+def escenarios(pg, base):
+    """Fase 3: Cartera › Escenarios (propuesta, escenarios, mapa de calor, divisas) y Ficha › Riesgo y escenarios."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    uni = pg.evaluate("fetch('data/universe.json').then(r => r.json()).then(u => u.filas.slice(0, 6).map(r => r.sym))")
+    pg.goto(base + "#/hoy")
+    pg.evaluate("(s) => localStorage.setItem('seguimiento', JSON.stringify(s))", uni)
+    pg.goto(base + "#/escenarios")
+    pg.reload()
+    try:
+        pg.wait_for_selector(".st-hm", timeout=40000)
+    except Exception:  # noqa: BLE001
+        check("escenarios: página", False, "sin mapa de calor (¿falta data/stress.json?)")
+        return
+    pg.wait_for_timeout(2500)
+    t = pg.text_content("#view") or ""
+    check("escenarios: indicadores, propuesta y alternativas", all(x in t for x in ("Peor escenario", "CVaR", "Propuesta", "Por qué", "Invalida si", "Alternativas evaluadas")))
+    check("escenarios: cartera frente al índice, peor caso y mapa", "Quién explica el peor caso" in t and pg.locator(".st-hm tbody tr").count() >= 4)
+    check("escenarios: riesgo de divisas con coste de cubrir", "Riesgo de divisas" in t and "Cubrir / año" in t)
+    check("escenarios: lectura conjunta", "Lectura conjunta" in t)
+    check("escenarios: en el área Cartera", "Escenarios" in (pg.text_content(".tabsbar") or ""))
+    pg.goto(base + f"#/empresa/{uni[0]}/riesgo")
+    pg.wait_for_timeout(3500)
+    t = pg.text_content("#view") or ""
+    check("ficha: stress test con base y fiabilidad y estrés del balance", all(x in t for x in ("Stress test", "Base del cálculo", "Fiabilidad", "Estrés del balance")))
+    pg.set_viewport_size({"width": 390, "height": 844})
+    pg.goto(base + "#/escenarios")
+    pg.wait_for_timeout(3000)
+    check("escenarios: móvil sin desborde horizontal", pg.evaluate("document.documentElement.scrollWidth") <= 392)
+
+
 def diseno3(pg, base):
     """Diseño A · entrega 3: Screener de una línea, «Hoy» en rejilla, rotación sectorial nueva y atajos."""
     pg.set_viewport_size({"width": 1440, "height": 900})
@@ -476,7 +506,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica, escenarios):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

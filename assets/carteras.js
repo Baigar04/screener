@@ -17,11 +17,6 @@ const METODO_TIP = {
   sharpe: "La combinación con mejor rentabilidad por unidad de riesgo. La rentabilidad esperada es la histórica del último año reducida a la mitad hacia la media: es la más inestable de las cuatro.",
 };
 const SRC = [["top", "Top puntuación"], ["filtro", "Resultado del screener"], ["seguimiento", "Mi seguimiento"], ["comparador", "Comparador"]];
-/* Sensibilidad aproximada por sector (%). Heurística, no estimación estadística. */
-const SENS = {
-  tipos: { "Technology": -8, "Communication Services": -6, "Consumer Cyclical": -5, "Real Estate": -10, "Utilities": -7, "Healthcare": -3, "Consumer Defensive": -3, "Industrials": -4, "Basic Materials": -3, "Energy": -1, "Financial Services": 3 },
-  petroleo: { "Energy": 12, "Basic Materials": 2, "Industrials": -3, "Consumer Cyclical": -5, "Consumer Defensive": -2, "Utilities": -1, "Technology": -2, "Communication Services": -1, "Healthcare": -1, "Financial Services": 0, "Real Estate": -1 },
-};
 const pct = (v, d = 1) => (v == null || isNaN(v) ? "—" : nf(v, d) + " %");
 const spct = (v, d = 1) => (v == null || isNaN(v) ? "—" : sgn(v, d) + " %");
 const eur = (v) => (v == null ? "—" : nf(v, 0) + " €");
@@ -203,14 +198,8 @@ async function build() {
       const pxEur = x.r.moneda === "USD" && fx ? x.r.precio / fx : x.r.moneda === "EUR" ? x.r.precio : null;
       x.eur = capital * x.w; x.acc = pxEur ? Math.floor(x.eur / pxEur) : null; x.pxEur = pxEur;
     });
-    const stress = {
-      recesion: items.reduce((a, x) => a + x.w * -25 * (x.r.beta ?? 1), 0),
-      tipos: items.reduce((a, x) => a + x.w * (SENS.tipos[x.r.sector] ?? -3), 0),
-      petroleo: items.reduce((a, x) => a + x.w * (SENS.petroleo[x.r.sector] ?? 0), 0),
-      dolar: items.reduce((a, x) => a + x.w * (isUS(x.r) ? 10 : 0), 0),
-    };
     const sect = {}; items.forEach((x) => { sect[x.r.sector || "—"] = (sect[x.r.sector || "—"] || 0) + x.w * 100; });
-    C.res = { items, vol, ret: port[port.length - 1] - 100, mdd: mdd * 100, sharpe: vol ? ((port[port.length - 1] - 100) - 3) / vol : null, port, bench, dates, stress, sect, fx,
+    C.res = { items, vol, ret: port[port.length - 1] - 100, mdd: mdd * 100, sharpe: vol ? ((port[port.length - 1] - 100) - 3) / vol : null, port, bench, dates, sect, fx,
       excl: cand.length - ok.length, metodo: C.cfg.metodo,
       risk: (() => { try { return riskCalc(ok, oks, w, bus, beu, C.cfg.capital); } catch (er) { console.warn(er); return null; } })() };
   } catch (e) { C.err = e.message; }
@@ -257,13 +246,21 @@ function renderBuild() {
     ${r.items.map((x) => `<tr data-sym="${esc(x.r.sym)}"><td><b>${esc(x.r.sym)}</b> <span class="nm">${esc((x.r.nombre || "").slice(0, 20))}</span></td><td class="num">${pct(x.w * 100)}</td><td class="num">${eur(x.eur)}</td><td class="num">${x.acc ?? "—"}</td><td class="num">${x.r.score ?? "—"}</td><td class="num">${pct(x.vol, 0)}</td><td class="num">${pct(x.rc, 0)}</td></tr>`).join("")}
     </tbody></table></div>${r.excl ? `<div class="method">${r.excl} candidato(s) excluido(s) por falta de histórico.</div>` : ""}</div>
     <div><div class="box"><b>Evolución simulada 1 año (base 100)</b>${line(r.dates, r.bench ? [r.port, r.bench] : [r.port], ["var(--accent)", "var(--faint)"], r.bench ? ["Cartera", "Índices de referencia (S&P 500 y Euro Stoxx 50 según peso por región)"] : ["Cartera"])}</div>
-    <div class="box"><b>Stress test (aproximado)</b><table><tbody>
-      ${[["Recesión: bolsa −25 %", r.stress.recesion, "Beta de cada valor × −25 %."], ["Tipos +100 pb", r.stress.tipos, "Sensibilidad típica de cada sector (heurística)."],
-        ["Petróleo +30 %", r.stress.petroleo, "Sensibilidad típica de cada sector (heurística)."], ["Dólar +10 % frente al euro", r.stress.dolar, "Efecto cambiario para un inversor en euros."]]
-        .map(([t, v, d]) => `<tr><td data-tip="${esc(d)}">${t}</td><td class="num chg ${cls(v)}">${spct(v)}</td><td class="num">${eur(C.cfg.capital * v / 100)}</td></tr>`).join("")}</tbody></table></div>
+    <div class="box">${stressBox(r)}</div>
     <div class="bar" style="margin-top:12px"><button class="icon-btn primary" data-csave="1">Guardar cartera</button><button class="icon-btn" data-ccsv="1">Exportar CSV</button></div></div></div>
     ${riskHtml(r.risk)}`;
   return h;
+}
+/* stress test con las sensibilidades estimadas (data/stress.json, fase 3); el detalle completo está en Cartera › Escenarios */
+function stressBox(r) {
+  const S = window.SCRStress;
+  if (!S) return "<b>Stress test</b><div class=\"hint\">Módulo no disponible.</div>";
+  if (S.data() === undefined) { S.ensure(); return '<b>Stress test</b><div class="skel" style="height:120px"></div>'; }
+  if (!S.data()) return '<b>Stress test</b><div class="hint">Los stress tests llegan con la próxima actualización automática.</div>';
+  const pos = r.items.map((x) => ({ sym: x.r.sym, w: x.w, r: x.r })), K = S.calc({ pos }, r.items.some((x) => !isUS(x.r)) && !r.items.some((x) => isUS(x.r)) ? "sx5e" : "sp500"), E = S.escenarios();
+  const pick = ["c2008", "c2022", "tipos", "petroleo", "credito", "dolar", "rusia", "capex"].map((id) => E.findIndex((e) => e.id === id)).filter((j) => j >= 0);
+  return `<b>Stress test</b><table><tbody>${pick.map((j) => `<tr><td data-tip="${esc(E[j].desc)}">${esc(E[j].etiqueta || E[j].nombre)}</td><td class="num chg ${cls(K.port[j])}">${spct(K.port[j])}</td><td class="num">${eur(C.cfg.capital * K.port[j] / 100)}</td></tr>`).join("")}</tbody></table>
+    <div class="method">En euros, con las sensibilidades estimadas de cada valor (crisis reales; choques por regresión con su R²). Guarda la cartera para ver todos los escenarios, quién explica el peor caso y una propuesta en Cartera › Escenarios.</div>`;
 }
 /* ---------- carteras guardadas ---------- */
 /* dividendos cobrados desde que se creó la cartera (fecha ex posterior), por acción y en la moneda del valor */

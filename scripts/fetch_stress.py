@@ -23,7 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fetch_risk import MERCADOS, fred, log  # noqa: E402
+from fetch_risk import MERCADOS, ecb, fred, log  # noqa: E402
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 NOW = datetime.now(timezone.utc)
@@ -56,8 +56,9 @@ PAIS_MERCADO = {"United States": "sp500", "Spain": "ibex", "United Kingdom": "ft
 DIVISAS = ["USD", "GBP", "CHF", "SEK", "NOK", "DKK", "JPY", "HKD"]
 TIPO3M = {"EUR": "IR3TIB01EZM156N", "USD": "IR3TIB01USM156N", "GBP": "IR3TIB01GBM156N", "CHF": "IR3TIB01CHM156N",
           "SEK": "IR3TIB01SEM156N", "NOK": "IR3TIB01NOM156N", "DKK": "IR3TIB01DKM156N", "JPY": "IR3TIB01JPM156N"}
-# Veredictos: decididos antes de ver los datos. Crisis (varios meses) y choques (un mes) con umbrales distintos.
-UMBRAL = {"crisis": {"rompe": (-35, -15), "tension": (-15, -5)}, "choque": {"rompe": (-15, -8), "tension": (-6, -3)}}
+# Veredictos frente a su bolsa (clasificación para leer la tabla, no un modelo de previsión): «Rompe» si empeora mucho a su
+# bolsa o sufre una caída catastrófica; «Tensión» si empeora claramente a su bolsa. Crisis (varios meses) y choques (un mes).
+UMBRAL = {"crisis": {"rompe": (-60, -15), "tension": (None, -5)}, "choque": {"rompe": (-20, -8), "tension": (None, -3)}}
 
 
 # ---------------------------------------------------------------- utilidades puras (con tests)
@@ -182,7 +183,7 @@ def veredicto(v, ref, tipo):
     u = UMBRAL[tipo]
     if v <= u["rompe"][0] or d <= u["rompe"][1]:
         return "Rompe"
-    if v <= u["tension"][0] or d <= u["tension"][1]:
+    if (u["tension"][0] is not None and v <= u["tension"][0]) or d <= u["tension"][1]:
         return "Tensión"
     return "Aguanta"
 
@@ -277,14 +278,30 @@ def factores(today):
     return {k: {m: v for m, v in s.items() if m <= lc} for k, s in F.items()}, meta
 
 
-def tipos_cortos():
+# si la serie de la OCDE va con más de 3 meses de retraso, una fuente más fresca del mismo plazo o del día
+TIPO3M_ALT = {"EUR": ("ecb", "FM.M.U2.EUR.RT.MM.EURIBOR3MD_.HSTA", "Euríbor a 3 meses (BCE)",
+                      "https://data.ecb.europa.eu/data/datasets/FM/FM.M.U2.EUR.RT.MM.EURIBOR3MD_.HSTA"),
+              "GBP": ("fred", "IUDSOIA", "SONIA (Banco de Inglaterra vía FRED)", "https://fred.stlouisfed.org/series/IUDSOIA")}
+
+
+def tipos_cortos(today=None):
+    today = today or NOW.date()
     out = {}
     for c, sid in TIPO3M.items():
         try:
             o = fred(sid)
-            out[c] = {"valor": round(o[-1][1], 2), "fecha": o[-1][0].isoformat()[:7], "url": f"https://fred.stlouisfed.org/series/{sid}"}
+            out[c] = {"valor": round(o[-1][1], 2), "fecha": o[-1][0].isoformat()[:7], "url": f"https://fred.stlouisfed.org/series/{sid}",
+                      "fuente": "OCDE, interbancario a 3 meses (FRED)"}
         except Exception as e:  # noqa: BLE001
             ERRORS.append({"fuente": "FRED", "serie": sid, "motivo": str(e)[:150]})
+        cur = out.get(c)
+        if c in TIPO3M_ALT and (cur is None or (today - date.fromisoformat(cur["fecha"] + "-01")).days > 100):
+            kind, key, nom, url = TIPO3M_ALT[c]
+            try:
+                o = ecb(key) if kind == "ecb" else fred(key)
+                out[c] = {"valor": round(o[-1][1], 2), "fecha": o[-1][0].isoformat()[:7], "url": url, "fuente": nom}
+            except Exception as e:  # noqa: BLE001
+                ERRORS.append({"fuente": nom, "serie": key, "motivo": str(e)[:150]})
     return out
 
 

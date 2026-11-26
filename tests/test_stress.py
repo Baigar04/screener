@@ -59,11 +59,13 @@ def test_effect_asym_distingue_escalada_y_distension():
 
 
 def test_veredicto_reglas_fijas():
-    assert S.veredicto(-40, -45, "crisis") == "Rompe"
+    assert S.veredicto(-40, -45, "crisis") == "Aguanta"          # cae, pero menos que su bolsa
+    assert S.veredicto(-62, -65, "crisis") == "Rompe"            # caída catastrófica
     assert S.veredicto(-30, -10, "crisis") == "Rompe"            # 20 pp peor que su bolsa
-    assert S.veredicto(-16, -20, "crisis") == "Tensión"
+    assert S.veredicto(-26, -20, "crisis") == "Tensión"
     assert S.veredicto(-5, -10, "crisis") == "Aguanta"
     assert S.veredicto(-4, -1, "choque") == "Tensión"
+    assert S.veredicto(-21, -25, "choque") == "Rompe"
     assert S.veredicto(2, -3, "choque") == "Aguanta"
     assert S.veredicto(None, -3, "choque") is None
 

@@ -13,6 +13,7 @@ const NAV = [
   ["comparar", "Comparar", true],
   ["seguimiento", "Watchlist", true],
   ["carteras", "Carteras", true],
+  ["escenarios", "Escenarios", true],
   ["adelantarse", "Adelantarse", true],
   ["laboratorio", "Laboratorio", true],
   ["diario", "Diario de decisiones", true],
@@ -24,13 +25,13 @@ const AREAS = [
   ["mercado", "Mercado", ["pulso", "sectores", "adelantarse"]],
   ["contexto", "Contexto", ["riesgo", "geopolitica"]],
   ["screener", "Screener", ["screener", "comparar", "smart"]],
-  ["cartera", "Cartera", ["seguimiento", "carteras"]],
+  ["cartera", "Cartera", ["seguimiento", "carteras", "escenarios"]],
   ["investigacion", "Investigación", ["diario", "laboratorio"]],
 ];
 const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
 /* Ficha de empresa (página propia, Fase 6): 9 apartados en la barra lateral */
 const FSECS = [["resumen", "Resumen"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["valoracion", "Valoración"], ["factores", "Factores"],
-  ["resultados", "Resultados"], ["comparables", "Comparables"], ["smartm", "Smart money"], ["invest", "Investigación"]];
+  ["resultados", "Resultados"], ["comparables", "Comparables"], ["smartm", "Smart money"], ["riesgo", "Riesgo y escenarios"], ["invest", "Investigación"]];
 /* enlaces antiguos de pestañas → apartado nuevo */
 const FSEC_OLD = { tesis: "valoracion", noticias: "resultados", pers: "smartm", comparar: "comparables" };
 const fsec = (t) => (FSECS.some((x) => x[0] === t) ? t : FSEC_OLD[t] || "resumen");
@@ -167,6 +168,7 @@ const ICONS = {
 ICONS.mercado = ICONS.pulso; ICONS.watchlists = "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"; ICONS.seguimiento = ICONS.watchlists;
 ICONS.geopolitica = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18";
 ICONS.cartera = "M3 7h18v13H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18";
+ICONS.escenarios = "M3 20h18M6 16v-5M10 16V8M14 16v-3M18 16V5";
 ICONS.contexto = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9M12 3c-2.5 2.5-3.8 5.5-3.8 9s1.3 6.5 3.8 9";
 ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4";
 ICONS.diario = "M6 3h10l3 3v15H6zM9 8h7M9 12h7M9 16h4";

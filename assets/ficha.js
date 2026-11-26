@@ -642,6 +642,49 @@ function secComparables(c) {
       <div class="method">Misma industria (si hay menos de 4, se completa con su sector), ordenadas por tamaño más parecido. Pulsa una fila para abrir su ficha.</div>`
     : '<div class="nodata">Sin comparables en el universo del screener.</div>', `${P.length} valores`);
 }
+/* ---------- fase 3 · Riesgo y escenarios: stress test (stress.js) y estrés del balance con beneficio −30 % ---------- */
+function balanceStress(c) {
+  const { r } = c, fin = FIN_SECT.has(r.sector), mmv = (v) => (v == null ? "—" : `${nf(v / 1e6, 0)} M`);
+  if (fin) return { html: '<div class="hint">No aplica en bancos y aseguradoras: su deuda es su materia prima y el estrés se mide con capital y morosidad, que no están en las fuentes públicas usadas.</div>', ver: null };
+  let cash, v1 = null, v2 = null, it = null, ebit = null, fcf = null, debt = null, src, when;
+  if (c.us && c.fy.length) {
+    const L = c.fy[c.fy.length - 1], g = (k) => (L[FY[k]] != null ? L[FY[k]] : null);
+    cash = g("caja"); v1 = g("v1"); v2 = g("v2"); it = g("int"); ebit = g("ebit"); debt = g("deuda");
+    fcf = g("cfo") != null && g("capex") != null ? g("cfo") - g("capex") : null;
+    src = `SEC, 10-K del ejercicio ${L[0].slice(0, 4)}`; when = L[1];
+  } else {
+    cash = r.caja ?? null; debt = r.deuda ?? null; fcf = r.fcf_ttm ?? null;
+    const yrs = Object.keys(c.d?.anual || {}).sort(), A = yrs.length ? c.d.anual[yrs[yrs.length - 1]] : null;
+    ebit = A?.ebitda ?? null;
+    src = `Yahoo Finance, cuentas anuales a ${fmtDate(r.fecha_fund)} (EBITDA en lugar de EBIT; sin vencimientos ni intereses)`; when = r.fecha_fund;
+  }
+  if (cash == null && debt == null && ebit == null) return { html: '<div class="hint">Sin datos de balance suficientes.</div>', ver: null };
+  const ebitS = ebit != null ? ebit * 0.7 : null;
+  const fcfS = fcf != null && ebit != null ? fcf - 0.3 * Math.max(0, ebit) * 0.75 : fcf;
+  const cov = ebit != null && it > 0 ? ebit / it : null, covS = ebitS != null && it > 0 ? ebitS / it : null;
+  const need = v1 != null && fcfS != null ? v1 - fcfS : null;
+  const months = need != null ? (need <= 0 ? Infinity : cash != null ? cash / (need / 12) : null) : null;
+  const nd = debt != null ? debt - (cash || 0) : null, yrsND = nd != null && fcfS > 0 ? nd / fcfS : null;
+  let ver;
+  if (c.us && v1 != null) ver = (covS != null && covS < 1.5) || (months != null && months < 12) ? "Rompe" : (covS != null && covS < 3) || (months != null && months < 24) ? "Tensión" : "Aguanta";
+  else ver = nd == null ? null : nd <= 0 ? "Aguanta" : fcfS == null ? null : fcfS <= 0 ? "Rompe" : yrsND > 6 ? "Tensión" : "Aguanta";
+  const row = (t, v, cls = "") => `<tr><td>${t}</td><td class="num ${cls}">${v}</td></tr>`;
+  const html = `<table class="rsk-kv st-bal">${row("Caja e inversiones a corto", mmv(cash))}${debt != null ? row("Deuda financiera", mmv(debt)) : ""}
+    ${v1 != null ? row("Vencimientos de deuda a 12 meses", mmv(v1)) : ""}${v2 != null ? row("Vencimientos el 2.º año", mmv(v2)) : ""}
+    ${row(c.us ? "Flujo de caja libre → con beneficio −30 %" : "Flujo de caja libre 12 m → con beneficio −30 %", `${mmv(fcf)} → ${mmv(fcfS)}`, fcfS != null && fcfS < 0 ? "neg" : "")}
+    ${cov != null ? row("Cobertura de intereses (EBIT / intereses)", `${nf(cov, 1)}× → ${nf(covS, 1)}×`, covS < 3 ? "warn" : "pos") : ""}
+    ${months != null ? row("Meses de autonomía sin financiación", months === Infinity ? "no la necesita" : months > 36 ? "> 36" : nf(months, 0), months < 12 ? "neg" : months < 24 ? "warn" : "pos") : yrsND != null ? row("Años para pagar la deuda neta con el FCF estresado", nf(yrsND, 1), yrsND > 6 ? "warn" : "pos") : ""}</table>
+    <div class="st-verd">${window.SCRStress ? `<span class="ui-pill ${{ Rompe: "ko", "Tensión": "te", Aguanta: "ok" }[ver] || "nu"}">${ver || "s. d."}</span>` : ""}
+    <span>${ver === "Aguanta" ? (months === Infinity || (nd != null && nd <= 0) ? "genera o tiene caja de sobra para su deuda aun con el beneficio −30 %" : "la caja y el flujo cubren la deuda con margen aun con el beneficio −30 %") : ver === "Tensión" ? "aguanta, pero con poco margen si el beneficio cae un 30 %" : ver === "Rompe" ? "con el beneficio −30 % dependería de refinanciar en menos de un año o no cubriría sus intereses" : "faltan datos para un veredicto"}</span></div>
+    <div class="fsrc">${esc(src)}${when ? ` · ${fmtDate(when)}` : ""} · beneficio −30 % = el resultado operativo cae un 30 % y el flujo de caja libre cae esa cantidad tras impuestos (25 %)</div>`;
+  return { html, ver };
+}
+function secRiesgo(c) {
+  const B = balanceStress(c);
+  const bal = `<section class="rsk-p"><h3>Estrés del balance <span>beneficio −30 %</span></h3>${B.html}
+    ${H.S.mode === "x" ? `<div class="rsk-exp"><b>Reglas.</b> Con datos de la SEC: «Rompe» si con el beneficio −30 % la cobertura de intereses baja de 1,5× o la caja dura menos de 12 meses frente a los vencimientos que el flujo no cubre; «Tensión» por debajo de 3× o de 24 meses. Sin vencimientos (Yahoo): «Rompe» si el flujo estresado es negativo con deuda neta; «Tensión» si tardaría más de 6 años en pagar la deuda neta.</div>` : ""}</section>`;
+  return window.SCRStress ? window.SCRStress.fichaHTML(c.r, bal) : `<div class="err-box">Módulo de stress tests no disponible.</div>`;
+}
 function secInvest(c) {
   const { r, d } = c, links = [];
   if (c.sec?.cik) links.push(`<a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${c.sec.cik}&type=10-K" target="_blank" rel="noopener">Informes en la SEC (EDGAR)</a>`);
@@ -661,7 +704,7 @@ function render(F) {
   if (!c) return `<div class="fp"><div class="soon-box"><h3>${esc(F.sym)}: valor no encontrado</h3>${esc(F.sym)} no está en el universo del screener (${k.E.uni.filas.length} valores). Busca otro ticker con el buscador de arriba.</div></div>`;
   if (!c.d) return `<div class="fp">${head(c)}<div class="skel" style="height:110px;margin-top:12px"></div><div class="skel" style="height:260px;margin-top:12px"></div></div>`;
   const body = { resumen: secResumen, grafico: () => `<div id="fchart" class="fchart"></div>`, fund: secFund, valoracion: secValoracion, factores: secFactores,
-    resultados: secResultados, comparables: secComparables, smartm: () => (window.SCRSmart ? window.SCRSmart.persTab(F.sym) : '<div class="err-box">Módulo de smart money no disponible.</div>'), invest: secInvest }[F.tab] || secResumen;
+    resultados: secResultados, comparables: secComparables, smartm: () => (window.SCRSmart ? window.SCRSmart.persTab(F.sym) : '<div class="err-box">Módulo de smart money no disponible.</div>'), riesgo: secRiesgo, invest: secInvest }[F.tab] || secResumen;
   let html;
   try { html = body(c); } catch (e) { console.error(e); html = `<div class="err-box">No se pudo dibujar este apartado: ${esc(e.message)}</div>`; }
   return `<div class="fp" data-sec="${esc(F.tab)}">${head(c)}<div class="fp-body">${html}</div></div>`;
