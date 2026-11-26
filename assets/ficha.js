@@ -644,7 +644,7 @@ function secComparables(c) {
 }
 /* ---------- fase 3 · Riesgo y escenarios: stress test (stress.js) y estrés del balance con beneficio −30 % ---------- */
 function balanceStress(c) {
-  const { r } = c, fin = FIN_SECT.has(r.sector), mmv = (v) => (v == null ? "—" : `${nf(v / 1e6, 0)} M`);
+  const { r } = c, fin = FIN_SECT.has(r.sector), mmv = (v) => (v == null ? "—" : `${nf(v / 1e6, 0)} M ${esc(c.cur || "")}`);
   if (fin) return { html: '<div class="hint">No aplica en bancos y aseguradoras: su deuda es su materia prima y el estrés se mide con capital y morosidad, que no están en las fuentes públicas usadas.</div>', ver: null };
   let cash, v1 = null, v2 = null, it = null, ebit = null, fcf = null, debt = null, src, when;
   if (c.us && c.fy.length) {

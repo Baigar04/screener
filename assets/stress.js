@@ -19,7 +19,7 @@ async function ensure() {
 const X = () => H.S.mode === "x";
 const exp = (t) => (X() ? `<div class="rsk-exp">${t}</div>` : "");
 const s0 = (v) => (Math.abs(v) < 0.5 ? "0" : sgn(v, 0));
-const pc = (v, d = 1) => (v == null || isNaN(v) ? "—" : `${sgn(v, d)} %`);
+const pc = (v, d = 1) => (v == null || isNaN(v) ? "—" : Math.abs(v) < 0.5 * 10 ** -d ? "0 %" : `${sgn(v, d)} %`);
 const eur = (v) => (v == null || isNaN(v) ? "—" : `${v < 0 ? "−" : ""}${nf(Math.abs(v), 0)} €`);
 const E = () => R.d?.escenarios || [];
 const NC = () => E().filter((e) => e.tipo === "crisis").length;
@@ -354,7 +354,7 @@ function render() {
         ${effRow("Escenarios en tensión", b.nT, a.nT, (v) => `${v} de ${n}`, (x, y) => y < x)}
         ${effRow("Peso que rompe en ≥ 3", b.wR, a.wR, (v) => nf(v, 0) + " %", (x, y) => y < x)}
         ${effRow("Dividendo", b.div, a.div, (v) => nf(v, 1) + " %", (x, y) => y > x)}
-        ${M.tipo === "reducir" ? `<tr><td>Coste · ${M.orders.length} órdenes</td><td class="num"></td><td class="num">≈ ${eur(M.cost)} · ${nf((M.cost / M.capRef) * 100, 2)} %${P.capital ? "" : " sobre 10.000 €"}</td></tr>` : ""}
+        ${M.tipo === "reducir" ? `<tr><td>Coste · ${M.orders.length} órdenes</td><td class="num"></td><td class="num">≈ ${eur(M.cost)}<br><small class="st-fa">${nf((M.cost / M.capRef) * 100, 2)} %${P.capital ? "" : " de 10.000 €"}</small></td></tr>` : ""}
         ${M.tipo === "cubrir" ? `<tr><td>Coste de cubrir</td><td class="num"></td><td class="num">${nf(M.hcost, 2)} % al año</td></tr>` : ""}
       </tbody></table></div>
       <div><div class="st-alt-h">Alternativas evaluadas y descartadas</div><table class="rsk-kv st-kv">${PR.alts.map((x) => `<tr><td>${esc(x.t)}</td><td>${esc(x.r)}</td></tr>`).join("")}</table>

@@ -1297,7 +1297,9 @@ body.one-sec .tabsbar #side{visibility:hidden}
 @media (max-width:1100px){.st-ficha,.st-2,.st-prop-g{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:640px){.st-cr{grid-template-columns:90px minmax(0,1fr) 64px}.st-bc{display:none}}
 .st-kv td,.st-kv td:last-child{text-align:left!important}
-.st-prop .rsk-t td:first-child{width:46%;white-space:nowrap}
+.st-prop .rsk-t{table-layout:fixed}
+.st-prop .rsk-t td:first-child,.st-prop .rsk-t th:first-child{width:50%}
+.st-prop .rsk-t td,.st-prop .rsk-t th{white-space:normal}
 .st-prop .rsk-t small{font-size:11px}
 .st-tbl td:nth-child(6),.st-tbl td:nth-child(7){white-space:nowrap}
 @media (max-width:640px){.st-prop .rsk-t td:first-child{white-space:normal}.st-hm td{min-width:44px}}
