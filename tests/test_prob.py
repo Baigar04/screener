@@ -67,3 +67,11 @@ def test_examen_sin_mirar_el_futuro_y_detecta_momento():
     # cada año se ajusta solo con muestras cuyo resultado ya se conocía: ninguna previsión usa su propio resultado
     R = P.resumen_mercado(E)
     assert R["meses"] >= 60 and R["auc"] > 0.5 and len(R["deciles"]) == 10
+
+
+def test_semanas_con_festivo_se_alinean_al_viernes():
+    d0 = date(2020, 1, 6)
+    W = {"A": [(d0 + timedelta(weeks=i), 1.0 + i) for i in range(10)],
+         "B": [(d0 + timedelta(weeks=i, days=1 if i == 3 else 0), 2.0 + i) for i in range(10)]}   # semana 4 empieza en martes
+    F = P.weekly_frame(W, ["A", "B"])
+    assert len(F) == 10 and F.notna().all().all()

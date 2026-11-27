@@ -403,6 +403,7 @@ const COLS = [
   ["veredicto", "Técnico", 0, (v) => (v ? `<span class="tec tec-${v === "Alcista" ? "al" : v === "Bajista" ? "ba" : "ne"}">${v}</span>` : "—")],
   ["resultados", "Resultados", 1, (v) => (v ? fmtDate(v) : "—")],
   ["n_smart", "Superinv.", 1, (v) => (v == null ? "—" : v || "·")],
+  ["prob", "Prob. 12 m", 1, (v, r) => (v == null ? "—" : `<span class="${r.prob_ok ? "" : "hint"}" data-tip="${r.prob_ok ? "Probabilidad de batir a su índice con dividendos en 12 meses (validada en el examen)" : "Sin ventaja demostrada en su mercado: cifra orientativa; la útil es la tasa base (ficha › Probabilidad y riesgo)"}">${nf(v, 0)} %</span>`)],
   ["f_fs", "F-score", 9, (v) => (v == null ? "—" : nf(v, 1))], ["f_gp", "Rent. bruta", 9, (v) => pct(v)], ["f_ag", "Crec. activos", 9, spct],
   ["f_acr", "Devengos", 9, spct], ["f_nsi", "Emisión acciones", 9, spct], ["f_sue", "Sorpresa BN", 9, (v) => (v == null ? "—" : sgn(v, 1))],
 ];

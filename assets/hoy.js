@@ -258,14 +258,13 @@ function avisos(uni, Q) {
 function valores(uni, Q) {
   const w = Q.watch();
   if (!w.length) return `<div class="hint">No sigues ningún valor. Márcalos con ☆ en el screener o pulsa W sobre una fila.</div>`;
-  const tip = (f) => `data-tip="Llega con la fase ${f} de la hoja de ruta"`;
   const rows = w.map((s) => uni.find((r) => r.sym === s)).filter(Boolean).slice(0, 12).map((r) => {
     const c = Q.changeOf(r.sym);
     return `<tr><td>${link(r.sym)} <span class="hy-nm">${esc((r.nombre || "").slice(0, 22))}</span></td><td class="num">${r.score ?? "s. d."}${c?.d ? ` <span class="chg ${c.d > 0 ? "p" : "n"}">${sgn(c.d, 0)}</span>` : ""}</td>
       <td class="num">${chg(r.r1d, 1)}</td><td class="num hy-fa">${r.resultados && r.resultados >= today() ? fmtDate(r.resultados) : "—"}</td>
-      <td class="hy-fa" ${tip(5)}>—</td><td>${window.SCRStress?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin historia de precios suficiente">—</span>`}</td><td>${window.SCRGeo?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin datos suficientes (menos de 3 años)">—</span>`}</td></tr>`;
+      <td>${window.SCRProb?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin historia suficiente o sin datos todavía">—</span>`}</td><td>${window.SCRStress?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin historia de precios suficiente">—</span>`}</td><td>${window.SCRGeo?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin datos suficientes (menos de 3 años)">—</span>`}</td></tr>`;
   }).join("");
-  return `<div class="hy-scroll"><table class="hy-t"><thead><tr><th>Valor</th><th class="num">Nota</th><th class="num">Hoy</th><th class="num">Resultados</th><th>Probabilidad</th><th>Estrés</th><th>Geopolítica</th></tr></thead><tbody>${rows}</tbody></table></div>
+  return `<div class="hy-scroll"><table class="hy-t"><thead><tr><th>Valor</th><th class="num">Nota</th><th class="num">Hoy</th><th class="num">Resultados</th><th data-tip="Probabilidad de batir a su índice con dividendos en 12 meses; «base» = el modelo no demostró ventaja en su mercado y se muestra la tasa base">Prob. 12 m</th><th>Estrés</th><th>Geopolítica</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${w.length > 12 ? `<div class="hint">y ${w.length - 12} más en Cartera › Watchlist</div>` : ""}`;
 }
 function lecturaDia() {

@@ -683,7 +683,8 @@ function secRiesgo(c) {
   const B = balanceStress(c);
   const bal = `<section class="rsk-p"><h3>Estrés del balance <span>beneficio −30 %</span></h3>${B.html}
     ${H.S.mode === "x" ? `<div class="rsk-exp"><b>Reglas.</b> Con datos de la SEC: «Rompe» si con el beneficio −30 % la cobertura de intereses baja de 1,5× o la caja dura menos de 12 meses frente a los vencimientos que el flujo no cubre; «Tensión» por debajo de 3× o de 24 meses. Sin vencimientos (Yahoo): «Rompe» si el flujo estresado es negativo con deuda neta; «Tensión» si tardaría más de 6 años en pagar la deuda neta.</div>` : ""}</section>`;
-  return window.SCRStress ? window.SCRStress.fichaHTML(c.r, bal) : `<div class="err-box">Módulo de stress tests no disponible.</div>`;
+  const pb = window.SCRProb ? window.SCRProb.fichaPanel(c.r) : "";
+  return pb + (window.SCRStress ? window.SCRStress.fichaHTML(c.r, bal) : `<div class="err-box">Módulo de stress tests no disponible.</div>`);
 }
 function secInvest(c) {
   const { r, d } = c, links = [];

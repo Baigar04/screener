@@ -1303,3 +1303,24 @@ body.one-sec .tabsbar #side{visibility:hidden}
 .st-prop .rsk-t small{font-size:11px}
 .st-tbl td:nth-child(6),.st-tbl td:nth-child(7){white-space:nowrap}
 @media (max-width:640px){.st-prop .rsk-t td:first-child{white-space:normal}.st-hm td{min-width:44px}}
+/* ---------- fase 5 · probabilidad de acierto ---------- */
+.pb{margin-bottom:12px}
+.pb-g{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.2fr) minmax(0,1fr);gap:20px;align-items:start}
+.pb-gauge{width:100%;max-width:280px;display:block;margin:0 auto}
+.pb-pill{text-align:center;margin:4px 0 8px}
+.pb-kv td{padding:4px 0;font-size:12.5px}
+.pb-kv td.num{text-align:right}
+.pb-h{color:var(--muted);font-size:12px;margin-bottom:8px}
+.pb-h small{color:var(--faint);margin-left:6px}
+.pb-f{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 56px;gap:8px;align-items:center;font-size:12.5px;padding:3px 0}
+.pb-fb{position:relative;height:10px}
+.pb-fb::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;border-left:1px solid var(--border-strong)}
+.pb-fb i{position:absolute;top:0;bottom:0}.pb-fb i.n{background:var(--neg)}.pb-fb i.p{background:var(--pos)}
+.pb-f b{text-align:right;font-weight:500;font-size:12px}
+.pb-spread{width:100%;display:block}
+.pb-sp-l{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.pb-rel{width:100%;max-width:260px;display:block}
+.pb-cell{font-family:var(--mono);font-size:12.5px}
+.pb-cell.up{color:var(--pos)}.pb-cell.dn{color:var(--neg)}.pb-cell.nv{color:var(--faint)}
+.pb-cell small{font-family:var(--sans,inherit);font-size:10px;margin-left:4px;color:var(--faint)}
+@media (max-width:1100px){.pb-g{grid-template-columns:minmax(0,1fr)}}

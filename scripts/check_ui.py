@@ -456,6 +456,7 @@ def escenarios(pg, base):
     pg.wait_for_timeout(3500)
     t = pg.text_content("#view") or ""
     check("ficha: stress test con base y fiabilidad y estrés del balance", all(x in t for x in ("Stress test", "Base del cálculo", "Fiabilidad", "Estrés del balance")))
+    check("ficha: probabilidad de acierto con examen, factores y fiabilidad", all(x in t for x in ("Probabilidad de acierto", "Tasa base", "Aportación de cada factor", "previsiones parecidas")) and ("Validada en el examen" in t or "Sin ventaja demostrada" in t))
     pg.set_viewport_size({"width": 390, "height": 844})
     pg.goto(base + "#/escenarios")
     pg.wait_for_timeout(3000)

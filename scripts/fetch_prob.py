@@ -73,7 +73,8 @@ def weekly_frame(W, syms):
     cols = {}
     for s in syms:
         if s in W and W[s]:
-            d = pd.Series({t + timedelta(days=4): v for t, v in W[s]})
+            # cada barra a su viernes: Yahoo fecha la semana por su primer día de sesión (martes si el lunes es festivo)
+            d = pd.Series({t + timedelta(days=(4 - t.weekday()) % 7): v for t, v in W[s]})
             cols[s] = d[~d.index.duplicated(keep="last")]
     df = pd.DataFrame(cols).sort_index()
     df.index = pd.to_datetime(df.index)
@@ -303,6 +304,10 @@ def main():
     W = load_weekly(tick)
     D, binfo, last_week = build(W, U)
     mks = sorted(D["mk"].unique())
+    if D.empty or D["y"].notna().sum() < 5000:
+        ERRORS.append({"fuente": "cálculo", "serie": "muestras", "motivo": f"solo {len(D)} muestras"})
+        log(f"prob: muestras insuficientes ({len(D)}); no se escribe prob.json")
+        return
     log(f"Muestras: {len(D):,} · con resultado {int(D['y'].notna().sum()):,} · mercados {mks} · última semana {last_week}")
     E = examen(D, mks)
     MK = {}
