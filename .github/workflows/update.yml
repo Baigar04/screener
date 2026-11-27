@@ -134,6 +134,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -r index.html assets data .nojekyll _site/
+          echo "Tamaño de la web: $(du -sh _site | cut -f1) · valores con precios: $(ls _site/data/p | wc -l) (límite de GitHub Pages: 1 GB)"
           mkdir -p _site/assets/vendor
           curl -fsSL "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js" -o _site/assets/vendor/lightweight-charts.js \
             || echo "Aviso: no se pudo descargar Lightweight Charts; la web usará la copia de unpkg"

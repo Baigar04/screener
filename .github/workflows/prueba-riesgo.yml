@@ -23,6 +23,15 @@ jobs:
         if: contains(inputs.pasos, 'sonda')
         continue-on-error: true
         run: python scripts/probe_fuentes.py
+      - name: Universo ampliado (solo composición)
+        if: contains(inputs.pasos, 'universo')
+        continue-on-error: true
+        run: |
+          cd scripts && python -c "
+          import collections, fetch_equities as F
+          U = F.universe(); c = collections.Counter(i for v in U.values() for i in v['indices'])
+          print('UNIVERSO', len(U)); [print('  ', k, n) for k, n in c.most_common()]
+          print('ERRORES', F.ERRORS[:10])"
       - name: Universo y amplitud publicados (para concentración y amplitud)
         run: |
           mkdir -p data

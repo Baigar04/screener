@@ -230,7 +230,7 @@ function renderBuild() {
   const f = C.cfg, dd = H.dropdown;
   let h = `<div class="bar">${dd("c_src", "Candidatos:", SRC, f.src)}${dd("c_n", "Valores:", [5, 8, 10, 12, 15, 20, 25].map((x) => [String(x), String(x)]), String(f.n))}
     ${dd("c_metodo", "Método:", METODOS, f.metodo)}${dd("c_wmax", "Peso máximo:", [10, 15, 20, 25, 30, 40].map((x) => [String(x), x + " %"]), String(f.wmax))}
-    ${dd("c_region", "Región:", [["Todas", "Todas"], ["EE. UU.", "EE. UU."], ["Europa", "Europa"], ["Latinoamérica", "Latinoamérica"]], f.region)}
+    ${dd("c_region", "Región:", [["Todas", "Todas"], ["EE. UU.", "EE. UU."], ["Europa", "Europa"], ["Latinoamérica", "Latinoamérica"], ["Asia", "Asia"]], f.region)}
     ${dd("c_seccap", "Máx. por sector:", [1, 2, 3, 4, 5, 99].map((x) => [String(x), x === 99 ? "Sin límite" : x + " valores"]), String(f.seccap))}
     ${dd("c_capital", "Capital:", [1000, 5000, 10000, 25000, 50000, 100000].map((x) => [String(x), nf(x, 0) + " €"]), String(f.capital))}
     <button class="icon-btn primary" data-cbuild="1" ${C.busy ? "disabled" : ""}>${C.busy ? "Calculando…" : "Construir"}</button></div>

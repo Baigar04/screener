@@ -10,6 +10,7 @@ Salidas (en data/):
 Fuentes: Wikipedia (composición S&P 500 y Nasdaq-100), Yahoo Finance vía yfinance (precios y fundamentales).
 Nunca se inventan datos: si falta un campo queda null y la web muestra «sin datos».
 """
+import html as html_lib
 import io
 import json
 import re
@@ -19,6 +20,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from datetime import datetime, timezone
 
 import numpy as np
@@ -53,6 +55,7 @@ GICS_YAHOO = {"Information Technology": "Technology", "Health Care": "Healthcare
               "Consumer Discretionary": "Consumer Cyclical", "Consumer Staples": "Consumer Defensive", "Materials": "Basic Materials",
               "Industrials": "Industrials", "Energy": "Energy", "Utilities": "Utilities", "Real Estate": "Real Estate",
               "Communication Services": "Communication Services"}
+ASIA_PAISES = {"Japan", "Taiwan", "South Korea", "Korea", "Hong Kong", "China"}
 LATAM_PAISES = {"Brazil", "Mexico", "Argentina", "Chile", "Colombia", "Peru", "Panama", "Uruguay"}
 CONTINUO = ["CIE", "VIS", "EBRO", "FAE", "ENC", "PHM", "CAF", "TRE", "TLGO", "MEL", "ALM", "A3M", "DIA", "ECR", "FCC", "GRE", "LDA",
             "OHLA", "PSG", "PRS", "TUB", "TRG", "VID", "AZK", "CBAV", "DOM", "EDR", "GSJ", "HOME", "MVC", "R4", "ATRY", "CASH", "GCO",
@@ -90,6 +93,111 @@ LISTING_SFX = [("london", ".L"), ("italiana", ".MI"), ("milan", ".MI"), ("stockh
 COUNTRY_SFX = {"Netherlands": ".AS", "Belgium": ".BR", "France": ".PA", "Portugal": ".LS", "Ireland": ".IR", "Norway": ".OL", "Italy": ".MI",
                "Germany": ".DE", "Austria": ".VI", "Switzerland": ".SW", "Sweden": ".ST", "Denmark": ".CO", "Finland": ".HE", "United Kingdom": ".L",
                "Spain": ".MC", "Poland": ".WA", "Greece": ".AT", "Luxembourg": ".AS", "Jersey": ".L", "Guernsey": ".L", "Isle of Man": ".L"}
+
+
+# ampliación del universo (fase 4, 27-nov-2026). Fuentes comprobadas desde GitHub Actions con scripts/probe_fuentes.py:
+# Nikkei (lista oficial), KOSPI 200 (Wikipedia), Taiwán y pequeñas de EE. UU. (buscador de Yahoo) y carteras de ETF temáticos
+# de SPDR (xlsx diario). Los CSV de iShares (IWM) devuelven la página web en vez del fichero desde GitHub: el Russell 2000 se
+# aproxima con las ~2.000 mayores empresas de EE. UU. entre 200 M$ y 8.000 M$ de capitalización.
+TEMATICOS = [("XAR", "Aeroespacial y defensa"), ("XSD", "Semiconductores"), ("XBI", "Biotecnología"), ("XSW", "Software"),
+             ("CNRG", "Energía limpia"), ("KOMP", "Innovación")]
+PEQUENAS = "Pequeñas EE. UU. (≈ Russell 2000)"
+TAIWAN = "Taiwán 100 (mayores, Yahoo)"
+NUEVOS = {"Nikkei 225", "KOSPI 200", TAIWAN, PEQUENAS}   # grupos cuyas noticias se refrescan por rotación (una vez por semana)
+ASIA_SUFFIX = (".T", ".TW", ".TWO", ".KS", ".KQ", ".HK")
+TICKER_OK = re.compile(r"^[A-Z][A-Z0-9-]{0,6}$")
+
+
+def xlsx_rows(b):
+    """Filas de la primera hoja de un .xlsx sin dependencias (zip + XML)."""
+    z = zipfile.ZipFile(io.BytesIO(b))
+    ss = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        x = z.read("xl/sharedStrings.xml").decode("utf-8")
+        ss = [html_lib.unescape(re.sub(r"<[^>]+>", "", m)) for m in re.findall(r"<si>(.*?)</si>", x, re.S)]
+    sh = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    out = []
+    for row in re.findall(r"<row[^>]*>(.*?)</row>", sh, re.S):
+        cells = []
+        for attrs, inner in re.findall(r"<c([^>]*?)(?:/>|>(.*?)</c>)", row, re.S):
+            v = re.search(r"<v>(.*?)</v>", inner or "", re.S)
+            t = re.search(r't="(\w+)"', attrs)
+            val = v.group(1) if v else re.sub(r"<[^>]+>", "", inner or "")
+            if t and t.group(1) == "s" and v:
+                val = ss[int(val)]
+            cells.append(html_lib.unescape(val))
+        out.append(cells)
+    return out
+
+
+def spdr_holdings(tk):
+    """Tickers de EE. UU. de la cartera diaria de un ETF de SPDR."""
+    R = xlsx_rows(get(f"https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/holdings-daily-us-en-{tk.lower()}.xlsx"))
+    h = next(i for i, r in enumerate(R) if "Ticker" in r)
+    it, ic = R[h].index("Ticker"), (R[h].index("Local Currency") if "Local Currency" in R[h] else None)
+    out = []
+    for r in R[h + 1:]:
+        if len(r) <= it:
+            continue
+        t = (r[it] or "").strip().upper().replace(".", "-").replace("/", "-")
+        if TICKER_OK.match(t) and (ic is None or len(r) <= ic or r[ic] in ("USD", "")):
+            out.append(t)
+    return out
+
+
+def nikkei225():
+    b = get("https://indexes.nikkei.co.jp/en/nkave/index/component?idx=nk225").decode("utf-8", "replace")
+    return sorted({c + ".T" for c in re.findall(r"<td[^>]*>\s*(\d{3}[0-9A-Z])\s*</td>", b)})
+
+
+def kospi200():
+    b = get("https://en.wikipedia.org/wiki/KOSPI_200").decode("utf-8", "replace")
+    return sorted({c + ".KS" for c in re.findall(r">\s*(\d{6})\s*<", b)})
+
+
+def yahoo_screen(query, n, page=250):
+    out = []
+    for off in range(0, n, page):
+        r = yf.screen(query, offset=off, size=min(page, n - off), sortField="intradaymarketcap", sortAsc=False)
+        q = [x for x in (r.get("quotes") or []) if x.get("quoteType") in (None, "EQUITY")]
+        out += [x["symbol"] for x in q if x.get("symbol")]
+        if len(r.get("quotes") or []) < min(page, n - off):
+            break
+    return list(dict.fromkeys(out))
+
+
+def taiwan100():
+    from yfinance import EquityQuery as Q
+    return [s for s in yahoo_screen(Q("eq", ["region", "tw"]), 100) if s.endswith((".TW", ".TWO"))]
+
+
+def pequenas_usa(n=2000):
+    from yfinance import EquityQuery as Q
+    q = Q("and", [Q("eq", ["region", "us"]), Q("btwn", ["intradaymarketcap", 2e8, 8e9]),
+                  Q("is-in", ["exchange", "NMS", "NYQ", "NGM", "NCM", "ASE"])])
+    return [s.replace(".", "-") for s in yahoo_screen(q, n) if TICKER_OK.match(s.replace(".", "-"))]
+
+
+def ampliacion(rows):
+    """Fase 4: añade Nikkei 225, KOSPI 200, Taiwán, pequeñas de EE. UU. y la etiqueta de ETF temáticos."""
+    for nombre, fn in (("Nikkei 225", nikkei225), ("KOSPI 200", kospi200), (TAIWAN, taiwan100), (PEQUENAS, pequenas_usa)):
+        try:
+            L = fn()
+            if len(L) < 50:
+                raise ValueError(f"solo {len(L)} valores")
+            for t in L:
+                rows.setdefault(t, {"indices": []})["indices"].append(nombre)
+            log(f"{nombre}: {len(L)}")
+        except Exception as e:  # noqa: BLE001
+            ERRORS.append({"fuente": "universo", "serie": nombre, "motivo": str(e)[:200]})
+    for tk, tema in TEMATICOS:
+        try:
+            L = spdr_holdings(tk)
+            for t in L:
+                rows.setdefault(t, {"indices": []})["indices"].append(f"Temático: {tema} ({tk})")
+            log(f"Temático {tema} ({tk}): {len(L)}")
+        except Exception as e:  # noqa: BLE001
+            ERRORS.append({"fuente": "SPDR", "serie": tk, "motivo": str(e)[:200]})
 
 
 def stoxx_symbol(tk, listing, country):
@@ -187,6 +295,7 @@ def universe():
     for s in CONTINUO:
         if s not in IBEX:
             rows.setdefault(s + ".MC", {"indices": []})["indices"].append("Mercado Continuo")
+    ampliacion(rows)
     # Valores añadidos a mano: un ticker de Yahoo Finance por línea en universo_extra.txt (# para comentarios)
     extra = os.path.join(ROOT, "universo_extra.txt")
     if os.path.exists(extra):
@@ -205,7 +314,7 @@ def drop_open_session(sym, df):
     """Quita la vela de hoy si su mercado aún no ha cerrado: una sesión a medias falsea volumen, técnico y Konkorde."""
     if df.empty or df.index[-1].date() != NOW.date():
         return df
-    close_utc = (16, 45) if sym.endswith(EU_SUFFIX) else (21, 15)
+    close_utc = (16, 45) if sym.endswith(EU_SUFFIX) else (6, 45) if sym.endswith(ASIA_SUFFIX) else (21, 15)
     if (NOW.hour, NOW.minute) < close_utc:
         return df.iloc[:-1]
     return df
@@ -797,7 +906,10 @@ def main():
     except Exception:  # noqa: BLE001
         ncache = {}
     ncut = (NOW - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
+    day0 = NOW.toordinal()
     for k, sym_ in enumerate(syms):
+        if set(U[sym_].get("indices") or []) <= NUEVOS and U[sym_].get("indices") and k % REFRESH_SHARE != day0 % REFRESH_SHARE and ncache.get(sym_):
+            continue   # grupos nuevos: titulares una vez por semana (la ejecución diaria no puede con 4.000 valores al día)
         try:
             got = news_items(sym_, (cache.get(sym_) or {}).get("nombre"))
             old = {x[2]: x for x in ncache.get(sym_, [])}
@@ -852,6 +964,7 @@ def main():
         if not r.get("sector") and U[s].get("gics_sector"):
             r["sector"] = GICS_YAHOO.get(U[s]["gics_sector"], U[s]["gics_sector"])
         r["region"] = ("Latinoamérica" if ("ADR Latinoamérica" in r["indices"] or r.get("pais") in LATAM_PAISES)
+                       else "Asia" if (s.endswith(ASIA_SUFFIX) or r.get("pais") in ASIA_PAISES)
                        else "EE. UU." if (r.get("pais") == "United States" or "." not in s) else "Europa")
         detail = {"sym": s, "anual": f.get("anual", {}), "desc": f.get("desc"), "web": f.get("web")}
         if s in SECD:   # cuentas de la SEC para la ficha (EE. UU.): 12 trimestres y 6 ejercicios con su fecha de presentación
@@ -933,7 +1046,8 @@ def main():
     stats = {}
     for reg, sub in (("Todos", rows), ("EE. UU.", [r for r in rows if r["region"] == "EE. UU."]),
                      ("Europa", [r for r in rows if r["region"] == "Europa"]),
-                     ("Latinoamérica", [r for r in rows if r["region"] == "Latinoamérica"])):
+                     ("Latinoamérica", [r for r in rows if r["region"] == "Latinoamérica"]),
+                     ("Asia", [r for r in rows if r["region"] == "Asia"])):
         stats[reg] = {"sector": group_stats(sub, "sector"), "industria": group_stats(sub, "industria"),
                       "mercado": {f: med([r.get(f) for r in sub], f in ("per", "per_fwd", "ev_ebitda", "pb", "ps")) for f in MED_FIELDS}}
     for r in rows:
@@ -990,7 +1104,9 @@ def main():
         ERRORS.append({"fuente": "Cálculo", "serie": "Laboratorio", "motivo": str(e)[:200]})
 
     meta = {"generado": NOW.isoformat(timespec="seconds"), "n": len(rows), "errores": ERRORS[:200], "n_errores": len(ERRORS),
-            "fuentes": ["Wikipedia (composición S&P 500, Nasdaq-100, S&P 400, S&P 600, FTSE 250 y STOXX Europe 600)", "Yahoo Finance vía yfinance (precios y fundamentales)", "Tiingo (respaldo de precios de EE. UU. si Yahoo falla)"],
+            "fuentes": ["Wikipedia (composición S&P 500, Nasdaq-100, S&P 400, S&P 600, FTSE 250, STOXX Europe 600 y KOSPI 200)",
+                        "Nikkei Inc. (componentes del Nikkei 225)", "Buscador de Yahoo Finance (Taiwán: 100 mayores; pequeñas de EE. UU.: ≈ Russell 2000)",
+                        "State Street SPDR (carteras diarias de ETF temáticos: XAR, XSD, XBI, XSW, CNRG, KOMP)", "Yahoo Finance vía yfinance (precios y fundamentales)", "Tiingo (respaldo de precios de EE. UU. si Yahoo falla)"],
             "n_respaldo": len(TIINGO_USED),
             "notas": "Fundamentales refrescados por rotación (cada valor, una vez por semana). Revisiones de beneficios: sin fuente pública fiable."}
     json.dump({**meta, "filas": rows}, open(os.path.join(DATA, "universe.json"), "w"), ensure_ascii=False, separators=(",", ":"))

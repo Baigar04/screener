@@ -61,7 +61,7 @@ REARME = [
 ]
 # Índice de referencia de cada valor según su país (para descontar el movimiento de su bolsa)
 REF_PAIS = {"United States": "^GSPC", "Spain": "^IBEX", "United Kingdom": "^FTSE", "Germany": "^GDAXI", "France": "^FCHI",
-            "Italy": "FTSEMIB.MI", "Japan": "^N225", "Hong Kong": "^HSI", "China": "^HSI"}
+            "Italy": "FTSEMIB.MI", "Japan": "^N225", "Hong Kong": "^HSI", "China": "^HSI", "Taiwan": "^TWII", "South Korea": "^KS11"}
 
 
 def http_bytes(url, tries=3):

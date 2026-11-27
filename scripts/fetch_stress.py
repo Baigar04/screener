@@ -53,9 +53,10 @@ TIPOS_FRED = {"US": "IRLTLT01USM156N", "DE": "IRLTLT01DEM156N", "GB": "IRLTLT01G
 TIPOS_NOMBRE = {"US": "EE. UU.", "DE": "Alemania", "GB": "Reino Unido", "JP": "Japón"}
 PAIS_MERCADO = {"United States": "sp500", "Spain": "ibex", "United Kingdom": "ftse", "Germany": "dax", "France": "cac", "Italy": "mib",
                 "Japan": "n225", "Hong Kong": "hsi", "China": "hsi"}
-DIVISAS = ["USD", "GBP", "CHF", "SEK", "NOK", "DKK", "JPY", "HKD"]
+DIVISAS = ["USD", "GBP", "CHF", "SEK", "NOK", "DKK", "JPY", "HKD", "TWD", "KRW"]
 TIPO3M = {"EUR": "IR3TIB01EZM156N", "USD": "IR3TIB01USM156N", "GBP": "IR3TIB01GBM156N", "CHF": "IR3TIB01CHM156N",
-          "SEK": "IR3TIB01SEM156N", "NOK": "IR3TIB01NOM156N", "DKK": "IR3TIB01DKM156N", "JPY": "IR3TIB01JPM156N"}
+          "SEK": "IR3TIB01SEM156N", "NOK": "IR3TIB01NOM156N", "DKK": "IR3TIB01DKM156N", "JPY": "IR3TIB01JPM156N",
+          "KRW": "IR3TIB01KRM156N"}
 # Veredictos frente a su bolsa (clasificación para leer la tabla, no un modelo de previsión): «Rompe» si empeora mucho a su
 # bolsa o sufre una caída catastrófica; «Tensión» si empeora claramente a su bolsa. Crisis (varios meses) y choques (un mes).
 UMBRAL = {"crisis": {"rompe": (-60, -15), "tension": (None, -5)}, "choque": {"rompe": (-20, -8), "tension": (None, -3)}}
