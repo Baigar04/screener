@@ -1,24 +1,21 @@
 {
- "generado": "2026-11-27T01:48:18+00:00",
+ "generado": "2026-11-27T02:49:32+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
    "detalle": "29/29 series al día"
   },
   "universe.json": {
-   "estado": "no válido",
-   "motivo": "universe.json: 000660.KS con mcap fuera de rango (733380228415488.0)",
-   "recuperado": "última versión publicada"
+   "estado": "ok",
+   "detalle": "4306 valores · 4291/4295 precios al día"
   },
   "sectors.json": {
    "estado": "ok",
-   "detalle": "11 sectores",
-   "recuperado": "última versión publicada"
+   "detalle": "11 sectores"
   },
   "score.json": {
    "estado": "ok",
-   "detalle": "4313 valores puntuados",
-   "recuperado": "última versión publicada"
+   "detalle": "4306 valores puntuados"
   },
   "score_hist.json": {
    "estado": "ok",
@@ -30,7 +27,7 @@
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 42.9 % > SMA50, Europa: 43.0 % > SMA50"
+   "detalle": "EE. UU.: 43.1 % > SMA50, Europa: 43.0 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
@@ -42,15 +39,15 @@
   },
   "geo.json": {
    "estado": "ok",
-   "detalle": "GPR 150.5 (p91) · 44 países · 5 pistas · 4035 valores"
+   "detalle": "GPR 150.5 (p91) · 44 países · 5 pistas · 4016 valores"
   },
   "stress.json": {
    "estado": "ok",
-   "detalle": "12 escenarios · 11 bolsas · 4107 valores · 11 divisas"
+   "detalle": "12 escenarios · 11 bolsas · 4096 valores · 11 divisas"
   },
   "prob.json": {
    "estado": "ok",
-   "detalle": "11 mercados · 0 validados · 4039 valores"
+   "detalle": "11 mercados · 0 validados · 4022 valores"
   },
   "smart.json": {
    "estado": "ok",
@@ -62,11 +59,11 @@
   },
   "fund_cache.json": {
    "estado": "ok",
-   "detalle": "2831 entradas"
+   "detalle": "3231 entradas"
   },
   "news_cache.json": {
    "estado": "ok",
-   "detalle": "3130 entradas"
+   "detalle": "3295 entradas"
   },
   "sec_cache.json": {
    "estado": "ok",
@@ -81,10 +78,6 @@
    "detalle": "2 entradas"
   }
  },
- "recuperados": [
-  "score.json",
-  "sectors.json",
-  "universe.json"
- ],
+ "recuperados": [],
  "sin_recuperar": []
 }
