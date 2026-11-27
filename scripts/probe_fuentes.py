@@ -1,40 +1,61 @@
-"""Sonda de fuentes para la fase 4 (segunda ronda; no forma parte del flujo diario)."""
+"""Sonda de fuentes para la fase 4 (tercera ronda; no forma parte del flujo diario)."""
+import io
 import re
+import sys
 import urllib.request
+import zipfile
 
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+sys.path.insert(0, "scripts")
+UA = "Mozilla/5.0 (screener personal; github.com/Baigar04)"
 
 
-def tryu(name, u, h=None):
+def get(u):
+    with urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": UA}), timeout=60) as r:
+        return r.read()
+
+
+for tk, pid, slug in (("IWM", "239710", "ishares-russell-2000-etf"), ("ITA", "239502", "ishares-u-s-aerospace-defense-etf")):
+    u = f"https://www.ishares.com/us/products/{pid}/{slug}/1467271812596.ajax?fileType=csv&fileName={tk}_holdings&dataType=fund&siteEntryPassthrough=true"
     try:
-        req = urllib.request.Request(u, headers={"User-Agent": UA, **(h or {})})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            b = r.read()
-        print(f"OK {name} {len(b)} :: {b[:250].decode('utf-8', 'replace')!r}")
-        return b
+        b = get(u).decode("utf-8", "replace")
+        L = b.splitlines()
+        h = next((i for i, x in enumerate(L) if x.startswith("Ticker,")), None)
+        print("ishares", tk, len(b), "header", h, L[h] if h is not None else L[:3], "|", L[h + 1] if h is not None else "", "| filas", len(L))
     except Exception as e:  # noqa: BLE001
-        print(f"FALLA {name} :: {str(e)[:150]}")
+        print("FALLA ishares", tk, e)
 
 
-base = "https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/1467271812596.ajax?fileType=csv&fileName=IWM_holdings&dataType=fund"
-tryu("ishares-accept", base, {"Accept": "text/csv,*/*", "Referer": "https://www.ishares.com/us/products/239710/ishares-russell-2000-etf"})
-tryu("ishares-xhr", base, {"X-Requested-With": "XMLHttpRequest", "Accept": "*/*"})
-tryu("ishares-sin-slug", "https://www.ishares.com/us/products/239710/1467271812596.ajax?fileType=csv&fileName=IWM_holdings&dataType=fund")
-tryu("ishares-json", "https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/1467271812596.ajax?tab=all&fileType=json")
-tryu("spdr twok", "https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/holdings-daily-us-en-twok.xlsx")
-tryu("vanguard vtwo", "https://investor.vanguard.com/investment-products/etfs/profile/api/VTWO/portfolio-holding/stock")
-for nm, u in [("zh-tw50", "https://zh.wikipedia.org/wiki/%E8%87%BA%E7%81%A350%E6%8C%87%E6%95%B8"), ("en-taiex", "https://en.wikipedia.org/wiki/TAIEX"),
-              ("en-tw50b", "https://en.wikipedia.org/wiki/Taiwan_50_Index")]:
-    b = tryu(nm, u)
-    if b:
-        print("   códigos 4d", len(set(re.findall(r">\s*(\d{4})\s*<", b.decode("utf-8", "replace")))))
-try:
-    import yfinance as yf
-    from yfinance import EquityQuery
-    for reg in ("tw", "kr", "jp"):
-        q = EquityQuery("eq", ["region", reg])
-        r = yf.screen(q, sortField="intradaymarketcap", sortAsc=False, size=100)
-        qs = r.get("quotes", [])
-        print("yf.screen", reg, len(qs), [x.get("symbol") for x in qs[:12]])
-except Exception as e:  # noqa: BLE001
-    print("FALLA yf.screen", e)
+def xlsx_rows(b):
+    z = zipfile.ZipFile(io.BytesIO(b))
+    ss = []
+    if "xl/sharedStrings.xml" in z.namelist():
+        x = z.read("xl/sharedStrings.xml").decode("utf-8")
+        ss = [re.sub(r"<[^>]+>", "", m) for m in re.findall(r"<si>(.*?)</si>", x, re.S)]
+    sh = z.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    out = []
+    for row in re.findall(r"<row[^>]*>(.*?)</row>", sh, re.S):
+        cells = []
+        for attrs, inner in re.findall(r"<c([^>]*)>(.*?)</c>", row, re.S):
+            v = re.search(r"<v>(.*?)</v>", inner, re.S)
+            t = re.search(r't="(\w+)"', attrs)
+            val = v.group(1) if v else re.sub(r"<[^>]+>", "", inner)
+            if t and t.group(1) == "s" and v:
+                val = ss[int(val)]
+            cells.append(val)
+        out.append(cells)
+    return out
+
+
+for tk in ("xar", "xsd", "komp"):
+    try:
+        R = xlsx_rows(get(f"https://www.ssga.com/us/en/intermediary/library-content/products/fund-data/etfs/us/holdings-daily-us-en-{tk}.xlsx"))
+        h = next(i for i, r in enumerate(R) if "Ticker" in r)
+        print("spdr", tk, "cabecera", h, R[h], "| ejemplo", R[h + 1], "| filas", len(R) - h - 1)
+    except Exception as e:  # noqa: BLE001
+        print("FALLA spdr", tk, e)
+b = get("https://indexes.nikkei.co.jp/en/nkave/index/component?idx=nk225").decode("utf-8", "replace")
+c = re.findall(r"<td[^>]*>\s*(\d{3}[0-9A-Z])\s*</td>", b)
+print("nikkei", len(c), len(set(c)), [x for x in c if not x.isdigit()])
+b = get("https://en.wikipedia.org/wiki/KOSPI_200").decode("utf-8", "replace")
+c = re.findall(r">\s*(\d{6})\s*<", b)
+print("kospi200", len(c), len(set(c)), c[:15])
