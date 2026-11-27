@@ -15,6 +15,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - name: Sonda de fuentes (fase 4)
+        continue-on-error: true
+        run: python scripts/probe_fuentes.py
       - name: Universo y amplitud publicados (para concentración y amplitud)
         run: |
           mkdir -p data
