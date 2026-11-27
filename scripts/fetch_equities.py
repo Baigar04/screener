@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -595,6 +595,33 @@ def yahoo_quarters(sym):
     return out[-8:]
 
 
+MAX_EVENTO = 400   # empresas con resultados recientes que se refrescan fuera de su turno
+
+
+def fechas_resultados(f, hoy):
+    """Fechas de resultados ya publicados (con BPA real o con la fecha de resultados ya pasada)."""
+    out = {e[0] for e in (f.get("ern") or []) if e and e[0] <= hoy.isoformat() and e[2] is not None}
+    r = f.get("resultados")
+    if r and r <= hoy.isoformat():
+        out.add(r)
+    return sorted(out)
+
+
+def resultados_pendientes(f, hoy):
+    """R0: hay que volver a pedir las cuentas si la empresa ha publicado después de la última petición (al día siguiente)
+    y otra vez a los 4 días (Yahoo tarda en incorporar los estados financieros). Solo resultados de los últimos 10 días."""
+    ff = f.get("fecha_fund")
+    if not ff:
+        return False
+    for d in fechas_resultados(f, hoy):
+        dd = date.fromisoformat(d)
+        if (hoy - dd).days > 10:
+            continue
+        if ff <= d or (ff < (dd + timedelta(days=4)).isoformat() <= hoy.isoformat()):
+            return True
+    return False
+
+
 def fundamentals(sym):
     t = yf.Ticker(sym)
     info = t.info or {}
@@ -923,7 +950,9 @@ def main():
     log("Noticias: valores con titulares", sum(1 for v in ncache.values() if v))
     day = NOW.toordinal()
     new = [s for s in syms if s not in cache]
-    todo = new[:MAX_NEW] + [s for i, s in enumerate(syms) if s in cache and i % REFRESH_SHARE == day % REFRESH_SHARE]
+    ev = [s for s in syms if s in cache and resultados_pendientes(cache[s], NOW.date())]   # R0: refresco por evento
+    todo = list(dict.fromkeys(ev[:MAX_EVENTO] + new[:MAX_NEW] + [s for i, s in enumerate(syms) if s in cache and i % REFRESH_SHARE == day % REFRESH_SHARE]))
+    log(f"Refresco por evento: {len(ev)} empresas con resultados recientes{f' (se piden {MAX_EVENTO})' if len(ev) > MAX_EVENTO else ''}")
     if len(new) > MAX_NEW:
         log("Fundamentales nuevos pendientes para próximas ejecuciones:", len(new) - MAX_NEW)
     log("Fundamentales a refrescar:", len(todo), "· en caché:", len(cache))
@@ -961,6 +990,9 @@ def main():
             continue
         r = {"sym": s, "indices": U[s].get("indices", [])}
         r.update({k: v for k, v in f.items() if k not in ("anual", "ern", "web", "desc")})
+        rec = [d for d in fechas_resultados(f, NOW.date()) if (NOW.date() - date.fromisoformat(d)).days <= 10] if f else []
+        if rec and f.get("fecha_fund", "") > rec[-1]:
+            r["cuentas_tras"] = rec[-1]   # R0: cuentas ya pedidas después de sus últimos resultados
         if not r.get("sector") and U[s].get("gics_sector"):
             r["sector"] = GICS_YAHOO.get(U[s]["gics_sector"], U[s]["gics_sector"])
         r["region"] = ("Latinoamérica" if ("ADR Latinoamérica" in r["indices"] or r.get("pais") in LATAM_PAISES)

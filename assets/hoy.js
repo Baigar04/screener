@@ -248,7 +248,8 @@ function avisos(uni, Q) {
     const lim = addDays(today(), 14);
     for (const s of Q.watch()) {
       const r = uni.find((x) => x.sym === s); if (!r) continue;
-      if (r.resultados && r.resultados >= today() && r.resultados <= lim) out.push(["g", `Resultados de ${esc(s)} el ${fmtDate(r.resultados)}: está en tu Watchlist`, null, null, s]);
+      if (r.cuentas_tras) out.push(["g", `${esc(s)} publicó resultados el ${fmtDate(r.cuentas_tras)}: cuentas y nota ya actualizadas`, null, null, s]);
+      else if (r.resultados && r.resultados >= today() && r.resultados <= lim) out.push(["g", `Resultados de ${esc(s)} el ${fmtDate(r.resultados)}: está en tu Watchlist`, null, null, s]);
       const c = Q.changeOf(s); if (c?.d && c.d <= -5) out.push(["n", `${esc(s)}: la nota cae ${-c.d} puntos`, null, null, s]);
     }
   }

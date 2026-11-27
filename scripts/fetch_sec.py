@@ -352,6 +352,25 @@ def diagnose(facts, q):
     return {"ultimo": last, "hechos_posteriores": seen[-40:], "n": len(seen)}
 
 
+def evento_sec(f, act, hoy):
+    """R0: pide de nuevo la empresa al día siguiente de publicar resultados (el 10-Q de las grandes suele salir ese día)
+    y otra vez a los 21 días (el 10-Q de las pequeñas llega más tarde). Solo resultados de los últimos 45 días."""
+    if not act or not isinstance(f, dict):
+        return False
+    fechas = {e[0] for e in (f.get("ern") or []) if e and e[0] <= hoy.isoformat() and len(e) > 2 and e[2] is not None}
+    if f.get("resultados") and f["resultados"] <= hoy.isoformat():
+        fechas.add(f["resultados"])
+    a = act[:10]
+    for d in fechas:
+        dd = date.fromisoformat(d)
+        if (hoy - dd).days > 45:
+            continue
+        d21 = (dd + timedelta(days=21)).isoformat()
+        if a <= d or (a < d21 <= hoy.isoformat()):
+            return True
+    return False
+
+
 def main():
     os.makedirs(DATA, exist_ok=True)
     if not UA or "@" not in UA:
@@ -387,8 +406,17 @@ def main():
         x = sim.get(s)
         # «act» es una fecha sin hora: se compara con la fecha de hoy (antes fallaba al restar con zona horaria)
         return not x or x.get("v") != VERSION or (NOW.date() - date.fromisoformat(x["act"][:10])).days >= REFRESH_DAYS
-    todo = [s for s in want if s in cik and stale(s)]
-    todo.sort(key=lambda s: s in sim)  # primero los que no están
+    # R0 · refresco por evento: fechas de resultados publicadas (caché de fundamentales de la web)
+    try:
+        FC = json.loads(get_site("data/fund_cache.json"))
+        FC = FC.get("datos", FC) if isinstance(FC, dict) else {}
+    except Exception as e:  # noqa: BLE001
+        FC = {}
+        log("Refresco por evento sin fechas de resultados:", e)
+    ev = {s for s in want if s in cik and s in sim and evento_sec(FC.get(s) or {}, sim[s].get("act"), NOW.date())}
+    log(f"Refresco por evento (SEC): {len(ev)} empresas con resultados recientes")
+    todo = [s for s in want if s in cik and (stale(s) or s in ev)]
+    todo.sort(key=lambda s: (s not in ev, s in sim))  # primero los de resultados recientes, luego los que no están
     todo = todo[:MAX_PER_RUN]
     ok = err = 0
     t0 = time.time()
