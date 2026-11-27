@@ -31,7 +31,7 @@ const AREAS = [
 const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
 /* Ficha de empresa (página propia, Fase 6): 9 apartados en la barra lateral */
 const FSECS = [["resumen", "Resumen"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["valoracion", "Valoración"], ["factores", "Factores"],
-  ["resultados", "Resultados"], ["comparables", "Comparables"], ["smartm", "Smart money"], ["riesgo", "Probabilidad y riesgo"], ["invest", "Investigación"]];
+  ["resultados", "Resultados"], ["comparables", "Comparables"], ["smartm", "Smart money"], ["riesgo", "Prob. y riesgo"], ["invest", "Investigación"]];
 /* enlaces antiguos de pestañas → apartado nuevo */
 const FSEC_OLD = { tesis: "valoracion", noticias: "resultados", pers: "smartm", comparar: "comparables" };
 const fsec = (t) => (FSECS.some((x) => x[0] === t) ? t : FSEC_OLD[t] || "resumen");

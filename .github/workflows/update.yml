@@ -79,6 +79,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 30
         run: python scripts/fetch_stress.py
+      - name: Probabilidad de acierto (batir a su índice en 12 meses; examen desde 2016)
+        continue-on-error: true
+        timeout-minutes: 30
+        run: python scripts/fetch_prob.py
       - name: Puntuación de oportunidad
         continue-on-error: true
         run: python scripts/score.py
@@ -87,7 +91,7 @@ jobs:
         run: python scripts/auditoria.py data
       - name: Si falla alguna fuente, conservar los datos publicados
         run: |
-          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json score_diario.json amplitud.json insiders.json news_cache.json lab.json sec_cache.json lab_extra.json risk.json geo.json stress.json; do
+          for f in universe.json sectors.json fund_cache.json smart.json smart_cache.json score.json score_hist.json score_diario.json amplitud.json insiders.json news_cache.json lab.json sec_cache.json lab_extra.json risk.json geo.json stress.json prob.json; do
             if [ ! -f "data/$f" ]; then curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" \
               || curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/copia-datos/data/$f" -o "data/$f" || true; fi
           done

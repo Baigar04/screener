@@ -240,6 +240,21 @@ def v_stress(d, prev):
     return f"{len(E)} escenarios · {len(I)} bolsas · {len(V)} valores · {len((d.get('divisas') or {}).get('fx') or {})} divisas"
 
 
+def v_prob(d, prev):
+    check_generado(d, "prob.json")
+    M, V = d.get("mercados") or {}, d.get("valores") or {}
+    check(len(M) >= 5, "prob.json: menos de 5 mercados")
+    for k, m in M.items():
+        x = m.get("examen") or {}
+        check(finite(x.get("skill")) and finite(x.get("ece")) and isinstance(x.get("validado"), bool), f"prob.json: examen incompleto en {k}")
+        check(not x.get("validado") or (x["skill"] >= 3 and x["ece"] < 10 and x.get("meses", 0) >= 60), f"prob.json: {k} validado sin cumplir el criterio")
+    if prev:
+        check(len(V) >= 0.7 * len(prev.get("valores") or {}), "prob.json: ha perdido muchos valores")
+    for s, v in list(V.items())[:6000]:
+        check(isinstance(v, list) and len(v) == 6 and all(finite(x) and 0 <= x <= 100 for x in v[:3]) and v[1] <= v[2], f"prob.json: valor imposible en {s}")
+    return f"{len(M)} mercados · {sum(1 for m in M.values() if (m.get('examen') or {}).get('validado'))} validados · {len(V)} valores"
+
+
 def v_insiders(d, prev):
     check_generado(d, "insiders.json")
     O, P = d.get("ops"), d.get("por_valor")
@@ -297,6 +312,7 @@ RULES = {
     "risk.json": v_risk,
     "geo.json": v_geo,
     "stress.json": v_stress,
+    "prob.json": v_prob,
     "smart.json": v_smart,
     "lab.json": v_lab,
     "fund_cache.json": v_dict("fund_cache.json"),

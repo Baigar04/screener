@@ -28,7 +28,7 @@ function cell(sym) {
   const x = of(sym); if (!x) return null;
   const tip = x.ok ? `Probabilidad de batir a ${x.M.nombre} en 12 meses (intervalo ${nf(x.lo, 0)}–${nf(x.hi, 0)} %; tasa base ${nf(x.M.base_hoy, 0)} %). Validada en el examen.`
     : `Sin ventaja demostrada en ${x.M?.nombre || "su mercado"}: usa la tasa base (${nf(x.M?.base_hoy, 0)} %). El modelo da ${nf(x.p, 0)} %.`;
-  return `<span class="pb-cell ${x.ok ? (x.p >= (x.M.base_hoy || 50) ? "up" : "dn") : "nv"}" data-tip="${esc(tip)}">${nf(x.ok ? x.p : x.M?.base_hoy, 0)} %${x.ok ? "" : "<small>base</small>"}</span>`;
+  return `<span class="pb-cell ${x.ok ? (x.p >= (x.M.base_hoy || 50) ? "up" : "dn") : "nv"}" data-tip="${esc(tip)}">${nf(x.ok ? x.p : x.M?.base_hoy, 0)} %${x.ok ? "" : " <small>base</small>"}</span>`;
 }
 
 /* gráficos */
@@ -36,13 +36,13 @@ function gauge(x) {
   const W = 260, Hh = 150, cx = 130, cy = 132, r = 104;
   const ang = (v) => Math.PI * (1 - v / 100), pt = (v, rr = r) => [cx + rr * Math.cos(ang(v)), cy - rr * Math.sin(ang(v))];
   const arc = (a, b, rr, col, w) => { const [x1, y1] = pt(a, rr), [x2, y2] = pt(b, rr); return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${rr} ${rr} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" style="stroke:${col};stroke-width:${w}px;stroke-linecap:butt"/>`; };
-  const base = x.M.base_hoy ?? 50, [bx1, by1] = pt(base, r - 14), [bx2, by2] = pt(base, r + 14), [nx, ny] = pt(x.p, r - 22);
-  return `<svg viewBox="0 0 ${W} ${Hh}" class="pb-gauge" role="img" aria-label="Probabilidad ${nf(x.p, 0)} %">
-    ${arc(0, 100, r, "var(--line)", 14)}${arc(Math.max(0, x.lo), Math.min(100, x.hi), r, x.ok ? "color-mix(in srgb,var(--accent) 45%,transparent)" : "color-mix(in srgb,var(--faint) 40%,transparent)", 14)}
+  const base = x.M.base_hoy ?? 50, shown = x.ok ? x.p : base, [bx1, by1] = pt(base, r - 14), [bx2, by2] = pt(base, r + 14), [nx, ny] = pt(shown, r);
+  return `<svg viewBox="0 0 ${W} ${Hh}" class="pb-gauge" role="img" aria-label="Cifra de acierto: ${nf(x.ok ? x.p : x.M.base_hoy, 0)} %">
+    ${arc(0, 100, r, "var(--line)", 14)}${x.ok ? "" : ""}${arc(Math.max(0, x.lo), Math.min(100, x.hi), r, x.ok ? "color-mix(in srgb,var(--accent) 45%,transparent)" : "color-mix(in srgb,var(--muted) 55%,transparent)", 14)}
     <line x1="${bx1.toFixed(1)}" y1="${by1.toFixed(1)}" x2="${bx2.toFixed(1)}" y2="${by2.toFixed(1)}" style="stroke:var(--text);stroke-width:2px"/>
-    <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" style="stroke:${x.ok ? "var(--accent)" : "var(--faint)"};stroke-width:3px"/><circle cx="${cx}" cy="${cy}" r="5" style="fill:${x.ok ? "var(--accent)" : "var(--faint)"}"/>
-    <text x="${cx}" y="${cy - 34}" text-anchor="middle" font-size="34" font-family="var(--mono)" fill="${x.ok ? "var(--text)" : "var(--muted)"}">${nf(x.p, 0)} %</text>
-    <text x="${cx}" y="${cy - 14}" text-anchor="middle" font-size="11" fill="var(--muted)">90 %: ${nf(x.lo, 0)}–${nf(x.hi, 0)} %</text>
+    <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="9" style="fill:var(--surface,#151515);stroke:${x.ok ? "var(--accent)" : "var(--muted)"};stroke-width:3px"/>
+    <text x="${cx}" y="${cy - 22}" text-anchor="middle" font-size="36" font-family="var(--mono)" fill="var(--text)">${nf(shown, 0)} %</text>
+    <text x="${cx}" y="${cy}" text-anchor="middle" font-size="11" fill="var(--muted)">${x.ok ? `90 %: ${nf(x.lo, 0)}–${nf(x.hi, 0)} %` : `tasa base · el modelo da ${nf(x.p, 0)} %`}</text>
     <text x="14" y="${Hh - 2}" font-size="10" fill="var(--faint)">0</text><text x="${W - 22}" y="${Hh - 2}" font-size="10" fill="var(--faint)">100</text>
     <text x="${bx2.toFixed(1)}" y="${(by2 - 4).toFixed(1)}" font-size="10" fill="var(--muted)" text-anchor="middle">base ${nf(base, 0)}</text></svg>`;
 }

@@ -1324,3 +1324,4 @@ body.one-sec .tabsbar #side{visibility:hidden}
 .pb-cell.up{color:var(--pos)}.pb-cell.dn{color:var(--neg)}.pb-cell.nv{color:var(--faint)}
 .pb-cell small{font-family:var(--sans,inherit);font-size:10px;margin-left:4px;color:var(--faint)}
 @media (max-width:1100px){.pb-g{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.st-bal{table-layout:fixed;width:100%}.st-bal td.num{min-width:0;white-space:normal;word-break:break-word}.st-bal td:first-child{width:55%}}

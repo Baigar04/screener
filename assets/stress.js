@@ -388,7 +388,7 @@ function render() {
     ].filter(Boolean),
     vigilar: [
       `${worstE.tipo === "crisis" ? "Señales de crisis de crédito (diferenciales y EBP) en Contexto › Riesgo" : `El factor del peor choque: ${worstE.desc.toLowerCase()}`}.`,
-      ...(K.rows.filter((x) => x.nr >= 3).slice(0, 2).map((x) => `${x.sym}: rompe en ${x.nr} escenarios; su balance en la ficha › Probabilidad y riesgo.`)),
+      ...(K.rows.filter((x) => x.nr >= 3).slice(0, 2).map((x) => `${x.sym}: rompe en ${x.nr} escenarios; su balance en la ficha › Prob. y riesgo.`)),
     ],
     cambiaria: ["Cambiar los pesos o añadir valores que aguanten el peor escenario.", "Una nueva actualización de precios que cambie las sensibilidades estimadas."],
   };

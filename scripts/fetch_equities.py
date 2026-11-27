@@ -908,7 +908,7 @@ def main():
     ncut = (NOW - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
     day0 = NOW.toordinal()
     for k, sym_ in enumerate(syms):
-        if set(U[sym_].get("indices") or []) <= NUEVOS and U[sym_].get("indices") and k % REFRESH_SHARE != day0 % REFRESH_SHARE and ncache.get(sym_):
+        if set(U[sym_].get("indices") or []) <= NUEVOS and U[sym_].get("indices") and k % REFRESH_SHARE != day0 % REFRESH_SHARE:
             continue   # grupos nuevos: titulares una vez por semana (la ejecución diaria no puede con 4.000 valores al día)
         try:
             got = news_items(sym_, (cache.get(sym_) or {}).get("nombre"))
