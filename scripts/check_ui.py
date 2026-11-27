@@ -369,8 +369,8 @@ def ranking(pg, base):
     idx = pg.evaluate("(window.SCRUni ? window.SCRUni() : []).reduce((a, r) => { (r.indices || []).forEach((i) => a[i] = (a[i] || 0) + 1); return a; }, {})")
     print("    regiones:", regs, "· índices:", idx, flush=True)
     check("universo ampliado: S&P 600, FTSE 250, Mercado Continuo y Latinoamérica", all(idx.get(k, 0) > 0 for k in ("S&P 600", "FTSE 250", "Mercado Continuo", "ADR Latinoamérica")) and regs.get("Latinoamérica", 0) > 0,
-    check("universo fase 4: Nikkei 225, KOSPI 200, Taiwán, pequeñas de EE. UU. y temáticos", all(idx.get(k, 0) > 0 for k in ("Nikkei 225", "KOSPI 200", "Taiwán 100 (mayores, Yahoo)", "Pequeñas EE. UU. (≈ Russell 2000)")) and any(k.startswith("Temático:") for k in idx), str({k: v for k, v in idx.items() if k.startswith(("Nikkei", "KOSPI", "Taiwán", "Pequeñas", "Temático"))}))
           str(idx))
+    check("universo fase 4: Nikkei 225, KOSPI 200, Taiwán, pequeñas de EE. UU. y temáticos", all(idx.get(k, 0) > 0 for k in ("Nikkei 225", "KOSPI 200", "Taiwán 100 (mayores, Yahoo)", "Pequeñas EE. UU. (≈ Russell 2000)")) and any(k.startswith("Temático:") for k in idx), str({k: v for k, v in idx.items() if k.startswith(("Nikkei", "KOSPI", "Taiwán", "Pequeñas", "Temático"))}))
 
 
 def riesgo(pg, base):

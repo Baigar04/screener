@@ -362,6 +362,12 @@ def main():
     fx_t = {c: f"EUR{c}=X" for c in DIVISAS}
     tick = list(idx_t.values()) + ["SOXX"] + list(fx_t.values()) + [r["sym"] for r in U]
     W = weekly(list(dict.fromkeys(tick)))
+    try:   # la fase 5 (fetch_prob.py) reutiliza estos precios semanales en el mismo job: no se publica
+        import pickle
+        with open(os.environ.get("SEMANAL", "/tmp/screener_semanal.pkl"), "wb") as fh:
+            pickle.dump(W, fh)
+    except Exception as e:  # noqa: BLE001
+        log("No se pudo guardar la copia semanal:", e)
     lc = last_complete_month(NOW.date())
     if "SOXX" in W:
         fac["semis"] = mlogret(monthly_from_weekly(W["SOXX"]), lc)

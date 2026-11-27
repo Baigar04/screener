@@ -49,8 +49,12 @@ jobs:
       - name: Stress tests
         if: contains(inputs.pasos, 'estres') || contains(inputs.pasos, 'prob')
         run: python scripts/fetch_stress.py
+      - name: Probabilidad de acierto (examen)
+        if: contains(inputs.pasos, 'prob')
+        run: python scripts/fetch_prob.py
       - name: Copia legible en el registro (gzip + base64)
         run: |
+          [ -f data/prob.json ] && echo "PROBB64:$(gzip -9c data/prob.json | base64 -w0)" || true
           [ -f data/stress.json ] && echo "STRESSB64:$(gzip -9c data/stress.json | base64 -w0)" || true
           [ -f data/risk.json ] && echo "RISKB64:$(gzip -9c data/risk.json | base64 -w0)" || true
           [ -f data/geo.json ] && echo "GEOB64:$(gzip -9c data/geo.json | base64 -w0)" || true
