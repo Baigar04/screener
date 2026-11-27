@@ -111,9 +111,9 @@ def v_universe(d, prev):
         s = r["sym"]
         px = r.get("precio")
         check(px is None or (finite(px) and px > 0), f"universe.json: {s} con precio no válido ({px!r})")
-        for k in ("mcap", "mcap_usd", "acciones"):
+        for k, lim in (("mcap", 1e16), ("mcap_usd", 1e14), ("acciones", 1e14)):   # mcap en moneda local: wones y yenes llegan a 10^15
             v = r.get(k)
-            check(v is None or (finite(v) and 0 <= v < 1e14), f"universe.json: {s} con {k} fuera de rango ({v!r})")
+            check(v is None or (finite(v) and 0 <= v < lim), f"universe.json: {s} con {k} fuera de rango ({v!r})")
         for k in ("per", "pb", "ev_ebitda", "roe", "margen_op", "crec_ventas", "r1d", "r1m", "r3m", "r6m", "r1a", "sma50", "sma200", "deuda_neta_ebitda"):
             check(num_or_none(r.get(k)), f"universe.json: {s} con {k} no numérico ({r.get(k)!r})")
         v = r.get("rsi")
