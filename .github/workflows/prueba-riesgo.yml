@@ -2,6 +2,10 @@ name: Prueba del termómetro de riesgo
 # Ejecuta solo scripts/fetch_risk.py y guarda risk.json como artefacto (para revisar el cálculo sin esperar a la actualización completa).
 on:
   workflow_dispatch:
+    inputs:
+      pasos:
+        description: "Pasos separados por comas: sonda, riesgo, geo, estres, prob"
+        default: "riesgo,geo,estres"
 permissions:
   contents: read
 jobs:
@@ -16,6 +20,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Sonda de fuentes (fase 4)
+        if: contains(inputs.pasos, 'sonda')
         continue-on-error: true
         run: python scripts/probe_fuentes.py
       - name: Universo y amplitud publicados (para concentración y amplitud)
@@ -23,19 +28,22 @@ jobs:
           mkdir -p data
           for f in universe.json amplitud.json; do curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "data/$f" || true; done
       - name: Termómetro
+        if: contains(inputs.pasos, 'riesgo')
         env:
           SEC_UA: ${{ secrets.SEC_UA }}
         run: python scripts/fetch_risk.py
       - name: Geopolítica
+        if: contains(inputs.pasos, 'geo')
         run: |
           mkdir -p data/p
           python scripts/fetch_geo.py
       - name: Stress tests
+        if: contains(inputs.pasos, 'estres') || contains(inputs.pasos, 'prob')
         run: python scripts/fetch_stress.py
       - name: Copia legible en el registro (gzip + base64)
         run: |
           [ -f data/stress.json ] && echo "STRESSB64:$(gzip -9c data/stress.json | base64 -w0)" || true
-          echo "RISKB64:$(gzip -9c data/risk.json | base64 -w0)"
+          [ -f data/risk.json ] && echo "RISKB64:$(gzip -9c data/risk.json | base64 -w0)" || true
           [ -f data/geo.json ] && echo "GEOB64:$(gzip -9c data/geo.json | base64 -w0)" || true
       - uses: actions/upload-artifact@v4
         with:
