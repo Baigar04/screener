@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-27T04:45:58+00:00",
+ "generado": "2026-11-28T01:00:27+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -7,7 +7,7 @@
   },
   "universe.json": {
    "estado": "ok",
-   "detalle": "4312 valores · 4295/4305 precios al día"
+   "detalle": "4323 valores · 4302/4312 precios al día"
   },
   "sectors.json": {
    "estado": "ok",
@@ -15,7 +15,7 @@
   },
   "score.json": {
    "estado": "ok",
-   "detalle": "4312 valores puntuados"
+   "detalle": "4323 valores puntuados"
   },
   "score_hist.json": {
    "estado": "ok",
@@ -23,31 +23,31 @@
   },
   "score_diario.json": {
    "estado": "ok",
-   "detalle": "10 fotos diarias"
+   "detalle": "11 fotos diarias"
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 43.3 % > SMA50, Europa: 43.1 % > SMA50"
+   "detalle": "EE. UU.: 48.9 % > SMA50, Europa: 51.4 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
-   "detalle": "11813 operaciones · 70 días · pendientes 4"
+   "detalle": "11813 operaciones · 70 días · pendientes 5"
   },
   "risk.json": {
    "estado": "ok",
-   "detalle": "11 bolsas · 0 validadas · S&P 500 18.5 % · Nasdaq 100 24.0 % · Euro Stoxx 50 29.6 % · DAX 27.1 %"
+   "detalle": "11 bolsas · 0 validadas · S&P 500 18.2 % · Nasdaq 100 23.9 % · Euro Stoxx 50 29.8 % · DAX 27.3 %"
   },
   "geo.json": {
    "estado": "ok",
-   "detalle": "GPR 150.5 (p91) · 44 países · 5 pistas · 4024 valores"
+   "detalle": "GPR 150.5 (p91) · 44 países · 4 pistas · 4031 valores"
   },
   "stress.json": {
    "estado": "ok",
-   "detalle": "12 escenarios · 11 bolsas · 4096 valores · 11 divisas"
+   "detalle": "12 escenarios · 11 bolsas · 4102 valores · 11 divisas"
   },
   "prob.json": {
    "estado": "ok",
-   "detalle": "12 mercados · 0 validados · 4029 valores"
+   "detalle": "12 mercados · 0 validados · 4036 valores"
   },
   "smart.json": {
    "estado": "ok",
@@ -59,15 +59,15 @@
   },
   "fund_cache.json": {
    "estado": "ok",
-   "detalle": "3624 entradas"
+   "detalle": "4017 entradas"
   },
   "news_cache.json": {
    "estado": "ok",
-   "detalle": "3295 entradas"
+   "detalle": "3480 entradas"
   },
   "sec_cache.json": {
    "estado": "ok",
-   "detalle": "2765 entradas"
+   "detalle": "2896 entradas"
   },
   "smart_cache.json": {
    "estado": "ok",
