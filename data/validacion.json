@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-28T01:00:27+00:00",
+ "generado": "2026-11-28T02:26:30+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -7,7 +7,7 @@
   },
   "universe.json": {
    "estado": "ok",
-   "detalle": "4323 valores · 4302/4312 precios al día"
+   "detalle": "4325 valores · 4302/4312 precios al día"
   },
   "sectors.json": {
    "estado": "ok",
@@ -15,7 +15,7 @@
   },
   "score.json": {
    "estado": "ok",
-   "detalle": "4323 valores puntuados"
+   "detalle": "4325 valores puntuados"
   },
   "score_hist.json": {
    "estado": "ok",
@@ -27,7 +27,7 @@
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 48.9 % > SMA50, Europa: 51.4 % > SMA50"
+   "detalle": "EE. UU.: 44.0 % > SMA50, Europa: 51.3 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
@@ -47,7 +47,7 @@
   },
   "prob.json": {
    "estado": "ok",
-   "detalle": "12 mercados · 0 validados · 4036 valores"
+   "detalle": "12 mercados · 0 validados · 4034 valores"
   },
   "smart.json": {
    "estado": "ok",
@@ -59,7 +59,7 @@
   },
   "fund_cache.json": {
    "estado": "ok",
-   "detalle": "4017 entradas"
+   "detalle": "4332 entradas"
   },
   "news_cache.json": {
    "estado": "ok",
@@ -67,7 +67,7 @@
   },
   "sec_cache.json": {
    "estado": "ok",
-   "detalle": "2896 entradas"
+   "detalle": "2914 entradas"
   },
   "smart_cache.json": {
    "estado": "ok",
