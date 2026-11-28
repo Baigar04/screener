@@ -721,7 +721,13 @@ def _rss(url):
             d = email.utils.parsedate_to_datetime(g("pubDate")).strftime("%Y-%m-%d")
         except Exception:  # noqa: BLE001
             continue
-        out.append((d, title, g("link"), src or None))
+        desc = html_lib.unescape(re.sub(r"<[^>]+>", " ", re.sub(r"<!\[CDATA\[|\]\]>", "", g("description"))))
+        desc = re.sub(r"\s+", " ", desc).strip()
+        if not desc or desc.lower().startswith(title.lower()[:40]) or len(desc) < 40:
+            desc = ""
+        elif len(desc) > 320:
+            desc = desc[:320].rsplit(" ", 1)[0] + "…"
+        out.append((d, title, g("link"), src or None, desc))
     return out
 
 
@@ -730,7 +736,7 @@ def news_items(sym, name=None):
     import urllib.parse
     items = []
     try:
-        items = [(d, t, l, p or "Yahoo Finance") for d, t, l, p in _rss(f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={urllib.parse.quote(sym)}&region=US&lang=en-US")]
+        items = [(d, t, l, p or "Yahoo Finance", ds) for d, t, l, p, ds in _rss(f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={urllib.parse.quote(sym)}&region=US&lang=en-US")]
     except Exception:  # noqa: BLE001
         items = []
     if len(items) < 3 and name:
@@ -741,10 +747,10 @@ def news_items(sym, name=None):
         except Exception:  # noqa: BLE001
             pass
     out = []
-    for d, title, link, prov in items[:25]:
+    for d, title, link, prov, desc in items[:25]:
         low = title.lower()
         cat = next((k for k, rx in NEWS_CAT if re.search(rx, low)), "otras")
-        out.append([d, cat, title[:220], link, prov])
+        out.append([d, cat, title[:220], link, prov] + ([desc] if desc else []))   # resumen que publica la propia fuente en su RSS
     return out
 
 

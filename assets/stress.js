@@ -17,7 +17,7 @@ async function ensure() {
   if (["escenarios", "hoy", "carteras"].includes(H.S.view) || H.S.ficha) H.render();
 }
 const X = () => H.S.mode === "x";
-const exp = (t) => (X() ? `<div class="rsk-exp">${t}</div>` : "");
+const exp = (t) => `<div class="rsk-exp">${t}</div>`;   /* R1: siempre presente; ui.js lo pliega (abierto en Explicado) */
 const s0 = (v) => (Math.abs(v) < 0.5 ? "0" : sgn(v, 0));
 const pc = (v, d = 1) => (v == null || isNaN(v) ? "—" : Math.abs(v) < 0.5 * 10 ** -d ? "0 %" : `${sgn(v, d)} %`);
 const eur = (v) => (v == null || isNaN(v) ? "—" : `${v < 0 ? "−" : ""}${nf(Math.abs(v), 0)} €`);
@@ -359,7 +359,7 @@ function render() {
       </tbody></table></div>
       <div><div class="st-alt-h">Alternativas evaluadas y descartadas</div><table class="rsk-kv st-kv">${PR.alts.map((x) => `<tr><td>${esc(x.t)}</td><td>${esc(x.r)}</td></tr>`).join("")}</table>
         ${M.tipo === "reducir" ? (R.reg ? `<div class="st-ok">${esc(R.reg)}</div>` : `<button class="icon-btn primary" data-escreg="1" style="margin-top:10px">Registrar en el Diario</button>`) : ""}
-        <div class="rsk-exp" style="display:block">La propuesta se registra en el Diario con fecha y precios para comparar dentro de 3-12 meses qué habría pasado con y sin ella. Si decides ejecutarla, se hace con el protocolo IBKR.</div></div></div>
+        <div class="rsk-exp ui-keep" style="display:block">La propuesta se registra en el Diario con fecha y precios para comparar dentro de 3-12 meses qué habría pasado con y sin ella. Si decides ejecutarla, se hace con el protocolo IBKR.</div></div></div>
       ${exp(`<b>Reglas de la propuesta</b> (fijadas antes de ver ninguna cartera): se reduce a la mitad, como mucho, a las 2 posiciones que más explican el peor escenario si rompen en 3 o más escenarios o si su parte de la pérdida es al menos 1,5 veces su peso (con peso ≥ 10 %). Lo liberado va a las posiciones que no rompen en ningún escenario y caen menos en su peor caso (máximo 25 % por valor); si no hay, a liquidez. Coste aproximado con la tarifa fija de IBKR (0,05 % con mínimo de 3 € en Europa; 0,005 $ por acción con mínimo de 1 $ en EE. UU.) más el impuesto sobre transacciones financieras en las compras (Reino Unido 0,5 %, Francia 0,4 %, España 0,2 %, Italia 0,1 %; en Francia, España e Italia solo afecta a empresas grandes, así que puede ser menor).`)}</section>`;
     R.lastProp = { M, P, mk };
   }
@@ -392,7 +392,7 @@ function render() {
     ],
     cambiaria: ["Cambiar los pesos o añadir valores que aguanten el peor escenario.", "Una nueva actualización de precios que cambie las sensibilidades estimadas."],
   };
-  return head + sel + kpis + prop + `<div class="st-2">${`<section class="rsk-p"><h3>Tu cartera frente al ${esc(bname)} en cada escenario <span>en euros</span></h3>${barsChart(K, bname)}</section>`}${contrib}</div>` + hm + divisasBox(P, K)
+  return head + (window.SCRRisk?.estado?.() || "") + sel + kpis + prop + `<div class="st-2">${`<section class="rsk-p"><h3>Tu cartera frente al ${esc(bname)} en cada escenario <span>en euros</span></h3>${barsChart(K, bname)}</section>`}${contrib}</div>` + hm + divisasBox(P, K)
     + exp(`<b>Cómo se calcula.</b> Cada posición con su peso actual y su efecto en cada escenario; en las crisis se suma lo que hizo su divisa frente al euro en ese tramo, y en el choque del dólar, la apreciación del dólar para los valores en dólares. Si un valor no tiene dato propio se usa el de su bolsa (∗). Es una foto de lo que habría pasado con esta cartera, no una previsión. CVaR: media del peor 5 % de las rentabilidades de 3 meses con los pesos actuales en los últimos 5 años, en la moneda de cada valor.`)
     + `<div class="rsk-read">${H.ui.conjunta(C, P.nombre || "Escenarios")}</div>`;
 }

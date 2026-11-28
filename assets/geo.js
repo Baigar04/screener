@@ -12,10 +12,10 @@ async function ensure() {
   R.loading = true;
   try { const r = await fetch(`data/geo.json?t=${Date.now()}`, { cache: "no-store" }); R.d = r.ok ? await r.json() : null; } catch { R.d = null; }
   R.loading = false;
-  if (["geopolitica", "hoy"].includes(H.S.view)) H.render();
+  if (["geopolitica", "hoy", "riesgo", "escenarios"].includes(H.S.view)) H.render();
 }
 const X = () => H.S.mode === "x";
-const exp = (t) => (X() ? `<div class="rsk-exp">${t}</div>` : "");
+const exp = (t) => `<div class="rsk-exp">${t}</div>`;   /* R1: siempre presente; ui.js lo pliega (abierto en Explicado) */
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const fm = (m) => (m ? `${MES[+m.slice(5, 7) - 1]}-${m.slice(2, 4)}` : "—");
 const pc = (v, d = 1) => (v == null ? "—" : `${sgn(v, d)} %`);
@@ -151,7 +151,7 @@ function render() {
   if (R.d === undefined) return `<div class="skel" style="height:420px"></div>`;
   const G = R.d;
   if (!G?.mensual) return `<div class="pg-head"><h1>Geopolítica</h1></div><div class="box">Todavía no hay datos de geopolítica: se generan en la próxima actualización automática.</div>`;
-  return `<div class="pg-head"><h1>Geopolítica</h1><div class="pg-sub">Qué significa el riesgo geopolítico para tus valores y qué hacer · índice GPR de Caldara e Iacoviello (Fed) · mensual ${fm(G.global?.ultimo_mes)}, diario ${G.global?.ultimo_dia ? fmtDate(G.global.ultimo_dia) : "—"}${G.errores?.length ? ` · <span class="stale-txt" data-tip="${esc(G.errores.map((e) => `${e.serie}: ${e.motivo}`).join(" · "))}">${G.errores.length} aviso(s)</span>` : ""}</div></div>
+  return `<div class="pg-head"><h1>Geopolítica</h1><div class="pg-sub">Qué significa el riesgo geopolítico para tus valores y qué hacer · índice GPR de Caldara e Iacoviello (Fed) · mensual ${fm(G.global?.ultimo_mes)}, diario ${G.global?.ultimo_dia ? fmtDate(G.global.ultimo_dia) : "—"}${G.errores?.length ? ` · <span class="stale-txt" data-tip="${esc(G.errores.map((e) => `${e.serie}: ${e.motivo}`).join(" · "))}">${G.errores.length} aviso(s)</span>` : ""}</div></div>${window.SCRRisk?.estado?.() || ""}
     ${pistasBox(G)}
     ${flowBox(G)}
     ${kpis(G)}

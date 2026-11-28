@@ -567,9 +567,11 @@ async function mountNews(sym) {
       <table><thead><tr><th>Fecha ex-dividendo</th><th>Importe</th></tr></thead><tbody>${divs.slice(0, 10).map(([f, a]) => `<tr><td>${fmtDate(f)}</td><td class="num">${nf(a, a < 1 ? 4 : 2)}</td></tr>`).join("")}</tbody></table>` : '<div class="hint">No ha repartido dividendos en los últimos 5 años.</div>'}</div></div>
     <div><div class="box"><b>Noticias (últimos 60 días)</b>
       <div class="bar" style="margin:4px 0 8px">${cats.map((c) => `<button class="chip ${newsCat === c ? "on" : ""}" data-ncat="${c}">${c === "relevantes" ? "Relevantes" : c === "todas" ? "Todas" : NEWS_LAB[c]}</button>`).join("")}</div>
-      ${shown.length ? shown.map(([f, c, t, l, pv]) => `<div class="nw"><span class="hint num">${fmtDate(f)}</span> <span class="tg tg-n-${c}">${NEWS_LAB[c] || c}</span><div>${l ? `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(t)}</a>` : esc(t)}</div>${pv ? `<span class="hint">${esc(pv)}</span>` : ""}</div>`).join("")
+      ${shown.length ? shown.map(([f, c, t, l, pv, ds]) => `<details class="nw nw-d"><summary><span class="hint num">${fmtDate(f)}</span> <span class="tg tg-n-${c}">${NEWS_LAB[c] || c}</span><div class="nw-t">${esc(t)}</div></summary>
+          <div class="nw-b">${ds ? `<p>${esc(ds)}</p><span class="hint">Resumen publicado por la fuente</span>` : `<span class="hint">La fuente no publica resumen en su canal de noticias.</span>`}
+          <div class="nw-f">${pv ? `<span class="hint">${esc(pv)}</span>` : ""}${l ? `<a href="${esc(l)}" target="_blank" rel="noopener">Leer en la fuente ↗</a>` : ""}</div></div></details>`).join("")
         : '<div class="hint">Sin noticias en esta categoría. El archivo de noticias empieza a acumularse desde ahora.</div>'}
-      <div class="method">Titulares de Yahoo Finance, en su idioma original. La categoría se asigna por palabras clave del titular, no leyendo la noticia: puede equivocarse.</div></div></div></div>`;
+      <div class="method">Titulares de Yahoo Finance (o Google Noticias si hay pocos), en su idioma original. Pulsa un titular para ver el resumen que publica la propia fuente y el enlace al artículo completo; el texto íntegro no se reproduce. La categoría se asigna por palabras clave del titular, no leyendo la noticia: puede equivocarse.</div></div></div></div>`;
 }
 function mountCompare(sym) {
   const el = document.getElementById("fcmp"); const list = [sym, ...E.cmp.filter((s) => s !== sym)].slice(0, 4);

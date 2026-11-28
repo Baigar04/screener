@@ -463,6 +463,31 @@ def escenarios(pg, base):
     check("escenarios: móvil sin desborde horizontal", pg.evaluate("document.documentElement.scrollWidth") <= 392)
 
 
+def r1(pg, base):
+    """R1: textos plegables, una sola columna de contexto en «Hoy», cabecera de estado del riesgo y noticias desplegables."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    pg.goto(base + "#/geopolitica")
+    pg.wait_for_timeout(1500)
+    pg.evaluate("""() => document.querySelector('#level button[data-mode="c"]')?.click()""")
+    pg.wait_for_timeout(3000)
+    n = pg.locator("#view details.ui-det").count()
+    opened = pg.locator("#view details.ui-det[open]").count()
+    check("R1: explicaciones plegadas en Compacto", n >= 3 and opened == 0, f"{n} desplegables, {opened} abiertos")
+    check("R1: cabecera «Estado del riesgo» en Geopolítica", pg.locator("#view .ui-estado").count() == 1)
+    syms = pg.evaluate("fetch('data/universe.json').then(r => r.json()).then(u => u.filas.slice(0, 4).map(r => r.sym))")
+    pg.evaluate("(s) => { if (!JSON.parse(localStorage.getItem('seguimiento') || '[]').length) localStorage.setItem('seguimiento', JSON.stringify(s)); }", syms)
+    pg.goto(base + "#/hoy")
+    pg.reload()
+    pg.wait_for_timeout(3500)
+    th = " ".join(pg.locator(".hy-t th").all_text_contents())
+    check("R1: «Hoy» con una sola columna de contexto", "Contexto" in th and "Estrés" not in th.replace("estrés", ""), th[:120])
+    sym = pg.evaluate("fetch('data/universe.json').then(r => r.json()).then(u => u.filas[0].sym)")
+    pg.goto(base + f"#/empresa/{sym}/resultados")
+    pg.wait_for_timeout(3500)
+    nd = pg.locator("details.nw-d").count()
+    check("R1: noticias desplegables en la ficha", nd >= 1 or "Sin noticias" in (pg.text_content("#view") or ""), f"{nd} noticias")
+
+
 def diseno3(pg, base):
     """Diseño A · entrega 3: Screener de una línea, «Hoy» en rejilla, rotación sectorial nueva y atajos."""
     pg.set_viewport_size({"width": 1440, "height": 900})
@@ -508,7 +533,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica, escenarios):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica, escenarios, r1):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

@@ -18,14 +18,14 @@ async function ensure() {
   R.loading = true;
   try { const r = await fetch(`data/risk.json?t=${Date.now()}`, { cache: "no-store" }); R.d = r.ok ? await r.json() : null; } catch { R.d = null; }
   R.loading = false;
-  if (["riesgo", "hoy"].includes(H.S.view)) H.render();
+  if (["riesgo", "hoy", "geopolitica", "escenarios"].includes(H.S.view)) H.render();
 }
 const X = () => H.S.mode === "x";
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const fm = (m) => (m ? `${MES[+m.slice(5, 7) - 1]}-${m.slice(2, 4)}` : "—");
 const fd = (iso) => (iso ? (iso.length <= 7 ? fm(iso) : `${+iso.slice(8, 10)}-${MES[+iso.slice(5, 7) - 1]}-${iso.slice(2, 4)}`) : "—");
 const pc = (v, d = 0) => (v == null ? "—" : `${nf(v, d)} %`);
-const exp = (t) => (X() ? `<div class="rsk-exp">${t}</div>` : "");
+const exp = (t) => `<div class="rsk-exp">${t}</div>`;   /* R1: siempre presente; ui.js lo pliega (abierto en Explicado) */
 const VEL = { lenta: ["Lenta · valoración", "predice la rentabilidad de años, no el momento de la caída"], media: ["Media · crédito y ciclo", "la de más evidencia histórica, de 3 a 12 meses vista"], rapida: ["Rápida · mercado", "confirma el estrés más que anticiparlo"] };
 const UNIT = { cape: ["", 1], cap_pib: [" %", 0], ebp: [" pp", 2], ebp_6m: [" pp", 2], baa: [" pp", 2], hy: [" pp", 2], ciss: ["", 3], prima_es: [" pb", 0], prima_it: [" pb", 0], margen: [" %", 2], curva: [" pp", 2], sahm: [" pp", 2], vix: ["", 1], nfci: ["", 2], tendencia: [" %", 1], vol_idx: [" %", 1] };
 const DEF = {
@@ -188,7 +188,7 @@ function iaBox(I, C) {
       <tr><td>Deuda financiera</td><td class="num">${nf(I.deuda, 0)} mil M$ · ${sgn(I.deuda_12m, 0)} en 12 m</td></tr>
       ${C ? `<tr><td>Peso del bloque IA en el S&amp;P 500</td><td class="num" data-tip="Nvidia, Microsoft, Alphabet, Amazon y Meta">${nf(C.ia, 1)} %</td></tr>` : ""}</table>
     <div class="rsk-fases">${FASES.map(([f, d]) => `<div class="${f === I.fase ? "on" : ""}"><b>${f}</b><span>${d}</span></div>`).join("")}</div>
-    ${I.fase ? `<div class="rsk-exp" style="display:block"><b>${esc(I.fase)}</b> (${esc(I.trimestre)}): ${esc(FASE_TXT[I.fase])}</div>` : ""}
+    ${I.fase ? `<div class="rsk-exp ui-keep" style="display:block"><b>${esc(I.fase)}</b> (${esc(I.trimestre)}): ${esc(FASE_TXT[I.fase])}</div>` : ""}
     ${exp(`<b>Reglas.</b> ${esc(I.reglas)}`)}
     <div class="rsk-src">${esc(I.fuente)}</div></section>`;
 }
@@ -274,11 +274,16 @@ function strip() {
   if (ebp) it.push(`<div><span>Crédito (EBP)</span><b class="num">${nf(ebp.ultimo.valor, 2)}</b><small class="num">percentil ${ebp.pct ?? "—"}</small></div>`);
   if (I?.fase) it.push(`<div><span>Ciclo IA</span><b class="${I.fase === "Digestión" || I.fase === "Contracción" ? "warn" : ""}">${esc(I.fase)}</b><small>${esc(I.trimestre)}</small></div>`);
   if (vix) it.push(`<div><span>VIX</span><b class="num">${nf(vix.ultimo.valor, 1)}</b><small class="num">percentil ${vix.pct ?? "—"}</small></div>`);
-  const gl = X() ? `<div class="rsk-exp hoy-gl"><b>Cómo leer esta franja.</b> Para cada bolsa que sigues: probabilidad estimada de que caiga más de un ${plazo() === "3" ? "10 % en algún momento de los próximos 3 meses" : "15 % en algún momento de los próximos 12 meses"} (el plazo se elige en Contexto › Riesgo), comparada con su media histórica, y su régimen (normal, tensión o alerta; «sin ventaja» si el modelo no mejora a la media en esa bolsa). Las bolsas se eligen en Mercado › Riesgo. <b>Crédito (EBP)</b>: lo que se cobra de más por prestar a empresas por encima de su riesgo de quiebra; cuando sube, el crédito se encarece y suele anticipar caídas. <b>Ciclo IA</b>: ${I?.fase ? esc(FASE_TXT[I.fase]) : "fase de la inversión en IA de las grandes tecnológicas."} <b>VIX</b>: volatilidad esperada del S&amp;P 500.</div>` : "";
+  const G = window.SCRGeo?.data?.();
+  if (G?.global?.pct != null) it.push(`<div class="rsk-sm" data-sub="geopolitica"><span>Geopolítica (GPR)</span><b class="num">p${nf(G.global.pct, 0)}</b><small>diario p${nf(G.global.pct7, 0)} · ${G.global.tendencia === "baja" ? "bajando" : G.global.tendencia === "sube" ? "subiendo" : esc(G.global.tendencia || "")}</small></div>`);
+  else window.SCRGeo?.ensure?.();
+  const gl = true ? `<div class="rsk-exp hoy-gl"><b>Cómo leer esta franja.</b> Para cada bolsa que sigues: probabilidad estimada de que caiga más de un ${plazo() === "3" ? "10 % en algún momento de los próximos 3 meses" : "15 % en algún momento de los próximos 12 meses"} (el plazo se elige en Contexto › Riesgo), comparada con su media histórica, y su régimen (normal, tensión o alerta; «sin ventaja» si el modelo no mejora a la media en esa bolsa). Las bolsas se eligen en Mercado › Riesgo. <b>Crédito (EBP)</b>: lo que se cobra de más por prestar a empresas por encima de su riesgo de quiebra; cuando sube, el crédito se encarece y suele anticipar caídas. <b>Ciclo IA</b>: ${I?.fase ? esc(FASE_TXT[I.fase]) : "fase de la inversión en IA de las grandes tecnológicas."} <b>VIX</b>: volatilidad esperada del S&amp;P 500. <b>Geopolítica</b>: percentil del índice de riesgo geopolítico frente a su historia desde 1985 (mensual y media de 7 días).</div>` : "";
   return `<div class="rsk-strip">${it.join("")}<button class="link-btn" data-sub="riesgo">Ver Riesgo →</button></div>${gl}`;
 }
 
 H.modules.riesgo = render;
 H.handlers.unshift(onClick);
-window.SCRRisk = { ensure, strip, data: () => R.d, followed: segs, tOf, plazo };
+/* R1 · cabecera común «estado del riesgo» para Geopolítica y Escenarios (y la franja de «Hoy») */
+function estado() { const h = strip(); return h ? `<div class="ui-estado"><div class="ui-estado-t">Estado del riesgo</div>${h}</div>` : ""; }
+window.SCRRisk = { ensure, strip, estado, data: () => R.d, followed: segs, tOf, plazo };
 })();

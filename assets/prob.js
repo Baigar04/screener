@@ -15,7 +15,7 @@ async function ensure() {
   if (H.S.ficha || H.S.view === "hoy") H.render();
 }
 const X = () => H.S.mode === "x";
-const exp = (t) => (X() ? `<div class="rsk-exp">${t}</div>` : "");
+const exp = (t) => `<div class="rsk-exp">${t}</div>`;   /* R1: siempre presente; ui.js lo pliega (abierto en Explicado) */
 const of = (sym) => {
   const v = R.d?.valores?.[sym]; if (!v) return null;
   const [p, lo, hi, c, dec, mk] = v, M = R.d.mercados?.[mk];

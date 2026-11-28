@@ -256,6 +256,23 @@ function avisos(uni, Q) {
   if (!out.length) return `<div class="hint">Ninguna señal cruza hoy su umbral.</div>`;
   return out.slice(0, 6).map(([c, t, sub, k, sym]) => `<button class="hy-alert" ${sym ? `data-sym="${esc(sym)}"` : `data-sub="${sub}" data-rsksel="${k}"`}><i class="${c}"></i><span>${t}<small>${sym ? "Abrir ficha" : "Contexto › Riesgo"} →</small></span></button>`).join("");
 }
+/* R1 · una sola columna de contexto: régimen de su bolsa, estrés y geopolítica (la probabilidad, en la ayuda) */
+function contexto(sym) {
+  const mk = window.SCRStress?.data?.()?.valores?.[sym]?.m || window.SCRProb?.of?.(sym)?.mk;
+  const RD = window.SCRRisk?.data?.(), T0 = mk && RD?.mercados?.[mk];
+  const out = [];
+  if (T0) {
+    const T = window.SCRRisk.tOf(T0), a = T.actual;
+    const tip = `${T.nombre}: probabilidad de caída de ${nf(a.p, 0)} % frente a una media de ${nf(a.base, 0)} %${a.validado ? "" : " (modelo sin ventaja en esta bolsa)"}`;
+    out.push(`<span data-tip="${esc(tip)}">${H.ui.pill(a.regimen, a.validado)}</span>`);
+  }
+  const st = window.SCRStress?.cell?.(sym); if (st) out.push(st);
+  const g = window.SCRGeo?.data?.()?.sens_valores?.[sym];
+  if (g && Math.abs(g[1]) >= 2) out.push(`<span class="hy-geo ${g[0] >= 0 ? "pos" : "neg"}" data-tip="Rentabilidad del mes si el riesgo geopolítico sube 2 desviaciones, descontando su bolsa">geo ${sgn(g[0], 1)} %</span>`);
+  const p = window.SCRProb?.of?.(sym);
+  if (p) out.push(`<span class="hy-fa hy-p" data-tip="${esc(p.ok ? `Probabilidad de batir a ${p.M.nombre} en 12 meses: ${nf(p.p, 0)} % (validada)` : `12 meses: sin ventaja demostrada en ${p.M?.nombre || "su mercado"}; tasa base ${nf(p.M?.base_hoy, 0)} %`)}">12 m ${nf(p.ok ? p.p : p.M?.base_hoy, 0)} %</span>`);
+  return out.length ? out.join(" ") : `<span class="hy-fa">—</span>`;
+}
 function valores(uni, Q) {
   const w = Q.watch();
   if (!w.length) return `<div class="hint">No sigues ningún valor. Márcalos con ☆ en el screener o pulsa W sobre una fila.</div>`;
@@ -263,9 +280,9 @@ function valores(uni, Q) {
     const c = Q.changeOf(r.sym);
     return `<tr><td>${link(r.sym)} <span class="hy-nm">${esc((r.nombre || "").slice(0, 22))}</span></td><td class="num">${r.score ?? "s. d."}${c?.d ? ` <span class="chg ${c.d > 0 ? "p" : "n"}">${sgn(c.d, 0)}</span>` : ""}</td>
       <td class="num">${chg(r.r1d, 1)}</td><td class="num hy-fa">${r.resultados && r.resultados >= today() ? fmtDate(r.resultados) : "—"}</td>
-      <td>${window.SCRProb?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin historia suficiente o sin datos todavía">—</span>`}</td><td>${window.SCRStress?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin historia de precios suficiente">—</span>`}</td><td>${window.SCRGeo?.cell?.(r.sym) ?? `<span class="hy-fa" data-tip="Sin datos suficientes (menos de 3 años)">—</span>`}</td></tr>`;
+      <td class="hy-ctx">${contexto(r.sym)}</td></tr>`;
   }).join("");
-  return `<div class="hy-scroll"><table class="hy-t"><thead><tr><th>Valor</th><th class="num">Nota</th><th class="num">Hoy</th><th class="num">Resultados</th><th data-tip="Probabilidad de batir a su índice con dividendos en 12 meses; «base» = el modelo no demostró ventaja en su mercado y se muestra la tasa base">Prob. 12 m</th><th>Estrés</th><th>Geopolítica</th></tr></thead><tbody>${rows}</tbody></table></div>
+  return `<div class="hy-scroll"><table class="hy-t"><thead><tr><th>Valor</th><th class="num">Nota</th><th class="num">Hoy</th><th class="num">Resultados</th><th data-tip="Su bolsa (régimen de riesgo del plazo elegido en Contexto › Riesgo) · estrés (peor escenario frente a su bolsa) · geopolítica (si gana o pierde con un sobresalto). Pasa el ratón por cada etiqueta para ver la cifra y su fiabilidad; el detalle está en su ficha.">Contexto · su bolsa · estrés · geopolítica</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${w.length > 12 ? `<div class="hint">y ${w.length - 12} más en Cartera › Watchlist</div>` : ""}`;
 }
 function lecturaDia() {
@@ -290,6 +307,8 @@ function render() {
   window.SCREnsureUni?.();
   window.SCRRisk?.ensure?.();
   window.SCRGeo?.ensure?.();
+  window.SCRStress?.ensure?.();
+  window.SCRProb?.ensure?.();
   if (!window.SCRSmart?.data?.()) window.SCRSmart?.ensure?.();
   const uni = window.SCRUni?.() || [], Q = window.SCREq, ok = uni.length && Q;
   const wait = `<div class="skel" style="height:120px"></div>`;
@@ -300,7 +319,7 @@ function render() {
     <div class="hgrid hy2">
       ${sec("Qué ha cambiado", "riesgo · notas · smart money", ok ? cambios(uni, Q) : wait)}
       ${sec("Avisos", "señales que cruzan su umbral", ok ? avisos(uni, Q) : wait)}
-      ${sec("Tus valores", ok ? `${Q.watch().length} en tu Watchlist · las columnas nuevas llegan con cada fase` : "", ok ? valores(uni, Q) : wait)}
+      ${sec("Tus valores", ok ? `${Q.watch().length} en tu Watchlist · contexto resumido; el detalle, en su ficha` : "", ok ? valores(uni, Q) : wait)}
       ${sec("Lectura del día", "conjunta · tus bolsas", lecturaDia())}
     </div>
     <div class="hgrid">
