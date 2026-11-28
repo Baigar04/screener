@@ -43,13 +43,18 @@ function inputs(r, d) {
 
 /* ---------- R3 · Escenarios a largo plazo (reglas fijadas el 28-nov-2026, antes de mirar resultados) ----------
    Ventas: crecen 5 años al ritmo del escenario y convergen en línea recta al crecimiento a perpetuidad en los años 6-10.
-   Ritmo base = media del crecimiento anual compuesto de las ventas de su historia y el del último año, acotada entre −5 % y 25 %.
+   Ritmo base = media del crecimiento anual compuesto de las ventas de su historia y el del último ejercicio, acotada entre −5 % y 25 %.
    Bajista / alcista = base ∓ la dispersión de su crecimiento anual (desviación típica, entre 3 y 10 puntos; el alcista, hasta 35 %).
    Margen de caja (FCF / ventas): base = mediana de sus ejercicios; bajista = el peor, sin bajar de la mitad de la mediana;
-   alcista = el mejor, sin pasar de 1,5 veces la mediana. Descuento = bono a 10 años de su divisa + beta (0,5-2) × 5 %, entre 6 % y 14 %;
+   alcista = el mejor, sin pasar de 1,5 veces la mediana. Descuento = bono a 10 años de la divisa de sus cuentas + beta (0,8-2) × 5 %,
+   entre 6 % y 14 %;
    perpetuidad 2,5 % (como mucho, el descuento − 3 puntos). Valor por acción = (valor presente de los flujos − deuda neta) / acciones.
    «Qué descuenta el precio» = ritmo de ventas de 5 años que iguala el valor base al precio con el margen mediano.
-   Son escenarios para entender qué hace falta que pase, no probabilidades ni precios objetivo. */
+   Si las cuentas van en otra divisa, el valor se pasa a la de cotización con el último cambio semanal (Yahoo, vía stress.json).
+   Son escenarios para entender qué hace falta que pase, no probabilidades ni precios objetivo.
+   Cambios tras la primera prueba con datos reales (28-nov, antes de publicar): «último año» salía del dato trimestral de Yahoo
+   (error: Samsung +127 %) y pasa a ser el último ejercicio de las cuentas; el suelo de la beta sube de 0,5 a 0,8 porque con 0,5
+   el descuento de valores defensivos europeos quedaba en el 6 % y daba valores desproporcionados; conversión de divisa añadida. */
 function histCaja(r, d) {
   const fy = d?.sec?.fy, out = [];
   if (Array.isArray(fy) && fy.length >= 4) {
@@ -71,12 +76,22 @@ function tipo10(moneda) {
   if (c === "EUR" && ez != null) return { v: ez, src: "curva AAA del euro a 10 años (BCE)", local: true };
   return { v: us ?? 4.2, src: `bono de EE. UU. a 10 años${c && c !== "USD" ? `, por falta de serie oficial en ${c}` : ""}`, local: c === "USD" };
 }
+function eurPor(c) {
+  if (c === "EUR") return { v: 1 };
+  const x = window.SCRStress?.data?.()?.divisas?.fx?.[c], last = x?.serie?.[x.serie.length - 1];
+  return last && last[1] > 0 ? { v: last[1], f: last[0], src: x.fuente } : null;
+}
 function escenarios(r, d, o = {}) {
   if (FIN.test(r.industria || "")) return { na: "No aplica a bancos, aseguradoras y gestoras: su flujo de caja es su materia prima. Para ellas cuenta el P/VC frente a su historia y el ROE." };
   const mp = String(r.moneda || ""), mf = String(r.moneda_fin || mp);
   const pence = mp === "GBp" || mp === "GBX";
-  if (mf.toUpperCase().slice(0, 3) !== mp.toUpperCase().slice(0, 3) && !(pence && mf.toUpperCase() === "GBP"))
-    return { na: `Las cuentas están en ${mf} y la acción cotiza en ${mp}: sin tipo de cambio fiable en la fuente, el valor por acción no sería comparable.` };
+  const cf = mf.toUpperCase().slice(0, 3), cp = pence ? "GBP" : mp.toUpperCase().slice(0, 3);
+  let fxr = 1, fxs = null;
+  if (cf !== cp) {
+    const a = eurPor(cf), b = eurPor(cp);
+    if (!a || !b) return { na: `Las cuentas están en ${mf} y la acción cotiza en ${mp}: sin tipo de cambio ${cf}/${cp} en las fuentes del screener, el valor por acción no sería comparable.` };
+    fxr = a.v / b.v; fxs = `1 ${cf} = ${nf(fxr, 4)} ${cp} (Yahoo, semana del ${a.f || b.f})`;
+  }
   const HC = histCaja(r, d), rows = HC.rows;
   if (rows.length < 3) return { na: "Hacen falta al menos 3 ejercicios con ventas y flujo de caja libre." };
   const shares = r.acciones;
@@ -87,12 +102,13 @@ function escenarios(r, d, o = {}) {
   const mBear = Math.max(Math.min(...ms), mBase / 2), mBull = Math.min(Math.max(...ms), mBase * 1.5);
   const gs = []; for (let i = 1; i < rows.length; i++) gs.push((rows[i].v / rows[i - 1].v - 1) * 100);
   const n = rows.length - 1, cg = ((rows[n].v / rows[0].v) ** (1 / n) - 1) * 100;
-  const parts = [cg, r.crec_ventas].filter(Number.isFinite), gBase = clamp(parts.reduce((a, b) => a + b, 0) / parts.length, -5, 25);
+  const lastG = (rows[n].v / rows[n - 1].v - 1) * 100;
+  const parts = [cg, lastG].filter(Number.isFinite), gBase = clamp(parts.reduce((a, b) => a + b, 0) / parts.length, -5, 25);
   const mu = gs.reduce((a, b) => a + b, 0) / gs.length, sd = gs.length >= 2 ? Math.sqrt(gs.reduce((a, b) => a + (b - mu) ** 2, 0) / (gs.length - 1)) : 5;
   const sig = clamp(sd, 3, 10), gBear = gBase - sig, gBull = Math.min(35, gBase + sig);
-  const rf = tipo10(mp), beta = r.beta != null ? clamp(r.beta, 0.5, 2) : 1;
+  const rf = tipo10(cf), beta = r.beta != null ? clamp(r.beta, 0.8, 2) : 1;
   const k = (o.r != null ? o.r : clamp(rf.v + beta * ERP, 6, 14)) / 100, gt = Math.min(o.gt != null ? o.gt : 2.5, k * 100 - 3) / 100;
-  const v0 = rows[n].v, fx = pence ? 100 : 1;
+  const v0 = rows[n].v, fx = fxr * (pence ? 100 : 1);
   const value = (g, m) => {
     let V = v0, pvs = 0, F = 0;
     for (let t = 1; t <= 10; t++) { const gg = t <= 5 ? g / 100 : g / 100 + (gt - g / 100) * ((t - 5) / 5); V *= 1 + gg; F = V * m; pvs += F / (1 + k) ** t; }
@@ -104,7 +120,7 @@ function escenarios(r, d, o = {}) {
   if (value(hi, mBase) < r.precio) gi = { above: true };
   else if (value(lo, mBase) > r.precio) gi = { below: true };
   else { for (let i = 0; i < 70; i++) { const m = (lo + hi) / 2; if (value(m, mBase) > r.precio) hi = m; else lo = m; } gi = { g: (lo + hi) / 2 }; }
-  return { S, gi, cg, n, last: r.crec_ventas, sig, mBase: mBase * 100, k: k * 100, gt: gt * 100, rf, beta, nd, src: HC.src, desde: rows[0].y, hasta: rows[n].y, moneda: mp };
+  return { S, gi, cg, n, last: lastG, fxs, sig, mBase: mBase * 100, k: k * 100, gt: gt * 100, rf, beta, nd, src: HC.src, desde: rows[0].y, hasta: rows[n].y, moneda: mp };
 }
 function lecturaLargo(E) {
   if (!E || E.na) return null;

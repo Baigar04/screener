@@ -759,10 +759,13 @@ function secInforme(c) {
     const b = E.S[1], cur = esc(E.moneda === "GBp" ? "p" : E.moneda || "");
     const tbl = `<table class="ft inf-t inf-sc"><thead><tr><th></th><th class="num">Ventas</th><th class="num">Margen</th><th class="num">Valor</th><th class="num">vs precio</th></tr></thead><tbody>
       ${E.S.map((x) => `<tr class="${x.t === "Base" ? "b" : ""}"><td>${x.t}</td><td class="num">${sgn(x.g, 1)} %</td><td class="num">${nf(x.m, 1)} %</td><td class="num">${x.px > 0 ? nf(x.px, 2) : "neg."}</td><td class="num ${x.up == null ? "" : x.up >= 0 ? "pos" : "neg"}">${x.up == null ? "—" : sgn(x.up, 0) + " %"}</td></tr>`).join("")}</tbody></table>`;
-    const gi = E.gi?.g != null ? `<div class="inf-l">El precio descuenta ventas a <b class="num">${sgn(E.gi.g, 1)} %</b> anual 5 años · su historia ${sgn(E.cg, 1)} % (${esc(E.desde)}-${esc(E.hasta)})</div>` : `<div class="inf-l">${esc(window.SCRTesis.lecturaLargo(E))}</div>`;
+    const capInt = /utilities|real estate|telecom/i.test((r.sector || "") + " " + (r.industria || ""));
+    const aviso = b.px <= 0 ? `<div class="inf-l hint">La deuda neta supera el valor de su flujo libre con estos supuestos: pasa en empresas en plena inversión (eléctricas, telecos, infraestructuras), donde el flujo libre de hoy infravalora el negocio. Aquí el método mide mal.</div>`
+      : capInt ? `<div class="inf-l hint">Sector intensivo en inversión: el flujo libre puede infravalorar el negocio; míralo junto a la valoración frente a su historia.</div>` : "";
+    const gi = aviso + (E.gi?.g != null ? `<div class="inf-l">El precio descuenta ventas a <b class="num">${sgn(E.gi.g, 1)} %</b> anual 5 años · su historia ${sgn(E.cg, 1)} % (${esc(E.desde)}-${esc(E.hasta)})</div>` : `<div class="inf-l">${esc(window.SCRTesis.lecturaLargo(E))}</div>`);
     largo = hzCard("Largo · 3-5 años", `<span class="ui-pill te">Escenarios, no probabilidad</span>`, b.up == null ? "neg." : `${sgn(b.up, 0)} %`,
       `valor del escenario base (${b.px > 0 ? nf(b.px, 2) + " " + cur : "negativo"}) frente al precio (${nf(r.precio, 2)} ${cur})`, gi + tbl,
-      `<b>Reglas fijadas antes de mirar resultados.</b> Ventas: crecen 5 años al ritmo del escenario y convergen al ${nf(E.gt, 1)} % en los años 6-10. Ritmo base = media entre su crecimiento compuesto (${sgn(E.cg, 1)} %, ${esc(E.desde)}-${esc(E.hasta)}) y el del último año (${E.last == null ? "sin dato" : sgn(E.last, 1) + " %"}), entre −5 % y 25 %; bajista y alcista = base ∓ ${nf(E.sig, 1)} puntos (la dispersión de su crecimiento anual). Margen de caja libre: mediana ${nf(E.mBase, 1)} %; bajista, su peor ejercicio (sin bajar de la mitad); alcista, el mejor (sin pasar de 1,5 veces). Descuento ${nf(E.k, 1)} % = ${esc(E.rf.src)} ${nf(E.rf.v, 2)} % + beta ${nf(E.beta, 2)} × 5 %. Deuda neta ${E.nd == null ? "sin dato (se toma 0)" : window.SCRFmt?.big ? window.SCRFmt.big(E.nd, r.moneda) : nf(E.nd / 1e6, 0) + " M"}. Cuentas: ${esc(E.src)}. Son escenarios para ver qué tiene que pasar, no una probabilidad ni un precio objetivo: no hay examen que los valide.`);
+      `<b>Reglas fijadas antes de mirar resultados.</b> Ventas: crecen 5 años al ritmo del escenario y convergen al ${nf(E.gt, 1)} % en los años 6-10. Ritmo base = media entre su crecimiento compuesto (${sgn(E.cg, 1)} %, ${esc(E.desde)}-${esc(E.hasta)}) y el del último ejercicio (${E.last == null ? "sin dato" : sgn(E.last, 1) + " %"}), entre −5 % y 25 %; bajista y alcista = base ∓ ${nf(E.sig, 1)} puntos (la dispersión de su crecimiento anual). Margen de caja libre: mediana ${nf(E.mBase, 1)} %; bajista, su peor ejercicio (sin bajar de la mitad); alcista, el mejor (sin pasar de 1,5 veces). Descuento ${nf(E.k, 1)} % = ${esc(E.rf.src)} ${nf(E.rf.v, 2)} % + beta ${nf(E.beta, 2)} × 5 % (beta acotada entre 0,8 y 2). ${E.fxs ? `Cuentas en otra divisa: ${esc(E.fxs)}. ` : ""}Deuda neta ${E.nd == null ? "sin dato (se toma 0)" : window.SCRFmt?.big ? window.SCRFmt.big(E.nd, r.moneda) : nf(E.nd / 1e6, 0) + " M"}. Cuentas: ${esc(E.src)}. Con el bono a 10 años alto y una prima de mercado del 5 %, muchos valores salen por debajo del precio: el mercado aplica hoy una prima menor. Compara la exigencia entre valores parecidos más que el signo. Son escenarios para ver qué tiene que pasar, no una probabilidad ni un precio objetivo: no hay examen que los valide.`);
   } else largo = hzCard("Largo · 3-5 años", `<span class="ui-pill nu">${E?.neg ? "Sin flujo positivo" : "No aplica"}</span>`, "—", esc(E?.na || "Módulo de valoración no disponible."), "", null);
   /* tesis */
   const R = reading(c);
@@ -797,6 +800,7 @@ function secInforme(c) {
   if (r.resultados && r.resultados >= new Date().toISOString().slice(0, 10)) inv.push(`Resultados del ${fmtDate(r.resultados)} por debajo de lo esperado o con guía a la baja.`);
   const det = window.SCRProb || window.SCRStress ? `<details class="ui-det inf-det"><summary>Detalle completo: probabilidad, stress test con los 12 escenarios y estrés del balance</summary><div class="ui-det-b">${secRiesgo(c)}</div></details>` : "";
   return `<div class="inf">
+    <div class="inf-print">Informe del valor · ${esc(r.nombre || r.sym)} (${esc(r.sym)}) · ${new Date().toISOString().slice(0, 10)} · cierre ${fmtDate(r.fecha_precio)} · Screener de Borja (baigar04.github.io/screener). Cifras con su fuente; las etiquetas y escenarios son reglas, no recomendaciones.</div>
     <div class="inf-verd"><span class="ui-pill ${PILLV[VD.label]}" data-tip="${esc(`Lectura por reglas (no es una recomendación ni una probabilidad): ${VD.why.join(" · ") || "sin señales fuertes"}`)}">${VD.label}</span>
       <div><div class="inf-verd-t">${esc(informeFrase(c, X))}</div><div class="hint">Corto: ${h3 ? (h3.validado ? `su bolsa en ${esc(h3.regimen.toLowerCase())}` : "su bolsa sin modelo validado") : "sin datos"} · Medio: ${P ? (P.ok ? "probabilidad validada" : "sin ventaja demostrada, cuenta la tasa base") : "sin datos"} · Largo: ${E && !E.na ? `escenario base ${E.S[1].up == null ? "negativo" : sgn(E.S[1].up, 0) + " % frente al precio"}` : "sin escenarios"}</div></div>
       <button class="icon-btn" data-infpdf="${esc(r.sym)}" title="Abre el diálogo de impresión con el Informe completo: elige «Guardar como PDF»">Descargar PDF</button></div>
@@ -821,7 +825,7 @@ function apuestaBox(c, E, rows) {
   if (enCesta) {
     const P = D.precedente || {}, base = E && !E.na ? E.S[1] : null;
     const facts = (G.rearme || []).map((x) => `<li>${esc(x.dato)}${H.ui.fuente(x.fuente, x.url)}</li>`).join("");
-    const pos = P.n ? Math.round((P.positivos / P.n) * 100) : null;
+    const pos = P.positivos != null ? Math.round(P.positivos) : null;   /* geo.json ya lo da en % */
     body = `<div class="apu-h"><b>Rearme europeo</b><span class="ui-pill te">Apuesta razonada · no validada</span></div>
       <div class="inf-2"><div><div class="apu-s">Por qué</div><ul class="inf-ul">${facts}</ul></div>
       <div><div class="apu-s">Dónde está ahora</div><ul class="inf-ul">
@@ -829,7 +833,7 @@ function apuestaBox(c, E, rows) {
         ${P.n ? `<li>Caídas así desde ${esc((D.desde || "").slice(0, 4))}: ${P.n}; a 6 meses, ${sgn(P.media6m, 1)} % de media y ${pos} % en positivo. Es un precedente de la cesta, no un examen.</li>` : ""}
         ${base ? `<li>${esc(r.sym)} en el escenario base a largo plazo: ${base.up == null ? "valor negativo" : sgn(base.up, 0) + " % frente al precio"}.</li>` : ""}
         ${paz?.v != null ? `<li>Si llega la distensión con Rusia (escenario «paz»): ${sgn(paz.v, 0)} % estimado en un mes${paz.q != null ? ` (R² ${nf(paz.q, 2)}${paz.q < 0.05 ? ": explica muy poco, fiabilidad baja" : ""})` : ""}.</li>` : ""}</ul></div></div>
-      <div class="apu-s">Qué la invalidaría</div><ul class="inf-ul"><li>Un acuerdo de paz duradero que frene los presupuestos, o recortes del objetivo del 5 %.</li><li>Pedidos y cartera de ${esc(r.nombre || r.sym)} que no crecen en dos resultados seguidos.</li><li>Valoración que ya descuenta el rearme: el precio exige más crecimiento del que publica la OTAN.</li></ul>`;
+      <div class="apu-s">Qué la invalidaría</div><ul class="inf-ul"><li>Un acuerdo de paz duradero que frene los presupuestos, o recortes del objetivo del 5 %.</li><li>Pedidos y cartera de ${esc(r.nombre || r.sym)} que no crecen en dos resultados seguidos.</li>${base?.up != null ? `<li>El valor del escenario base queda por debajo del precio (hoy ${sgn(base.up, 0)} %): el rearme ya estaría en el precio.</li>` : ""}</ul>`;
     pre = { tipo: "apuesta", tema: "Rearme europeo", hz: "largo", mot: `Rearme europeo: OTAN 5 % del PIB en 2035 y ReArm 800.000 M€; ${r.nombre || r.sym} como beneficiario directo del gasto en defensa.`, inv: "Acuerdo de paz que frene los presupuestos, o pedidos que no crecen en dos resultados seguidos." };
   } else {
     body = `<div class="apu-h"><b>Tu apuesta razonada</b><span class="ui-pill nu">Opcional · no validada</span></div>
@@ -874,6 +878,7 @@ async function mountCatal(sym) {
   el.innerHTML = h.length ? h.join("") + `<div class="bar" style="margin-top:6px"><a class="link-btn" href="#/empresa/${encodeURIComponent(sym)}/movimientos">Todos los resultados, noticias y movimientos →</a></div>` : '<div class="hint">Sin catalizadores con fecha en las fuentes.</div>';
 }
 function secCuentas(c) {
+  window.SCRStress?.ensure?.();   /* bono a 10 años y cambio de divisa de los escenarios */
   return `${secResumenSinLectura(c)}<h3 class="f-sub">Valoración</h3>${secValoracion(c)}<h3 class="f-sub">Factores de la nota</h3>${secFactores(c)}
     <details class="ui-det inf-det"><summary>Cuentas completas: tablas anuales y trimestrales, ratios</summary><div class="ui-det-b">${secFund(c)}</div></details>`;
 }

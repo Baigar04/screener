@@ -18,7 +18,7 @@ async function ensure() {
   R.loading = true;
   try { const r = await fetch(`data/risk.json?t=${Date.now()}`, { cache: "no-store" }); R.d = r.ok ? await r.json() : null; } catch { R.d = null; }
   R.loading = false;
-  if (["riesgo", "hoy", "geopolitica", "escenarios"].includes(H.S.view)) H.render();
+  if (["riesgo", "hoy", "geopolitica", "escenarios"].includes(H.S.view) || H.S.ficha) H.render();
 }
 const X = () => H.S.mode === "x";
 const MES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];

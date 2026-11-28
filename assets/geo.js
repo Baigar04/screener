@@ -12,7 +12,7 @@ async function ensure() {
   R.loading = true;
   try { const r = await fetch(`data/geo.json?t=${Date.now()}`, { cache: "no-store" }); R.d = r.ok ? await r.json() : null; } catch { R.d = null; }
   R.loading = false;
-  if (["geopolitica", "hoy", "riesgo", "escenarios"].includes(H.S.view)) H.render();
+  if (["geopolitica", "hoy", "riesgo", "escenarios"].includes(H.S.view) || H.S.ficha) H.render();
 }
 const X = () => H.S.mode === "x";
 const exp = (t) => `<div class="rsk-exp">${t}</div>`;   /* R1: siempre presente; ui.js lo pliega (abierto en Explicado) */

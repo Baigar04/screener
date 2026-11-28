@@ -486,6 +486,46 @@ def r1(pg, base):
     check("R1: noticias desplegables en la ficha", nd >= 1 or "Sin noticias" in (pg.text_content("#view") or ""), f"{nd} noticias")
 
 
+def r3(pg, base):
+    """R3: horizonte largo con escenarios, apuesta razonada (rearme en la cesta de defensa) y PDF del Informe."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    defensa = pg.evaluate("""Promise.all([fetch('data/geo.json').then(r => r.json()), fetch('data/universe.json').then(r => r.json())])
+        .then(([g, u]) => { const s = new Set(u.filas.map(x => x.sym)); return ((g.defensa || {}).valores || []).find(x => s.has(x)) || null; })""")
+    check("R3: hay un valor de la cesta de defensa en el universo", bool(defensa), str(defensa))
+    banco = pg.evaluate("window.SCR && fetch('data/universe.json').then(r => r.json()).then(u => (u.filas.find(x => /bank/i.test(x.industria || '')) || {}).sym || null)")
+    for sym in [x for x in ("AAPL", banco, defensa) if x]:
+        pg.goto(base + "#/empresa/" + sym)
+        pg.wait_for_selector("#view .inf", timeout=60000)
+        pg.wait_for_timeout(4000)
+        t = pg.text_content("#view") or ""
+        i = t.find("Largo · 3-5 años")
+        largo = t[i:i + 400] if i >= 0 else ""
+        ok = ("Escenarios, no probabilidad" in largo and "Base" in largo) or "No aplica" in largo or "Sin flujo positivo" in largo
+        check(f"R3 {sym}: horizonte largo con escenarios o motivo", ok and "R3" not in largo[:40], largo[:120])
+        check(f"R3 {sym}: apuesta razonada y botón de PDF", pg.locator("[data-apuesta]").count() == 1 and pg.locator("[data-infpdf]").count() == 1)
+        if sym == banco:
+            check(f"R3 {sym}: el método no se aplica a bancos", "No aplica a bancos" in largo)
+        if sym == defensa:
+            check(f"R3 {sym}: caso del rearme europeo con fuentes", "Rearme europeo" in t and "OTAN" in t)
+            pg.click("[data-apuesta]")
+            pg.wait_for_timeout(1200)
+            d = pg.text_content("#drawer") or ""
+            check("R3: la apuesta se abre en el Diario con su tesis", "Registrar apuesta razonada" in d and "Rearme europeo" in d)
+            pg.keyboard.press("Escape")
+    pg.goto(base + "#/empresa/AAPL/cuentas")
+    pg.wait_for_timeout(4000)
+    check("R3: Cuentas usa los mismos escenarios", "Margen de caja" in (pg.text_content("#view") or ""))
+    pg.goto(base + "#/empresa/AAPL")
+    pg.wait_for_timeout(3000)
+    pg.evaluate("document.body.classList.add('print-inf')")
+    pg.emulate_media(media="print")
+    w = pg.evaluate("document.querySelector('.inf').getBoundingClientRect().width")
+    vis = pg.evaluate("getComputedStyle(document.querySelector('.inf-print')).display")
+    pg.emulate_media(media="screen")
+    pg.evaluate("document.body.classList.remove('print-inf')")
+    check("R3: el Informe se imprime a todo el ancho y con cabecera", w > 600 and vis == "block", f"{w:.0f} px · {vis}")
+
+
 def r2(pg, base):
     """R2: el Informe del valor es la portada de la ficha y reúne veredicto, horizontes, tesis, riesgo aplicado, catalizadores e invalidación."""
     pg.set_viewport_size({"width": 1440, "height": 900})
@@ -557,7 +597,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica, escenarios, r1, r2):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica, escenarios, r1, r2, r3):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001
