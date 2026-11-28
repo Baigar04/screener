@@ -1,5 +1,5 @@
 {
- "generado": "2026-11-28T02:26:30+00:00",
+ "generado": "2026-11-28T12:26:18+00:00",
  "ficheros": {
   "macro.json": {
    "estado": "ok",
@@ -27,15 +27,15 @@
   },
   "amplitud.json": {
    "estado": "ok",
-   "detalle": "EE. UU.: 44.0 % > SMA50, Europa: 51.3 % > SMA50"
+   "detalle": "EE. UU.: 49.1 % > SMA50, Europa: 56.3 % > SMA50"
   },
   "insiders.json": {
    "estado": "ok",
-   "detalle": "11813 operaciones · 70 días · pendientes 5"
+   "detalle": "11999 operaciones · 71 días · pendientes 4"
   },
   "risk.json": {
    "estado": "ok",
-   "detalle": "11 bolsas · 0 validadas · S&P 500 18.2 % · Nasdaq 100 23.9 % · Euro Stoxx 50 29.8 % · DAX 27.3 %"
+   "detalle": "11 bolsas · 0 validadas · S&P 500 18.2 % · Nasdaq 100 23.9 % · Euro Stoxx 50 30.0 % · DAX 27.0 %"
   },
   "geo.json": {
    "estado": "ok",
@@ -67,7 +67,7 @@
   },
   "sec_cache.json": {
    "estado": "ok",
-   "detalle": "2914 entradas"
+   "detalle": "2916 entradas"
   },
   "smart_cache.json": {
    "estado": "ok",
