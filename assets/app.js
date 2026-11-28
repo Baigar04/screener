@@ -30,11 +30,12 @@ const AREAS = [
 ];
 const areaOf = (v) => AREAS.find((a) => a[2].includes(v)) || AREAS[0];
 /* Ficha de empresa (página propia, Fase 6): 9 apartados en la barra lateral */
-const FSECS = [["resumen", "Resumen"], ["grafico", "Gráfico"], ["fund", "Fundamentales"], ["valoracion", "Valoración"], ["factores", "Factores"],
-  ["resultados", "Resultados"], ["comparables", "Comparables"], ["smartm", "Smart money"], ["riesgo", "Prob. y riesgo"], ["invest", "Investigación"]];
+/* R2 (28-nov-2026): 6 apartados; el Informe es la portada */
+const FSECS = [["informe", "Informe"], ["grafico", "Gráfico"], ["cuentas", "Cuentas y valoración"], ["movimientos", "Resultados y movimientos"], ["comparables", "Comparables"], ["invest", "Investigación"]];
 /* enlaces antiguos de pestañas → apartado nuevo */
-const FSEC_OLD = { tesis: "valoracion", noticias: "resultados", pers: "smartm", comparar: "comparables" };
-const fsec = (t) => (FSECS.some((x) => x[0] === t) ? t : FSEC_OLD[t] || "resumen");
+const FSEC_OLD = { resumen: "informe", riesgo: "informe", fund: "cuentas", valoracion: "cuentas", factores: "cuentas", tesis: "cuentas", resultados: "movimientos",
+  noticias: "movimientos", smartm: "movimientos", pers: "movimientos", comparar: "comparables" };
+const fsec = (t) => (FSECS.some((x) => x[0] === t) ? t : FSEC_OLD[t] || "informe");
 /* 2 modos en lugar de 4 niveles: los dos muestran todos los datos; «Explicado» añade las explicaciones */
 const MODES = [["c", "Compacto", "Todos los datos, sin textos de ayuda"], ["x", "Explicado", "Todos los datos con explicaciones de cada bloque"]];
 const REGIONS = [["US", "EE. UU."], ["EZ", "Zona euro"], ["GL", "Global"]];
@@ -171,11 +172,13 @@ ICONS.cartera = "M3 7h18v13H3zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18";
 ICONS.escenarios = "M3 20h18M6 16v-5M10 16V8M14 16v-3M18 16V5";
 ICONS.contexto = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9M12 3c-2.5 2.5-3.8 5.5-3.8 9s1.3 6.5 3.8 9";
 ICONS.investigacion = "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4";
+ICONS.informe = "M6 3h12v18H6zM9 7h6M9 11h6M9 15h4";
 ICONS.diario = "M6 3h10l3 3v15H6zM9 8h7M9 12h7M9 16h4";
 Object.assign(ICONS, { resumen: "M4 6h16M4 12h16M4 18h10", grafico: "M3 3v18h18M7 15l4-4 3 3 5-6", fund: "M5 21V10M10 21V4M15 21v-7M20 21v-11",
   valoracion: "M3 6h18v12H3zM3 10h18M7 14h4", factores: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4",
   resultados: "M4 5h16v15H4zM4 9h16M9 3v4M15 3v4", comparables: "M4 6h16M4 12h16M4 18h16", smartm: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5",
-  invest: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4" }); ICONS.empresas = "M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h3a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M3 21h18";
+  invest: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h4" });
+ICONS.cuentas = ICONS.fund; ICONS.movimientos = ICONS.resultados; ICONS.empresas = "M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h3a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M3 21h18";
 function subnav() {
   const [, , secs] = areaOf(S.view);
   if (secs.length < 2) return "";
@@ -508,11 +511,11 @@ function go(v) { S.ficha = null; S.view = v; store.set("area_" + areaOf(v)[0], v
 /* la ficha es una página: #/empresa/SYM/<apartado>. Cambiar de apartado no añade entradas al historial;
    abrir otra empresa desde una ficha tampoco (así «atrás» vuelve siempre a la sección de origen) */
 function openFicha(sym, tab) {
-  sym = String(sym).toUpperCase(); tab = fsec(tab || (S.ficha?.sym === sym ? S.ficha.tab : "resumen"));
+  sym = String(sym).toUpperCase(); tab = fsec(tab || (S.ficha?.sym === sym ? S.ficha.tab : "informe"));
   store.set("recientes", [sym, ...store.get("recientes", []).filter((x) => x !== sym)].slice(0, 6));
   const same = S.ficha?.sym === sym, inFicha = FICHA_RE.test(location.hash);
   S.ficha = { sym, tab };
-  setHash("#/empresa/" + encodeURIComponent(sym) + (tab === "resumen" ? "" : "/" + tab), inFicha);
+  setHash("#/empresa/" + encodeURIComponent(sym) + (tab === "informe" ? "" : "/" + tab), inFicha);
   closeDrawer(); render(); if (!same) window.scrollTo(0, 0); else document.getElementById("view")?.scrollIntoView?.({ block: "start" });
 }
 function userClose() { window.SCR.closeDrawer(); }   /* cierre del panel lateral por la X, el fondo o Escape */

@@ -1345,3 +1345,32 @@ details.nw-d[open]>summary .nw-t::before{content:"▾ "}
 details.nw-d[open]{background:var(--surface-2);padding:6px 8px;margin:4px -8px}
 .nw-b{margin:6px 0 2px;font-size:12.5px;color:var(--muted)}.nw-b p{margin:0 0 4px;color:var(--text)}
 .nw-f{display:flex;gap:12px;align-items:center;margin-top:4px}
+
+/* ---------- R2 · Informe del valor ---------- */
+.inf-verd{display:flex;gap:14px;align-items:center;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));background:var(--surface);padding:12px 16px;margin-bottom:4px}
+.inf-verd .ui-pill{font-size:12px;padding:2px 10px}
+.inf-verd>div{flex:1;min-width:0}
+.inf-verd-t{font-size:15px;font-weight:600;line-height:1.35;color:var(--text)}
+.inf-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+.inf-hz{background:var(--surface);border:1px solid var(--border);padding:12px 14px}
+.inf-hz-h{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.inf-hz-h span{margin-left:auto;text-transform:none;letter-spacing:0}
+.inf-hz-big{font-size:28px;margin:6px 0 2px;color:var(--text)}
+.inf-hz-s{color:var(--muted);font-size:12.5px;line-height:1.4}
+.inf-l{margin-top:8px;font-size:12.5px}
+.inf-fs{margin-top:8px}
+.inf-f{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 44px;gap:8px;align-items:center;font-size:12px;padding:2px 0}
+.inf-f b{text-align:right;font-weight:500}
+.inf-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-bottom:12px}
+.inf-rc{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+.inf-ul{margin:0;padding-left:18px}.inf-ul li{margin:5px 0;line-height:1.45}
+.inf-ul .tag{font-size:10.5px;color:var(--faint);border:1px solid var(--border-strong);padding:0 5px;white-space:nowrap}
+.inf-t td,.inf-t th{padding:5px 6px}
+.inf-ev{padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.inf-det{margin-top:12px}
+.inf-det>summary{font-size:13px}
+.f-sub{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:18px 0 8px;font-weight:600}
+@media (max-width:1100px){.inf-3,.inf-2,.inf-rc{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.inf-verd{flex-wrap:wrap}}
+.inf-rk{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
+@media (max-width:1700px){.inf-rk{grid-template-columns:minmax(0,1fr)}}

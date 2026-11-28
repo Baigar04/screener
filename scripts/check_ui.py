@@ -128,7 +128,7 @@ def fase2(pg, base):
     pg.goto(base + "#/empresa/MSFT")
     pg.wait_for_function("window.SCRFichaSym && window.SCRFichaSym() === 'MSFT'", timeout=60000)
     pg.wait_for_timeout(2500)
-    pg.click("#side [data-fsec=factores]")
+    pg.click("#side [data-fsec=cuentas]")
     pg.wait_for_timeout(1500)
     check("ficha: «por qué esta nota»", pg.locator("#view .sc-why .why-row").count() >= 4)
     check("ficha: percentiles en su sector", "Percentiles en su sector" in pg.text_content("#view"))
@@ -164,11 +164,9 @@ def tanda2(pg, base):
     pg.wait_for_timeout(2500)
     n = pg.locator("#view table tbody tr").count()
     check("smart money: directivos (formulario 4)", n >= 1, f"{n} filas")
-    pg.goto(base + "#/empresa/AAPL/fund")
+    pg.goto(base + "#/empresa/AAPL/cuentas")
     pg.wait_for_function("window.SCRFichaSym && window.SCRFichaSym() === 'AAPL'", timeout=60000)
     pg.wait_for_timeout(2500)
-    pg.click("#side [data-fsec=factores]")
-    pg.wait_for_timeout(1500)
     check("ficha: factores académicos (SEC)", "Factores académicos" in pg.text_content("#view"), "con datos" if "F-score" in pg.text_content("#view") else "sin datos SEC aún")
 
 
@@ -190,42 +188,42 @@ def fase5(pg, base):
     check("tema oscuro por defecto", pg.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(13, 15, 18)")
 
 
-FSECS = ["resumen", "grafico", "fund", "valoracion", "factores", "resultados", "comparables", "smartm", "riesgo", "invest"]
+FSECS = ["informe", "grafico", "cuentas", "movimientos", "comparables", "invest"]
 
 
 def fase6(pg, base):
-    """Fase 6: ficha 2.0 con 10 apartados (fase 3: Riesgo y escenarios), tarjetas con fuente y fecha, migas «Screener / Empresas / X»."""
+    """Fase 6 (R2: 6 apartados, el Informe como portada): ficha 2.0 (fase 3: Riesgo y escenarios), tarjetas con fuente y fecha, migas «Screener / Empresas / X»."""
     pg.set_viewport_size({"width": 1440, "height": 900})
     for sym in ("AAPL", "SAN.MC"):
-        pg.goto(base + "#/empresa/" + sym)
+        pg.goto(base + "#/empresa/" + sym + "/cuentas")
         pg.wait_for_selector("#view .f3 .fs", timeout=60000)
         pg.wait_for_timeout(1500)
         side = [b.get_attribute("data-fsec") for b in pg.locator("#side button").all()]
         crumbs = pg.text_content("#crumbs")
-        check(f"{sym}: barra lateral con los 10 apartados", side == FSECS, " · ".join(x or "?" for x in side))
+        check(f"{sym}: barra lateral con los 6 apartados", side == FSECS, " · ".join(x or "?" for x in side))
         check(f"{sym}: migas Screener / Empresas / empresa y área Screener", "Empresas" in crumbs and pg.get_attribute("#nav .on", "data-area") == "screener", crumbs.strip()[:80])
         srcs = [x.text_content() for x in pg.locator("#view .fs > h3 > span").all()]
         check(f"{sym}: bloques con fuente y fecha", sum(any(m in t for m in ("SEC", "Yahoo")) for t in srcs) >= 2 and pg.locator("#view .fsrc").count() >= 1, " · ".join(srcs[:3]))
         t = pg.text_content("#view")
-        need = ("Datos clave", "Calidad del dato", "Nota de ordenación", "Próximos eventos", "Crecimiento reciente", "Márgenes", "Observado", "Interpretación", "En contra")
-        check(f"{sym}: Resumen en tres columnas y lectura en tres partes", all(x in t for x in need) and ("Cuenta de resultados" in t or "Cuentas anuales" in t), ", ".join(x for x in need if x not in t))
+        need = ("Datos clave", "Calidad del dato", "Nota de ordenación", "Próximos eventos", "Crecimiento reciente", "Márgenes")
+        check(f"{sym}: Cuentas en tres columnas y lectura en tres partes", all(x in t for x in need) and ("Cuenta de resultados" in t or "Cuentas anuales" in t), ", ".join(x for x in need if x not in t))
         check(f"{sym}: cabecera con precio y titular", pg.locator("#view .fh .fh-p").count() == 1, (pg.text_content("#view .fh-tesis") or "sin titular")[:80] if pg.locator("#view .fh-tesis").count() else "sin titular")
         if sym == "AAPL":
             sec = "Último 10-Q presentado" in pg.text_content("#status") or "Último 10-K presentado" in pg.text_content("#status")
             check("AAPL: trimestres SEC en la ficha", sec, pg.text_content("#status").strip()[:80] if sec else "sin trimestres SEC aún (llegan con la caché v3)")
         bad = []
-        for k in FSECS[1:]:
+        for k in FSECS:
             pg.click(f"#side [data-fsec={k}]")
             pg.wait_for_timeout(1200)
-            if not pg.url.endswith(f"/{k}") or "No se pudo dibujar" in pg.text_content("#view"):
+            if pg.evaluate("window.SCR.S.ficha && window.SCR.S.ficha.tab") != k or "No se pudo dibujar" in pg.text_content("#view"):
                 bad.append(k)
-        check(f"{sym}: los 10 apartados abren sin error", not bad, ", ".join(bad))
+        check(f"{sym}: los 6 apartados abren sin error", not bad, ", ".join(bad))
     pg.goto(base + "#/empresa/AAPL/tesis")
     pg.wait_for_timeout(1500)
-    check("enlace antiguo #/empresa/X/tesis → Valoración", pg.evaluate("window.SCR.S.ficha && window.SCR.S.ficha.tab") == "valoracion")
+    check("enlace antiguo #/empresa/X/tesis → Cuentas y valoración", pg.evaluate("window.SCR.S.ficha && window.SCR.S.ficha.tab") == "cuentas")
     pg.set_viewport_size({"width": 390, "height": 844})
     bad = []
-    for k in ("resumen", "fund", "comparables", "resultados"):
+    for k in ("informe", "cuentas", "comparables", "movimientos"):
         pg.goto(base + f"#/empresa/AAPL/{k}")
         pg.wait_for_timeout(2500)
         sw = pg.evaluate("document.documentElement.scrollWidth")
@@ -296,12 +294,12 @@ def diseno1(pg, base):
 def fase9(pg, base):
     """Fase 9: calidad del beneficio y balance en Resumen y Fundamentales (EE. UU. con SEC; Europa aproximado)."""
     pg.set_viewport_size({"width": 1440, "height": 900})
-    pg.goto(base + "#/empresa/AAPL/resumen")
+    pg.goto(base + "#/empresa/AAPL/cuentas")
     pg.wait_for_selector("#view .f3 .fs", timeout=60000)
     pg.wait_for_timeout(1000)
     t = pg.text_content("#view .f3c") or ""
-    check("AAPL: calidad del beneficio en el Resumen", "Calidad del beneficio y balance" in t and "Conversión en caja" in t, t[-120:].replace("\n", " "))
-    pg.goto(base + "#/empresa/AAPL/fund")
+    check("AAPL: calidad del beneficio en Cuentas", "Calidad del beneficio y balance" in t and "Conversión en caja" in t, t[-120:].replace("\n", " "))
+    pg.goto(base + "#/empresa/AAPL/cuentas")
     pg.wait_for_timeout(2500)
     t = pg.text_content("#view") or ""
     n = pg.locator("#view .q3 tr").count()
@@ -482,10 +480,36 @@ def r1(pg, base):
     th = " ".join(pg.locator(".hy-t th").all_text_contents())
     check("R1: «Hoy» con una sola columna de contexto", "Contexto" in th and "Estrés" not in th.replace("estrés", ""), th[:120])
     sym = pg.evaluate("fetch('data/universe.json').then(r => r.json()).then(u => u.filas[0].sym)")
-    pg.goto(base + f"#/empresa/{sym}/resultados")
+    pg.goto(base + f"#/empresa/{sym}/movimientos")
     pg.wait_for_timeout(3500)
     nd = pg.locator("details.nw-d").count()
     check("R1: noticias desplegables en la ficha", nd >= 1 or "Sin noticias" in (pg.text_content("#view") or ""), f"{nd} noticias")
+
+
+def r2(pg, base):
+    """R2: el Informe del valor es la portada de la ficha y reúne veredicto, horizontes, tesis, riesgo aplicado, catalizadores e invalidación."""
+    pg.set_viewport_size({"width": 1440, "height": 900})
+    uni = pg.evaluate("fetch('data/universe.json').then(r => r.json()).then(u => u.filas.slice(0, 2).map(x => x.sym))")
+    for sym in ["AAPL", "SAN.MC"] + uni[:1]:
+        pg.goto(base + "#/empresa/" + sym)
+        pg.wait_for_selector("#view .inf", timeout=60000)
+        pg.wait_for_timeout(3500)
+        t = pg.text_content("#view") or ""
+        need = ("Corto · 3 meses", "Medio · 12 meses", "Largo · 3-5 años", "Tesis a favor", "Tesis en contra", "Riesgo aplicado a la acción", "Catalizadores", "Qué invalidaría la tesis", "Cómo se forma la etiqueta")
+        check(f"R2 {sym}: Informe completo", all(x in t for x in need) and pg.evaluate("window.SCR.S.ficha.tab") == "informe", ", ".join(x for x in need if x not in t))
+        v = pg.text_content("#view .inf-verd .ui-pill") or ""
+        check(f"R2 {sym}: etiqueta por reglas", v.strip() in ("Favorable", "Vigilar", "Desfavorable"), v)
+        check(f"R2 {sym}: catalizadores cargados", pg.locator("#fcat .skel").count() == 0)
+    for old, new in (("resumen", "informe"), ("riesgo", "informe"), ("fund", "cuentas"), ("smartm", "movimientos"), ("resultados", "movimientos")):
+        pg.goto(base + f"#/empresa/AAPL/{old}")
+        pg.wait_for_timeout(1500)
+        if pg.evaluate("window.SCR.S.ficha && window.SCR.S.ficha.tab") != new:
+            check(f"R2: enlace antiguo /{old} → /{new}", False)
+    pg.set_viewport_size({"width": 390, "height": 844})
+    pg.goto(base + "#/empresa/AAPL")
+    pg.wait_for_timeout(3500)
+    check("R2: Informe sin desborde a 390 px", pg.evaluate("document.documentElement.scrollWidth") <= 392)
+    pg.set_viewport_size({"width": 1366, "height": 900})
 
 
 def diseno3(pg, base):
@@ -533,7 +557,7 @@ def main():
         errs = []
         where = ["inicio"]
         pg.on("pageerror", lambda e: errs.append(f"{where[0]}: {e}"))
-        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica, escenarios, r1):
+        for fn in (fichas, navegacion, movil, fase2, tanda2, fase5, fase6, fase7, fase9, diseno1, diseno3, ranking, grafico, riesgo, geopolitica, escenarios, r1, r2):
             try:
                 fn(pg, base)
             except Exception as e:  # noqa: BLE001

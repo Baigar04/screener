@@ -696,6 +696,134 @@ function secInvest(c) {
       <div class="bar" style="margin-top:8px">${links.join(" · ")}</div>`)}</div>`;
 }
 
+
+/* ---------- R2 · Informe del valor (portada de la ficha) ----------
+   Junta en una página lo que antes estaba repartido: veredicto por reglas, tres horizontes con su fiabilidad, tesis a favor y en
+   contra con su fuente, riesgo aplicado al valor, catalizadores y qué invalidaría la tesis. Nada nuevo se inventa: cada cifra
+   sale de los módulos ya publicados (riesgo, probabilidad, estrés, geopolítica, nota, técnico, cuentas). */
+const PILLV = { Favorable: "ok", Vigilar: "te", Desfavorable: "ko" };
+function informeVeredicto(c, X) {
+  const { r } = c, pts = [], why = [];
+  const add = (v, t) => { pts.push(v); why.push(`${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v)} ${t}`); };
+  if (r.score != null) { if (r.score >= 70) add(1, `nota ${r.score}`); else if (r.score <= 40) add(-1, `nota ${r.score}`); }
+  if (r.veredicto === "Alcista") add(1, "técnico alcista"); else if (r.veredicto === "Bajista") add(-1, "técnico bajista");
+  if (X.bal === "Rompe") add(-1, "balance rompe con beneficio −30 %"); else if (X.bal === "Tensión") add(-0.5, "balance en tensión");
+  if (r.per_vs_sector != null) { if (r.per_vs_sector > 30) add(-0.5, "PER muy por encima de su sector"); else if (r.per_vs_sector < -20) add(0.5, "PER por debajo de su sector"); }
+  if (X.corto?.validado && X.corto.p >= X.corto.alerta) add(-1, "su bolsa en alerta a 3 meses");
+  if (X.nRompe >= 3) add(-0.5, `rompe en ${X.nRompe} escenarios`);
+  const t = pts.reduce((a, b) => a + b, 0);
+  const label = t >= 1.5 ? "Favorable" : t <= -1 ? "Desfavorable" : "Vigilar";
+  return { label, score: t, why };
+}
+function informeFrase(c, X) {
+  const { r } = c, k = K(), parts = [];
+  if (r.score != null) parts.push(`${r.score >= 70 ? "Nota alta" : r.score >= 50 ? "Nota media" : "Nota baja"} (${r.score}/100 frente a su sector)`);
+  if (r.per_vs_sector != null) parts.push(`PER ${Math.abs(r.per_vs_sector) < 10 ? "en línea con" : r.per_vs_sector > 0 ? `un ${nf(r.per_vs_sector, 0)} % por encima de` : `un ${nf(-r.per_vs_sector, 0)} % por debajo de`} su sector`);
+  if (r.veredicto) parts.push(`técnico ${r.veredicto.toLowerCase()}`);
+  if (X.bal) parts.push(`balance que ${X.bal === "Aguanta" ? "aguanta" : X.bal === "Tensión" ? "queda en tensión" : "se rompe"} con el beneficio −30 %`);
+  return parts.length ? parts.join("; ") + "." : "Sin datos suficientes para una lectura.";
+}
+function hzCard(title, pill, big, sub, body, foot) {
+  return `<div class="inf-hz"><div class="inf-hz-h">${title}<span>${pill}</span></div><div class="inf-hz-big num">${big}</div><div class="inf-hz-s">${sub}</div>${body || ""}${foot ? H.ui.exp(foot, "Por qué esta cifra y su fiabilidad") : ""}</div>`;
+}
+function secInforme(c) {
+  const { r } = c, k = K(), RS = window.SCRStress, RP = window.SCRProb, RR = window.SCRRisk, RG = window.SCRGeo;
+  RS?.ensure?.(); RP?.ensure?.(); RR?.ensure?.(); RG?.ensure?.();
+  const V = RS?.data?.()?.valores?.[r.sym], mk = V?.m || RP?.of?.(r.sym)?.mk;
+  const T0 = mk && RR?.data?.()?.mercados?.[mk];
+  const h3 = T0?.h3 ? { ...T0.h3.actual, nombre: T0.nombre, alerta: T0.h3.umbrales?.alerta ?? 30, examen: T0.h3.precision?.examen } : null;   /* sin plazo de 3 meses: «sin datos» (no se mezcla con el de 12) */
+  const rows = RS?.symRows?.(r.sym) || null;
+  const nRompe = rows ? rows.filter((x) => x.ver === "Rompe").length : 0;
+  const B = balanceStress(c);
+  const X = { corto: h3, bal: B.ver, nRompe };
+  const VD = informeVeredicto(c, X);
+  /* horizontes */
+  const corto = h3 ? hzCard("Corto · 3 meses", H.ui.pill(h3.validado ? h3.regimen : null, h3.validado).replace("Sin ventaja", "Sin ventaja demostrada"),
+      `${nf(h3.p, 0)} %`, `probabilidad de que ${esc(h3.nombre)} caiga más de un 10 % (media histórica ${nf(h3.base, 0)} %)`,
+      `<div class="inf-l">Técnico: <b class="${r.veredicto === "Alcista" ? "pos" : r.veredicto === "Bajista" ? "neg" : ""}">${esc((r.veredicto || "—").toLowerCase())}</b>${r.rsi != null ? ` · RSI ${nf(r.rsi, 0)}` : ""}${r.sobre_mm200 != null ? ` · ${r.sobre_mm200 >= 0 ? "sobre" : "bajo"} su media de 200 sesiones` : ""}</div>`,
+      h3.validado ? `El termómetro a 3 meses de ${esc(h3.nombre)} superó el examen con datos desde 2016 que no vio al diseñarse${h3.examen ? ` (mejora ${sgn(h3.examen.skill, 1)} %, calibración ${nf(h3.examen.ece, 1)} pp)` : ""}. Es una cifra de su bolsa, no de la acción.` : `En ${esc(h3.nombre)} el termómetro no mejora a su media histórica en el examen: la referencia útil es la media (${nf(h3.base, 0)} %). El técnico es un filtro sin ventaja demostrada.`)
+    : hzCard("Corto · 3 meses", `<span class="ui-pill nu">Sin datos</span>`, "—", "su bolsa no tiene termómetro de riesgo", "", null);
+  const P = RP?.of?.(r.sym);
+  let medio;
+  if (P) {
+    const F = RP.data().factores || [], fac = F.map((f, j) => [f.nombre, P.c[j]]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 4), mx = Math.max(2, ...fac.map((x) => Math.abs(x[1])));
+    const bars = fac.map(([n, v]) => `<div class="inf-f"><span>${esc(n.replace(" frente al índice", ""))}</span><span class="pb-fb"><i class="${v < 0 ? "n" : "p"}" style="${v < 0 ? "right:50%" : "left:50%"};width:${((Math.abs(v) / mx) * 50).toFixed(1)}%"></i></span><b class="num ${v < 0 ? "neg" : v > 0 ? "pos" : ""}">${sgn(v, 1)}</b></div>`).join("");
+    medio = hzCard("Medio · 12 meses", P.ok ? `<span class="ui-pill ok">Validado</span>` : `<span class="ui-pill nu">Sin ventaja demostrada</span>`,
+      `${nf(P.ok ? P.p : P.M.base_hoy, 0)} %`, P.ok ? `probabilidad de batir a ${esc(P.M.nombre)} con dividendos (intervalo ${nf(P.lo, 0)}–${nf(P.hi, 0)} %)` : `tasa base: valores de ${esc(P.M.nombre)} que baten a su índice con dividendos en 12 meses · el modelo da ${nf(P.p, 0)} % (orientativo)`,
+      `<div class="inf-fs">${bars}</div>`,
+      `Examen ${esc(P.M.examen.desde?.slice(0, 4) || "")}–${esc(P.M.examen.hasta?.slice(0, 4) || "")}: el modelo mejora un ${sgn(P.M.examen.skill, 1)} % a la tasa base (mínimo exigido +3 %), calibración ${nf(P.M.examen.ece, 1)} pp. Las barras muestran qué factores alejan su cifra de la media de su mercado (puntos).`);
+  } else medio = hzCard("Medio · 12 meses", `<span class="ui-pill nu">Sin datos</span>`, "—", "sin historia suficiente (hacen falta 3 años de precios)", "", null);
+  const largo = hzCard("Largo · 3-5 años", `<span class="ui-pill te">Escenarios, no probabilidad</span>`, "R3", "Qué crecimiento descuenta el precio y escenarios bajista, base y alcista: llegan en el siguiente bloque.", `<div class="inf-l"><a href="#/empresa/${encodeURIComponent(r.sym)}/cuentas" class="link-btn">Mientras tanto: DCF inverso en Cuentas y valoración →</a></div>`, null);
+  /* tesis */
+  const R = reading(c);
+  const li = (x) => { const [t, src] = String(x).split("|"); return `<li>${esc(t)}${src ? ` <span class="tag">${esc(src)}</span>` : ""}</li>`; };
+  const ins = window.SCRSmart?.ins?.()?.por_valor?.[r.sym];
+  const favor = [...R.ev, ...R.interp], contra = [...R.contra];
+  if (ins?.n_compras && !ins.n_ventas) favor.push(`Directivos: ${ins.n_compras} compra(s) reciente(s) y ninguna venta.|Form 4`);
+  if (ins?.n_ventas && !ins.n_compras) contra.push(`Directivos: ${ins.n_ventas} venta(s) reciente(s) y ninguna compra.|Form 4`);
+  if (rows) { const w = rows.filter((x) => x.v != null).sort((a, b) => a.v - b.v)[0]; if (w && w.ver !== "Aguanta") contra.push(`Peor escenario: ${w.e.etiqueta || w.e.nombre} ${sgn(w.v, 0)} % frente a ${sgn(w.ref, 0)} % de su bolsa.|stress test`); }
+  /* riesgo aplicado */
+  const pick = rows ? ["c2008", "c2020", "c2022"].map((id) => rows.find((x) => x.e.id === id)).filter(Boolean) : [];
+  const wc = rows ? rows.filter((x) => x.e.tipo === "choque" && x.v != null).sort((a, b) => a.v - b.v)[0] : null;
+  if (wc) pick.push(wc);
+  const VCL = { Rompe: "ko", "Tensión": "te", Aguanta: "ok" };
+  const g = RG?.data?.()?.sens_valores?.[r.sym];
+  const riesgo = `<div class="inf-rk"><div class="tbl-wrap">${pick.length ? `<table class="ft inf-t"><thead><tr><th>Escenario</th><th class="num">${esc(r.sym)}</th><th class="num">Su bolsa</th><th>Veredicto</th></tr></thead><tbody>
+      ${pick.map((x) => `<tr><td>${esc(x.e.etiqueta || x.e.nombre)}</td><td class="num ${x.v < 0 ? "neg" : "pos"}">${sgn(x.v, 0)} %</td><td class="num hint">${x.ref == null ? "—" : sgn(x.ref, 0) + " %"}</td><td>${x.ver ? `<span class="ui-pill ${VCL[x.ver]}">${x.ver}</span>` : "—"}</td></tr>`).join("")}</tbody></table>` : '<div class="hint">Sin stress test (historia de precios insuficiente).</div>'}</div>
+    <div><table class="ft inf-t"><tbody>
+      <tr><td>Su bolsa ahora (3 meses)</td><td class="num">${h3 ? H.ui.pill(h3.regimen, h3.validado) : "—"}</td></tr>
+      <tr><td>Balance con beneficio −30 %</td><td class="num">${B.ver ? `<span class="ui-pill ${VCL[B.ver]}">${B.ver}</span>` : "s. d."}</td></tr>
+      <tr><td>Geopolítica: sobresalto de +2σ</td><td class="num ${g && Math.abs(g[1]) >= 2 ? (g[0] >= 0 ? "pos" : "neg") : "hint"}">${g ? (Math.abs(g[1]) >= 2 ? `${sgn(g[0], 1)} %` : "sin efecto claro") : "—"}</td></tr>
+      <tr><td>Divisa</td><td class="num">${esc(r.moneda || "—")}</td></tr>
+      <tr><td>Beta frente a su bolsa</td><td class="num">${V?.b != null ? nf(V.b, 2) : "—"}</td></tr></tbody></table></div></div>`;
+  /* qué invalidaría */
+  const inv = [];
+  if (r.score != null) inv.push(`La nota baja de ${Math.max(40, r.score - 15)} (hoy ${r.score}).`);
+  if (r.veredicto === "Alcista" && r.invalidacion) inv.push(`El precio cierra por debajo de ${nf(r.invalidacion, 2)} ${esc(r.moneda || "")} (invalida el técnico alcista).`);
+  else if (r.veredicto === "Bajista" && r.sma200) inv.push(`Recupera su media de 200 sesiones (${nf(r.sma200, 2)}): dejaría de ser bajista.`);
+  if (h3?.validado) inv.push(`${esc(h3.nombre)} pasa a «alerta» en el termómetro a 3 meses (umbral ${nf(h3.alerta, 0)} %).`);
+  if (B.ver === "Aguanta") inv.push("El flujo de caja libre pasa a negativo con deuda neta.");
+  inv.push("Ventas netas de directivos o salida de superinversores.");
+  if (r.resultados && r.resultados >= new Date().toISOString().slice(0, 10)) inv.push(`Resultados del ${fmtDate(r.resultados)} por debajo de lo esperado o con guía a la baja.`);
+  const det = window.SCRProb || window.SCRStress ? `<details class="ui-det inf-det"><summary>Detalle completo: probabilidad, stress test con los 12 escenarios y estrés del balance</summary><div class="ui-det-b">${secRiesgo(c)}</div></details>` : "";
+  return `<div class="inf">
+    <div class="inf-verd"><span class="ui-pill ${PILLV[VD.label]}" data-tip="${esc(`Lectura por reglas (no es una recomendación ni una probabilidad): ${VD.why.join(" · ") || "sin señales fuertes"}`)}">${VD.label}</span>
+      <div><div class="inf-verd-t">${esc(informeFrase(c, X))}</div><div class="hint">Corto: ${h3 ? (h3.validado ? `su bolsa en ${esc(h3.regimen.toLowerCase())}` : "su bolsa sin modelo validado") : "sin datos"} · Medio: ${P ? (P.ok ? "probabilidad validada" : "sin ventaja demostrada, cuenta la tasa base") : "sin datos"} · Largo: escenarios en el bloque R3</div></div></div>
+    ${H.ui.exp(`<b>Cómo se forma la etiqueta.</b> Suma de reglas fijas: nota ≥ 70 (+1) o ≤ 40 (−1); técnico alcista (+1) o bajista (−1); balance que rompe con el beneficio −30 % (−1) o en tensión (−0,5); PER más de un 30 % sobre su sector (−0,5) o más de un 20 % por debajo (+0,5); su bolsa en alerta a 3 meses con modelo validado (−1); rompe en 3 o más escenarios (−0,5). Favorable desde +1,5; desfavorable desde −1. Es una forma de resumir lo que dice la página, no una probabilidad: ninguna de estas reglas ha demostrado por sí sola batir al mercado.`, "Cómo se forma la etiqueta")}
+    <div class="inf-3">${corto}${medio}${largo}</div>
+    <div class="inf-2 inf-tesis"><section class="fbox"><header><h2>Tesis a favor</h2><span class="fbox-r">hechos con su fuente</span></header><ul class="inf-ul">${favor.slice(0, 6).map(li).join("") || "<li class=\"hint\">Sin argumentos con datos suficientes.</li>"}</ul></section>
+      <section class="fbox"><header><h2>Tesis en contra y por comprobar</h2><span class="fbox-r">hechos y dudas abiertas</span></header><ul class="inf-ul">${[...contra, ...R.todo].slice(0, 6).map(li).join("")}</ul></section></div>
+    <div class="inf-2 inf-rc">${box("Riesgo aplicado a la acción", riesgo, "su bolsa, escenarios, balance, geopolítica")}${box("Catalizadores", `<div id="fcat"><div class="skel" style="height:140px"></div></div>`, "resultados, directivos, noticias")}</div>
+    <div class="inf-2 inf-rc">${box("Qué invalidaría la tesis", `<ul class="inf-ul">${inv.map((x) => `<li>${x}</li>`).join("")}</ul><div class="method keep">Se recalcula con cada actualización.</div>`)}${box("Tu investigación", `<div class="f-ev">${myResearch(c)}</div>`, "diario de decisiones")}</div>
+    ${det}</div>`;
+}
+async function mountCatal(sym) {
+  const el = document.getElementById("fcat"); if (!el) return;
+  let d; try { d = await window.SCRChart.loadPrices(sym); } catch { el.innerHTML = '<div class="hint">Sin eventos disponibles.</div>'; return; }
+  if (!document.body.contains(el)) return;
+  const r = row(sym), ev = d.ev || {}, hoy = new Date().toISOString().slice(0, 10);
+  const ern = ev.ern || [], next = ern.find((x) => x[2] == null && x[0] >= hoy), past = ern.filter((x) => x[2] != null).slice(-2).reverse();
+  const ins = window.SCRSmart?.ins?.()?.por_valor?.[sym];
+  const news = (ev.news || []).filter((n) => n[1] !== "otras").slice(0, 3);
+  const h = [];
+  const nx = next?.[0] || (r?.resultados >= hoy ? r.resultados : null);
+  if (nx) h.push(`<div class="inf-ev"><b>${fmtDate(nx)}</b> · próximos resultados${next?.[1] != null ? ` · BPA estimado ${nf(next[1], 2)}` : ""}</div>`);
+  past.forEach((x) => h.push(`<div class="inf-ev">${fmtDate(x[0])} · resultados: BPA ${nf(x[2], 2)} frente a ${nf(x[1], 2)} estimado${x[3] != null ? ` (<span class="${x[3] >= 0 ? "pos" : "neg"}">${sgn(x[3], 1)} %</span>)` : ""}</div>`));
+  if (ins && (ins.n_compras || ins.n_ventas)) h.push(`<div class="inf-ev">Directivos: ${ins.n_compras || 0} compra(s) y ${ins.n_ventas || 0} venta(s) recientes · <span class="hint">Form 4</span></div>`);
+  news.forEach(([f, c, t, l, pv, ds]) => h.push(`<details class="nw nw-d"><summary><span class="hint num">${fmtDate(f)}</span> <div class="nw-t">${esc(t)}</div></summary><div class="nw-b">${ds ? `<p>${esc(ds)}</p>` : '<span class="hint">La fuente no publica resumen.</span>'}<div class="nw-f">${pv ? `<span class="hint">${esc(pv)}</span>` : ""}${l ? `<a href="${esc(l)}" target="_blank" rel="noopener">Leer en la fuente ↗</a>` : ""}</div></div></details>`));
+  el.innerHTML = h.length ? h.join("") + `<div class="bar" style="margin-top:6px"><a class="link-btn" href="#/empresa/${encodeURIComponent(sym)}/movimientos">Todos los resultados, noticias y movimientos →</a></div>` : '<div class="hint">Sin catalizadores con fecha en las fuentes.</div>';
+}
+function secCuentas(c) {
+  return `${secResumenSinLectura(c)}<h3 class="f-sub">Valoración</h3>${secValoracion(c)}<h3 class="f-sub">Factores de la nota</h3>${secFactores(c)}
+    <details class="ui-det inf-det"><summary>Cuentas completas: tablas anuales y trimestrales, ratios</summary><div class="ui-det-b">${secFund(c)}</div></details>`;
+}
+function secResumenSinLectura(c) {
+  return `<div class="f3"><div class="f3a">${keyData(c)}${eventsBox(c)}${qualityBox(c)}</div><div class="f3b">${finTable(c)}${yqBlock(c)}${chartsRow(c)}</div><div class="f3c">${scoreCol(c)}${valCol(c)}${qualityCol(c)}</div></div>`;
+}
+function secMovimientos(c) {
+  return `${secResultados(c)}<h3 class="f-sub">Smart money y directivos</h3>${window.SCRSmart ? window.SCRSmart.persTab(c.r.sym) : '<div class="err-box">Módulo de smart money no disponible.</div>'}`;
+}
+
 /* ---------- página ---------- */
 function render(F) {
   const k = K();
@@ -704,8 +832,8 @@ function render(F) {
   const c = ctx(F.sym);
   if (!c) return `<div class="fp"><div class="soon-box"><h3>${esc(F.sym)}: valor no encontrado</h3>${esc(F.sym)} no está en el universo del screener (${k.E.uni.filas.length} valores). Busca otro ticker con el buscador de arriba.</div></div>`;
   if (!c.d) return `<div class="fp">${head(c)}<div class="skel" style="height:110px;margin-top:12px"></div><div class="skel" style="height:260px;margin-top:12px"></div></div>`;
-  const body = { resumen: secResumen, grafico: () => `<div id="fchart" class="fchart"></div>`, fund: secFund, valoracion: secValoracion, factores: secFactores,
-    resultados: secResultados, comparables: secComparables, smartm: () => (window.SCRSmart ? window.SCRSmart.persTab(F.sym) : '<div class="err-box">Módulo de smart money no disponible.</div>'), riesgo: secRiesgo, invest: secInvest }[F.tab] || secResumen;
+  const body = { informe: secInforme, grafico: () => `<div id="fchart" class="fchart"></div>`, cuentas: secCuentas, movimientos: secMovimientos,
+    comparables: secComparables, invest: secInvest }[F.tab] || secInforme;
   let html;
   try { html = body(c); } catch (e) { console.error(e); html = `<div class="err-box">No se pudo dibujar este apartado: ${esc(e.message)}</div>`; }
   return `<div class="fp" data-sec="${esc(F.tab)}">${head(c)}<div class="fp-body">${html}</div></div>`;
@@ -713,8 +841,9 @@ function render(F) {
 function after(F) {
   const c = ctx(F.sym); if (!c || !c.d) return;
   if (F.tab === "grafico") K().mountChart(F.sym);
-  if (F.tab === "resultados") K().mountNews(F.sym);
-  if (F.tab === "valoracion" && window.SCRTesis) { const el = document.getElementById("ftesis"); if (el) window.SCRTesis.mount(el, c.r, c.d, { uni: K().E.uni.filas, fact: K().E.sc?.factores?.[F.sym] }); }
+  if (F.tab === "movimientos") K().mountNews(F.sym);
+  if (F.tab === "informe" || !F.tab) mountCatal(F.sym);
+  if (F.tab === "cuentas" && window.SCRTesis) { const el = document.getElementById("ftesis"); if (el) window.SCRTesis.mount(el, c.r, c.d, { uni: K().E.uni.filas, fact: K().E.sc?.factores?.[F.sym] }); }
 }
 function title(sym) { return row(sym)?.nombre || sym; }
 function note(sym) {
