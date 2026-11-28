@@ -50,6 +50,12 @@ CHOQUES = [  # (id, nombre, factor, signo del choque, descripción)
 ZONA_TIPOS = {"sp500": "US", "ndx": "US", "eem": "US", "hsi": "US", "sx5e": "DE", "dax": "DE", "cac": "DE", "ibex": "DE", "mib": "DE",
               "ftse": "GB", "n225": "JP"}
 TIPOS_FRED = {"US": "IRLTLT01USM156N", "DE": "IRLTLT01DEM156N", "GB": "IRLTLT01GBM156N", "JP": "IRLTLT01JPM156N"}
+# R3: bono a 10 años por divisa de cotización (nivel actual) para la tasa de descuento de los escenarios. OCDE vía FRED.
+# EUR = Bund alemán (referencia sin riesgo del euro). Sin serie OCDE (TWD, HKD, BRL…): la web usa el de EE. UU. y lo dice.
+TIPOS10_DIV = {"USD": "IRLTLT01USM156N", "EUR": "IRLTLT01DEM156N", "GBP": "IRLTLT01GBM156N", "JPY": "IRLTLT01JPM156N",
+               "KRW": "IRLTLT01KRM156N", "CHF": "IRLTLT01CHM156N", "SEK": "IRLTLT01SEM156N", "NOK": "IRLTLT01NOM156N",
+               "DKK": "IRLTLT01DKM156N", "PLN": "IRLTLT01PLM156N", "MXN": "IRLTLT01MXM156N", "CAD": "IRLTLT01CAM156N",
+               "AUD": "IRLTLT01AUM156N"}
 TIPOS_NOMBRE = {"US": "EE. UU.", "DE": "Alemania", "GB": "Reino Unido", "JP": "Japón"}
 PAIS_MERCADO = {"United States": "sp500", "Spain": "ibex", "United Kingdom": "ftse", "Germany": "dax", "France": "cac", "Italy": "mib",
                 "Japan": "n225", "Hong Kong": "hsi", "China": "hsi"}
@@ -245,6 +251,24 @@ def weekly(tickers, chunk=150):
             except Exception:  # noqa: BLE001
                 pass
         log(f"  semanal: {min(i + chunk, len(tickers))}/{len(tickers)} · {len(out)} con datos")
+    return out
+
+
+def tipos10():
+    """Último nivel mensual del bono a 10 años de cada divisa (%), con su fecha y fuente; lo que falle se omite y se registra."""
+    out = {}
+    for c, sid in TIPOS10_DIV.items():
+        try:
+            m = month_last(fred(sid))
+            k = max(m)
+            if k < (NOW.date() - timedelta(days=200)).isoformat()[:7]:
+                raise ValueError(f"serie desfasada ({k})")
+            v = float(m[k])
+            if not (-1 < v < 25):
+                raise ValueError(f"valor fuera de rango ({v})")
+            out[c] = {"valor": round(v, 2), "fecha": k, "fuente": "OCDE vía FRED", "url": f"https://fred.stlouisfed.org/series/{sid}"}
+        except Exception as e:  # noqa: BLE001
+            ERRORS.append({"fuente": "FRED", "serie": sid, "motivo": "bono 10 años: " + str(e)[:140]})
     return out
 
 
@@ -454,6 +478,8 @@ def main():
     if dol is not None and "dolar" in sig:
         dol["traslacion"] = S["divisas"]["dolar_choque"]
     log(f"Divisas: {len(FX)} · tipos a 3 m: " + ", ".join(f"{k} {v['valor']}" for k, v in T.items()))
+    S["tipos10"] = tipos10()
+    log("Bono a 10 años por divisa: " + ", ".join(f"{k} {v['valor']}" for k, v in S["tipos10"].items()))
     S["sigma"] = {k: round(v, 3) for k, v in sig.items()}
     out = os.path.join(DATA, "stress.json")
     with open(out, "w") as f:

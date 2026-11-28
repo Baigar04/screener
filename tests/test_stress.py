@@ -97,3 +97,17 @@ def test_saltos_de_datos_no_producen_efectos_imposibles():
     x = rng.normal(0, 1, 120)
     y = 80 * x
     assert S.effect(dict(zip(ms, y)), dict(zip(ms, x)), 2.0) is None    # efecto > 300 %: se descarta
+
+
+def test_tipos10_omite_series_desfasadas_o_imposibles(monkeypatch):
+    hoy = S.NOW.date()
+    reciente = [(date(hoy.year, hoy.month, 1) - timedelta(days=40), 1.6)]
+    viejo = [(date(2020, 1, 1), 1.0)]
+    raro = [(date(hoy.year, hoy.month, 1) - timedelta(days=40), 80.0)]
+    series = {"IRLTLT01JPM156N": reciente, "IRLTLT01KRM156N": viejo, "IRLTLT01USM156N": raro}
+    monkeypatch.setattr(S, "TIPOS10_DIV", {"JPY": "IRLTLT01JPM156N", "KRW": "IRLTLT01KRM156N", "USD": "IRLTLT01USM156N"})
+    monkeypatch.setattr(S, "fred", lambda sid: series[sid])
+    S.ERRORS.clear()
+    out = S.tipos10()
+    assert set(out) == {"JPY"} and out["JPY"]["valor"] == 1.6 and out["JPY"]["fuente"]
+    assert len(S.ERRORS) == 2

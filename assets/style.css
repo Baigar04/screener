@@ -1374,3 +1374,20 @@ details.nw-d[open]{background:var(--surface-2);padding:6px 8px;margin:4px -8px}
 @media (max-width:640px){.inf-verd{flex-wrap:wrap}}
 .inf-rk{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
 @media (max-width:1700px){.inf-rk{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- R3 · largo plazo, apuesta razonada y PDF ---------- */
+.inf-sc{margin-top:8px}.inf-sc td,.inf-sc th{padding:3px 5px;font-size:12px}.inf-sc tr.b td{font-weight:600;color:var(--text)}
+.apu{border-style:dashed;border-color:color-mix(in srgb,var(--accent) 55%,var(--border));margin-bottom:12px}
+.apu .fbox-b{padding:12px 14px}
+.apu-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}.apu-h b{font-size:14px}.apu-h .ui-pill{margin-left:auto}
+.apu-s{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:8px 0 2px}
+@media print{
+  body.print-inf #nav,body.print-inf #side,body.print-inf #crumbs,body.print-inf #status,body.print-inf #settings,body.print-inf #overlay,body.print-inf #drawer,body.print-inf header,body.print-inf nav,body.print-inf button,body.print-inf .icon-btn{display:none!important}
+  body.print-inf{background:#fff!important;color:#111!important}
+  body.print-inf #view{margin:0!important;padding:0!important;max-width:none!important}
+  body.print-inf .inf *{color:#111!important;background:transparent!important;border-color:#bbb!important}
+  body.print-inf .inf .pos{color:#0a6b2d!important}body.print-inf .inf .neg{color:#a11!important}
+  body.print-inf .inf-3{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  body.print-inf .fbox,body.print-inf .inf-hz{break-inside:avoid}
+  body.print-inf details>summary{list-style:none}
+}

@@ -237,6 +237,8 @@ def v_stress(d, prev):
         check(len(x.get("v") or []) == len(E) and all(v is None or (finite(v) and -100 < v < 400) for v in x["v"]), f"stress.json: valores imposibles en {s}")
     for e in E:
         check(e.get("base"), f"stress.json: escenario {e.get('id')} sin base del cálculo")
+    for c, t in (d.get("tipos10") or {}).items():
+        check(finite(t.get("valor")) and -1 < t["valor"] < 25 and t.get("fuente"), f"stress.json: bono a 10 años imposible en {c}")
     return f"{len(E)} escenarios · {len(I)} bolsas · {len(V)} valores · {len((d.get('divisas') or {}).get('fx') or {})} divisas"
 
 

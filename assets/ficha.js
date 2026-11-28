@@ -753,7 +753,17 @@ function secInforme(c) {
       `<div class="inf-fs">${bars}</div>`,
       `Examen ${esc(P.M.examen.desde?.slice(0, 4) || "")}–${esc(P.M.examen.hasta?.slice(0, 4) || "")}: el modelo mejora un ${sgn(P.M.examen.skill, 1)} % a la tasa base (mínimo exigido +3 %), calibración ${nf(P.M.examen.ece, 1)} pp. Las barras muestran qué factores alejan su cifra de la media de su mercado (puntos).`);
   } else medio = hzCard("Medio · 12 meses", `<span class="ui-pill nu">Sin datos</span>`, "—", "sin historia suficiente (hacen falta 3 años de precios)", "", null);
-  const largo = hzCard("Largo · 3-5 años", `<span class="ui-pill te">Escenarios, no probabilidad</span>`, "R3", "Qué crecimiento descuenta el precio y escenarios bajista, base y alcista: llegan en el siguiente bloque.", `<div class="inf-l"><a href="#/empresa/${encodeURIComponent(r.sym)}/cuentas" class="link-btn">Mientras tanto: DCF inverso en Cuentas y valoración →</a></div>`, null);
+  const E = window.SCRTesis?.escenarios?.(r, c.d || {});
+  let largo;
+  if (E && !E.na) {
+    const b = E.S[1], cur = esc(E.moneda === "GBp" ? "p" : E.moneda || "");
+    const tbl = `<table class="ft inf-t inf-sc"><thead><tr><th></th><th class="num">Ventas</th><th class="num">Margen</th><th class="num">Valor</th><th class="num">vs precio</th></tr></thead><tbody>
+      ${E.S.map((x) => `<tr class="${x.t === "Base" ? "b" : ""}"><td>${x.t}</td><td class="num">${sgn(x.g, 1)} %</td><td class="num">${nf(x.m, 1)} %</td><td class="num">${x.px > 0 ? nf(x.px, 2) : "neg."}</td><td class="num ${x.up == null ? "" : x.up >= 0 ? "pos" : "neg"}">${x.up == null ? "—" : sgn(x.up, 0) + " %"}</td></tr>`).join("")}</tbody></table>`;
+    const gi = E.gi?.g != null ? `<div class="inf-l">El precio descuenta ventas a <b class="num">${sgn(E.gi.g, 1)} %</b> anual 5 años · su historia ${sgn(E.cg, 1)} % (${esc(E.desde)}-${esc(E.hasta)})</div>` : `<div class="inf-l">${esc(window.SCRTesis.lecturaLargo(E))}</div>`;
+    largo = hzCard("Largo · 3-5 años", `<span class="ui-pill te">Escenarios, no probabilidad</span>`, b.up == null ? "neg." : `${sgn(b.up, 0)} %`,
+      `valor del escenario base (${b.px > 0 ? nf(b.px, 2) + " " + cur : "negativo"}) frente al precio (${nf(r.precio, 2)} ${cur})`, gi + tbl,
+      `<b>Reglas fijadas antes de mirar resultados.</b> Ventas: crecen 5 años al ritmo del escenario y convergen al ${nf(E.gt, 1)} % en los años 6-10. Ritmo base = media entre su crecimiento compuesto (${sgn(E.cg, 1)} %, ${esc(E.desde)}-${esc(E.hasta)}) y el del último año (${E.last == null ? "sin dato" : sgn(E.last, 1) + " %"}), entre −5 % y 25 %; bajista y alcista = base ∓ ${nf(E.sig, 1)} puntos (la dispersión de su crecimiento anual). Margen de caja libre: mediana ${nf(E.mBase, 1)} %; bajista, su peor ejercicio (sin bajar de la mitad); alcista, el mejor (sin pasar de 1,5 veces). Descuento ${nf(E.k, 1)} % = ${esc(E.rf.src)} ${nf(E.rf.v, 2)} % + beta ${nf(E.beta, 2)} × 5 %. Deuda neta ${E.nd == null ? "sin dato (se toma 0)" : window.SCRFmt?.big ? window.SCRFmt.big(E.nd, r.moneda) : nf(E.nd / 1e6, 0) + " M"}. Cuentas: ${esc(E.src)}. Son escenarios para ver qué tiene que pasar, no una probabilidad ni un precio objetivo: no hay examen que los valide.`);
+  } else largo = hzCard("Largo · 3-5 años", `<span class="ui-pill nu">${E?.neg ? "Sin flujo positivo" : "No aplica"}</span>`, "—", esc(E?.na || "Módulo de valoración no disponible."), "", null);
   /* tesis */
   const R = reading(c);
   const li = (x) => { const [t, src] = String(x).split("|"); return `<li>${esc(t)}${src ? ` <span class="tag">${esc(src)}</span>` : ""}</li>`; };
@@ -788,15 +798,65 @@ function secInforme(c) {
   const det = window.SCRProb || window.SCRStress ? `<details class="ui-det inf-det"><summary>Detalle completo: probabilidad, stress test con los 12 escenarios y estrés del balance</summary><div class="ui-det-b">${secRiesgo(c)}</div></details>` : "";
   return `<div class="inf">
     <div class="inf-verd"><span class="ui-pill ${PILLV[VD.label]}" data-tip="${esc(`Lectura por reglas (no es una recomendación ni una probabilidad): ${VD.why.join(" · ") || "sin señales fuertes"}`)}">${VD.label}</span>
-      <div><div class="inf-verd-t">${esc(informeFrase(c, X))}</div><div class="hint">Corto: ${h3 ? (h3.validado ? `su bolsa en ${esc(h3.regimen.toLowerCase())}` : "su bolsa sin modelo validado") : "sin datos"} · Medio: ${P ? (P.ok ? "probabilidad validada" : "sin ventaja demostrada, cuenta la tasa base") : "sin datos"} · Largo: escenarios en el bloque R3</div></div></div>
+      <div><div class="inf-verd-t">${esc(informeFrase(c, X))}</div><div class="hint">Corto: ${h3 ? (h3.validado ? `su bolsa en ${esc(h3.regimen.toLowerCase())}` : "su bolsa sin modelo validado") : "sin datos"} · Medio: ${P ? (P.ok ? "probabilidad validada" : "sin ventaja demostrada, cuenta la tasa base") : "sin datos"} · Largo: ${E && !E.na ? `escenario base ${E.S[1].up == null ? "negativo" : sgn(E.S[1].up, 0) + " % frente al precio"}` : "sin escenarios"}</div></div>
+      <button class="icon-btn" data-infpdf="${esc(r.sym)}" title="Abre el diálogo de impresión con el Informe completo: elige «Guardar como PDF»">Descargar PDF</button></div>
     ${H.ui.exp(`<b>Cómo se forma la etiqueta.</b> Suma de reglas fijas: nota ≥ 70 (+1) o ≤ 40 (−1); técnico alcista (+1) o bajista (−1); balance que rompe con el beneficio −30 % (−1) o en tensión (−0,5); PER más de un 30 % sobre su sector (−0,5) o más de un 20 % por debajo (+0,5); su bolsa en alerta a 3 meses con modelo validado (−1); rompe en 3 o más escenarios (−0,5). Favorable desde +1,5; desfavorable desde −1. Es una forma de resumir lo que dice la página, no una probabilidad: ninguna de estas reglas ha demostrado por sí sola batir al mercado.`, "Cómo se forma la etiqueta")}
     <div class="inf-3">${corto}${medio}${largo}</div>
     <div class="inf-2 inf-tesis"><section class="fbox"><header><h2>Tesis a favor</h2><span class="fbox-r">hechos con su fuente</span></header><ul class="inf-ul">${favor.slice(0, 6).map(li).join("") || "<li class=\"hint\">Sin argumentos con datos suficientes.</li>"}</ul></section>
       <section class="fbox"><header><h2>Tesis en contra y por comprobar</h2><span class="fbox-r">hechos y dudas abiertas</span></header><ul class="inf-ul">${[...contra, ...R.todo].slice(0, 6).map(li).join("")}</ul></section></div>
     <div class="inf-2 inf-rc">${box("Riesgo aplicado a la acción", riesgo, "su bolsa, escenarios, balance, geopolítica")}${box("Catalizadores", `<div id="fcat"><div class="skel" style="height:140px"></div></div>`, "resultados, directivos, noticias")}</div>
     <div class="inf-2 inf-rc">${box("Qué invalidaría la tesis", `<ul class="inf-ul">${inv.map((x) => `<li>${x}</li>`).join("")}</ul><div class="method keep">Se recalcula con cada actualización.</div>`)}${box("Tu investigación", `<div class="f-ev">${myResearch(c)}</div>`, "diario de decisiones")}</div>
+    ${apuestaBox(c, E, rows)}
     ${det}</div>`;
 }
+
+const APU = {};
+/* R3 · Apuesta razonada: tesis que ningún modelo valida, separada de lo validado y registrable en el Diario.
+   Primer caso con datos: rearme europeo (valores de la cesta de defensa de Geopolítica). Para el resto, plantilla propia. */
+function apuestaBox(c, E, rows) {
+  const { r } = c, G = window.SCRGeo?.data?.(), D = G?.defensa;
+  const enCesta = D?.valores?.includes(r.sym);
+  const paz = rows?.find((x) => x.e.id === "paz");
+  let body, pre;
+  if (enCesta) {
+    const P = D.precedente || {}, base = E && !E.na ? E.S[1] : null;
+    const facts = (G.rearme || []).map((x) => `<li>${esc(x.dato)}${H.ui.fuente(x.fuente, x.url)}</li>`).join("");
+    const pos = P.n ? Math.round((P.positivos / P.n) * 100) : null;
+    body = `<div class="apu-h"><b>Rearme europeo</b><span class="ui-pill te">Apuesta razonada · no validada</span></div>
+      <div class="inf-2"><div><div class="apu-s">Por qué</div><ul class="inf-ul">${facts}</ul></div>
+      <div><div class="apu-s">Dónde está ahora</div><ul class="inf-ul">
+        <li>Cesta de defensa europea (${D.valores.length} valores): ${sgn(D.dd3m, 1)} % desde su máximo de 3 meses · ${sgn(D.r1a, 0)} % en un año · ${sgn(D.r3a, 0)} % en tres.</li>
+        ${P.n ? `<li>Caídas así desde ${esc((D.desde || "").slice(0, 4))}: ${P.n}; a 6 meses, ${sgn(P.media6m, 1)} % de media y ${pos} % en positivo. Es un precedente de la cesta, no un examen.</li>` : ""}
+        ${base ? `<li>${esc(r.sym)} en el escenario base a largo plazo: ${base.up == null ? "valor negativo" : sgn(base.up, 0) + " % frente al precio"}.</li>` : ""}
+        ${paz?.v != null ? `<li>Si llega la distensión con Rusia (escenario «paz»): ${sgn(paz.v, 0)} % estimado en un mes${paz.q != null ? ` (R² ${nf(paz.q, 2)}${paz.q < 0.05 ? ": explica muy poco, fiabilidad baja" : ""})` : ""}.</li>` : ""}</ul></div></div>
+      <div class="apu-s">Qué la invalidaría</div><ul class="inf-ul"><li>Un acuerdo de paz duradero que frene los presupuestos, o recortes del objetivo del 5 %.</li><li>Pedidos y cartera de ${esc(r.nombre || r.sym)} que no crecen en dos resultados seguidos.</li><li>Valoración que ya descuenta el rearme: el precio exige más crecimiento del que publica la OTAN.</li></ul>`;
+    pre = { tipo: "apuesta", tema: "Rearme europeo", hz: "largo", mot: `Rearme europeo: OTAN 5 % del PIB en 2035 y ReArm 800.000 M€; ${r.nombre || r.sym} como beneficiario directo del gasto en defensa.`, inv: "Acuerdo de paz que frene los presupuestos, o pedidos que no crecen en dos resultados seguidos." };
+  } else {
+    body = `<div class="apu-h"><b>Tu apuesta razonada</b><span class="ui-pill nu">Opcional · no validada</span></div>
+      <p class="hint">Para tesis que los datos no pueden validar (una ola tecnológica, una política, un cambio de ciclo). Escríbela con su motivo y lo que la invalidaría: queda en el Diario separada de lo validado y se mide igual, para saber con el tiempo si tus apuestas funcionan. El primer caso con datos propios es el rearme europeo (valores de la cesta de defensa).</p>`;
+    pre = { tipo: "apuesta", hz: "largo", mot: "", inv: "" };
+  }
+  APU[r.sym] = pre;
+  return `<section class="fbox apu"><div class="fbox-b">${body}<div class="bar" style="margin-top:8px"><button class="icon-btn" data-apuesta="${esc(r.sym)}">Registrar como apuesta en el Diario</button></div></div></section>`;
+}
+/* PDF: el Informe se imprime con todos los desplegables abiertos; el diálogo del navegador permite «Guardar como PDF» */
+function informePDF(sym) {
+  const v = document.getElementById("view"); if (!v) return;
+  const closed = [...v.querySelectorAll("details:not([open])")];
+  closed.forEach((d) => (d.open = true));
+  const t0 = document.title;
+  document.title = `Informe ${sym} · ${new Date().toISOString().slice(0, 10)}`;
+  document.body.classList.add("print-inf");
+  const done = () => { closed.forEach((d) => (d.open = false)); document.title = t0; document.body.classList.remove("print-inf"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  setTimeout(() => { window.print(); setTimeout(() => document.body.classList.contains("print-inf") && !matchMedia("print").matches && done(), 1500); }, 60);
+}
+H.handlers.push((t) => {
+  let b;
+  if ((b = t.closest("[data-apuesta]"))) { window.SCRDiario?.openForm(b.dataset.apuesta, APU[b.dataset.apuesta] || { tipo: "apuesta", hz: "largo" }); return true; }
+  if ((b = t.closest("[data-infpdf]"))) { informePDF(b.dataset.infpdf); return true; }
+  return false;
+});
 async function mountCatal(sym) {
   const el = document.getElementById("fcat"); if (!el) return;
   let d; try { d = await window.SCRChart.loadPrices(sym); } catch { el.innerHTML = '<div class="hint">Sin eventos disponibles.</div>'; return; }

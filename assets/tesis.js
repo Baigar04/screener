@@ -40,6 +40,82 @@ function inputs(r, d) {
   return { lastF, avg3, ttm: r.fcf_ttm, shares, nd, beta, rf, r0: Math.min(14, Math.max(6, rf + beta * ERP)) };
 }
 
+
+/* ---------- R3 · Escenarios a largo plazo (reglas fijadas el 28-nov-2026, antes de mirar resultados) ----------
+   Ventas: crecen 5 años al ritmo del escenario y convergen en línea recta al crecimiento a perpetuidad en los años 6-10.
+   Ritmo base = media del crecimiento anual compuesto de las ventas de su historia y el del último año, acotada entre −5 % y 25 %.
+   Bajista / alcista = base ∓ la dispersión de su crecimiento anual (desviación típica, entre 3 y 10 puntos; el alcista, hasta 35 %).
+   Margen de caja (FCF / ventas): base = mediana de sus ejercicios; bajista = el peor, sin bajar de la mitad de la mediana;
+   alcista = el mejor, sin pasar de 1,5 veces la mediana. Descuento = bono a 10 años de su divisa + beta (0,5-2) × 5 %, entre 6 % y 14 %;
+   perpetuidad 2,5 % (como mucho, el descuento − 3 puntos). Valor por acción = (valor presente de los flujos − deuda neta) / acciones.
+   «Qué descuenta el precio» = ritmo de ventas de 5 años que iguala el valor base al precio con el margen mediano.
+   Son escenarios para entender qué hace falta que pase, no probabilidades ni precios objetivo. */
+function histCaja(r, d) {
+  const fy = d?.sec?.fy, out = [];
+  if (Array.isArray(fy) && fy.length >= 4) {
+    fy.slice().sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(-8).forEach((x) => { if (x[2] > 0 && x[7] != null && x[8] != null) out.push({ y: String(x[0]).slice(0, 4), v: x[2], f: x[7] - x[8] }); });
+    if (out.length >= 4) return { rows: out, src: "SEC 10-K" };
+    out.length = 0;
+  }
+  const an = d?.anual || {};
+  Object.keys(an).sort().forEach((y) => { const a = an[y]; if (a?.ventas > 0 && a.fcf != null) out.push({ y, v: a.ventas, f: a.fcf }); });
+  return { rows: out, src: "Yahoo Finance" };
+}
+const med = (a) => { const s = a.slice().sort((x, y) => x - y), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function tipo10(moneda) {
+  const c = String(moneda || "").toUpperCase().slice(0, 3) === "GBP" ? "GBP" : String(moneda || "").toUpperCase();
+  const T = window.SCRStress?.data?.()?.tipos10 || {};
+  if (T[c]) return { v: T[c].valor, src: `bono a 10 años en ${c} (${T[c].fuente}, ${T[c].fecha})`, local: true };
+  const us = H.S.data?.series?.us10y?.valor, ez = H.S.data?.series?.ez10y?.valor;
+  if (c === "EUR" && ez != null) return { v: ez, src: "curva AAA del euro a 10 años (BCE)", local: true };
+  return { v: us ?? 4.2, src: `bono de EE. UU. a 10 años${c && c !== "USD" ? `, por falta de serie oficial en ${c}` : ""}`, local: c === "USD" };
+}
+function escenarios(r, d, o = {}) {
+  if (FIN.test(r.industria || "")) return { na: "No aplica a bancos, aseguradoras y gestoras: su flujo de caja es su materia prima. Para ellas cuenta el P/VC frente a su historia y el ROE." };
+  const mp = String(r.moneda || ""), mf = String(r.moneda_fin || mp);
+  const pence = mp === "GBp" || mp === "GBX";
+  if (mf.toUpperCase().slice(0, 3) !== mp.toUpperCase().slice(0, 3) && !(pence && mf.toUpperCase() === "GBP"))
+    return { na: `Las cuentas están en ${mf} y la acción cotiza en ${mp}: sin tipo de cambio fiable en la fuente, el valor por acción no sería comparable.` };
+  const HC = histCaja(r, d), rows = HC.rows;
+  if (rows.length < 3) return { na: "Hacen falta al menos 3 ejercicios con ventas y flujo de caja libre." };
+  const shares = r.acciones;
+  if (!(shares > 0) || !(r.precio > 0)) return { na: "Sin número de acciones o precio en la fuente." };
+  const ms = rows.slice(-5).map((x) => x.f / x.v).filter(Number.isFinite), mBase = med(ms);
+  const nd = r.deuda != null && r.caja != null ? r.deuda - r.caja : null;
+  if (!(mBase > 0)) return { na: `Su flujo de caja libre mediano es negativo (${nf(mBase * 100, 1)} % de las ventas): el precio descuenta un cambio de rumbo, no una continuación, y un flujo descontado no lo puede medir.`, neg: true };
+  const mBear = Math.max(Math.min(...ms), mBase / 2), mBull = Math.min(Math.max(...ms), mBase * 1.5);
+  const gs = []; for (let i = 1; i < rows.length; i++) gs.push((rows[i].v / rows[i - 1].v - 1) * 100);
+  const n = rows.length - 1, cg = ((rows[n].v / rows[0].v) ** (1 / n) - 1) * 100;
+  const parts = [cg, r.crec_ventas].filter(Number.isFinite), gBase = clamp(parts.reduce((a, b) => a + b, 0) / parts.length, -5, 25);
+  const mu = gs.reduce((a, b) => a + b, 0) / gs.length, sd = gs.length >= 2 ? Math.sqrt(gs.reduce((a, b) => a + (b - mu) ** 2, 0) / (gs.length - 1)) : 5;
+  const sig = clamp(sd, 3, 10), gBear = gBase - sig, gBull = Math.min(35, gBase + sig);
+  const rf = tipo10(mp), beta = r.beta != null ? clamp(r.beta, 0.5, 2) : 1;
+  const k = (o.r != null ? o.r : clamp(rf.v + beta * ERP, 6, 14)) / 100, gt = Math.min(o.gt != null ? o.gt : 2.5, k * 100 - 3) / 100;
+  const v0 = rows[n].v, fx = pence ? 100 : 1;
+  const value = (g, m) => {
+    let V = v0, pvs = 0, F = 0;
+    for (let t = 1; t <= 10; t++) { const gg = t <= 5 ? g / 100 : g / 100 + (gt - g / 100) * ((t - 5) / 5); V *= 1 + gg; F = V * m; pvs += F / (1 + k) ** t; }
+    const ev = pvs + (F * (1 + gt)) / (k - gt) / (1 + k) ** 10;
+    return ((ev - (nd || 0)) / shares) * fx;
+  };
+  const S = [["Bajista", gBear, mBear], ["Base", gBase, mBase], ["Alcista", gBull, mBull]].map(([t, g, m]) => { const px = value(g, m); return { t, g, m: m * 100, px, up: px > 0 ? (px / r.precio - 1) * 100 : null }; });
+  let gi = null, lo = -30, hi = 60;
+  if (value(hi, mBase) < r.precio) gi = { above: true };
+  else if (value(lo, mBase) > r.precio) gi = { below: true };
+  else { for (let i = 0; i < 70; i++) { const m = (lo + hi) / 2; if (value(m, mBase) > r.precio) hi = m; else lo = m; } gi = { g: (lo + hi) / 2 }; }
+  return { S, gi, cg, n, last: r.crec_ventas, sig, mBase: mBase * 100, k: k * 100, gt: gt * 100, rf, beta, nd, src: HC.src, desde: rows[0].y, hasta: rows[n].y, moneda: mp };
+}
+function lecturaLargo(E) {
+  if (!E || E.na) return null;
+  const b = E.S[1];
+  if (E.gi?.above) return "El precio pide más del 60 % anual de crecimiento de ventas durante 5 años con su margen actual: cotiza por expectativas que sus cuentas no muestran todavía.";
+  if (E.gi?.below) return "El precio descuenta que las ventas caigan más de un 30 % al año: el mercado duda de la continuidad del negocio o de sus cuentas.";
+  const gap = E.gi.g - E.cg;
+  const exig = gap <= -3 ? "menos crecimiento del que ha tenido" : gap <= 3 ? "un crecimiento parecido al de su historia" : gap <= 10 ? "acelerar respecto a su historia" : "un crecimiento muy superior al de su historia";
+  return `El precio descuenta ventas a ${sgn(E.gi.g, 1)} % anual durante 5 años (su historia: ${sgn(E.cg, 1)} %), es decir, ${exig}. En el escenario base vale ${b.px > 0 ? nf(b.px, 2) : "menos de cero"}${b.up != null ? ` (${sgn(b.up, 0)} % frente al precio)` : ""}.`;
+}
+
 /* ---------- vista ---------- */
 const T = { base: store.get("tesis_base", "ttm"), r: null, gt: 2.5, n: 10, sym: null, peers: store.get("tesis_peers", "industria") };
 
@@ -61,12 +137,8 @@ function dcfBox(r, d, I) {
     else if (g > 15 && g > 2 * Math.max(vs.v, 1)) { ver = "Muy exigente: el precio necesita un crecimiento muy superior al histórico durante una década."; vc = "bad"; }
     else { ver = "Exigente: el precio descuenta acelerar el crecimiento respecto a su historia."; vc = "bad"; }
   }
-  /* escenarios */
-  const base = vs ? Math.max(-5, Math.min(20, vs.v)) : (r.crec_ventas != null ? Math.max(-5, Math.min(20, r.crec_ventas)) : null);
-  const scen = fcf > 0 && base != null && I.shares ? [["Bajista", base - 5], ["Base", base], ["Alcista", base + 5]].map(([k, gg]) => {
-    const eq = pv(fcf, gg / 100, rr, gt, T.n) - (I.nd || 0), px = eq / I.shares;
-    return [k, gg, px, r.precio ? (px / r.precio - 1) * 100 : null];
-  }) : null;
+  /* escenarios: el mismo motor que el Informe (R3), con la tasa y la perpetuidad de los controles */
+  const E = escenarios(r, d, { r: T.r, gt: T.gt });
   return `<div class="box tes-dcf"><b>Qué descuenta el precio · DCF inverso</b>
     ${fcf <= 0 ? `<div class="hint">El flujo de caja libre elegido es negativo (${F().big(fcf, r.moneda)}): el precio descuenta un cambio de rumbo, no una continuación. Prueba con la media de 3 ejercicios.</div>` : ""}
     ${res?.above ? `<div class="hint">Ni con un 100 % anual se justifica el precio con estos supuestos: cotiza por opcionalidad o por beneficios muy lejanos.</div>` : ""}
@@ -81,11 +153,11 @@ function dcfBox(r, d, I) {
       <label>Crecimiento a perpetuidad <b class="num">${nf(T.gt, 1)} %</b><input type="range" min="0" max="4" step="0.5" value="${T.gt}" data-tset="gt"></label>
       <label>Años de crecimiento <b class="num">${T.n}</b><input type="range" min="5" max="15" step="1" value="${T.n}" data-tset="n"></label>
     </div>
-    ${scen ? `<div class="lab-tw"><table><thead><tr><th>Escenario</th><th>Crec. FCF</th><th>Valor por acción</th><th>Frente al precio</th></tr></thead><tbody>
-      ${scen.map(([k, gg, px, up]) => `<tr><td>${k}</td><td class="num">${sgn(gg, 1)} %</td><td class="num">${px > 0 ? nf(px, 2) : "negativo"}</td><td class="num chg ${F().cls(up)}">${px > 0 ? F().spct(up, 0) : "—"}</td></tr>`).join("")}
+    ${E && !E.na ? `<div class="lab-tw"><table><thead><tr><th>Escenario</th><th>Ventas 5 años</th><th>Margen de caja</th><th>Valor por acción</th><th>Frente al precio</th></tr></thead><tbody>
+      ${E.S.map((x) => `<tr><td>${x.t}</td><td class="num">${sgn(x.g, 1)} %</td><td class="num">${nf(x.m, 1)} %</td><td class="num">${x.px > 0 ? nf(x.px, 2) : "negativo"}</td><td class="num chg ${F().cls(x.up)}">${x.px > 0 ? F().spct(x.up, 0) : "—"}</td></tr>`).join("")}
       ${r.precio_objetivo ? `<tr><td>Analistas (${r.n_analistas || "?"})</td><td></td><td class="num">${nf(r.precio_objetivo, 2)}</td><td class="num chg ${F().cls(r.precio_objetivo / r.precio - 1)}">${F().spct((r.precio_objetivo / r.precio - 1) * 100, 0)}</td></tr>` : ""}</tbody></table></div>` : ""}
     <div class="method">Valor empresa = capitalización ${F().big(r.mcap, r.moneda)} + deuda neta ${I.nd == null ? "(sin dato: se toma 0)" : F().big(I.nd, r.moneda)}.
-      Tasa por defecto = bono a 10 años (${nf(I.rf, 2)} %) + beta ${nf(I.beta, 2)} × ${ERP} % de prima de mercado. Escenarios: crecimiento histórico de ventas (acotado entre −5 % y 20 %) ± 5 puntos.
+      Tasa por defecto = bono a 10 años (${nf(I.rf, 2)} %) + beta ${nf(I.beta, 2)} × ${ERP} % de prima de mercado. Escenarios: los mismos del Informe (ventas y margen de caja de su historia; reglas en el Informe), con la tasa y la perpetuidad de estos controles.
       Es una herramienta para entender qué espera el mercado, no un precio objetivo.</div></div>`;
 }
 
@@ -195,5 +267,5 @@ function mount(el, r, d, ctx) {
     else if ((b = e.target.closest("[data-tpeers]"))) { T.peers = b.dataset.tpeers; store.set("tesis_peers", T.peers); el.querySelector("#tpeers").innerHTML = peersBox(r, ctx.uni); }
     else if ((b = e.target.closest("[data-topen]"))) { e.stopPropagation(); window.SCROpen?.(b.dataset.topen); } };
 }
-window.SCRTesis = { mount, implied, pv };
+window.SCRTesis = { mount, implied, pv, escenarios, lecturaLargo, tipo10 };
 })();

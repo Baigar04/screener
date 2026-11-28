@@ -74,16 +74,19 @@ function regNote() {
 }
 
 /* ---------- formulario (panel lateral) ---------- */
-function openForm(sym) {
+function openForm(sym, pre) {
   const r = window.SCRUni?.().find((x) => x.sym === sym);
-  if (!r) { window.SCREnsureUni?.(); H.openDrawer(`<h3>Registrar decisión</h3><div class="box">Cargando los datos de ${esc(sym)}…</div>`); setTimeout(() => window.SCRUni?.().length && openForm(sym), 800); return; }
+  if (!r) { window.SCREnsureUni?.(); H.openDrawer(`<h3>Registrar decisión</h3><div class="box">Cargando los datos de ${esc(sym)}…</div>`); setTimeout(() => window.SCRUni?.().length && openForm(sym, pre), 800); return; }
   D.form = { sym, dec: D.form?.sym === sym ? D.form.dec : null, hz: D.form?.sym === sym ? D.form.hz : "medio" };
+  /* R3: «Apuesta razonada» desde el Informe: llega con horizonte largo, tesis e invalidación propuestas (editables) y queda marcada */
+  if (pre) Object.assign(D.form, { hz: pre.hz || "largo", mot: pre.mot || "", inv: pre.inv || "", tipo: pre.tipo || null, tema: pre.tema || null });
   paintForm();
 }
 function paintForm() {
   const F = D.form, r = window.SCRUni().find((x) => x.sym === F.sym);
   const prev = D.list.filter((e) => e.sym === F.sym && !e.anulada);
-  H.openDrawer(`<h3>Registrar decisión · ${esc(F.sym)}</h3><div class="reg">${esc(r.nombre || "")}</div>
+  H.openDrawer(`<h3>${F.tipo === "apuesta" ? "Registrar apuesta razonada" : "Registrar decisión"} · ${esc(F.sym)}</h3><div class="reg">${esc(r.nombre || "")}${F.tema ? ` · ${esc(F.tema)}` : ""}</div>
+    ${F.tipo === "apuesta" ? '<div class="hint">Apuesta razonada: una tesis que ningún modelo ha validado. Queda marcada así en el Diario y se mide igual que el resto, para saber con el tiempo si este tipo de apuestas funciona. Revisa y cambia el texto propuesto.</div>' : ""}
     <div class="box"><b>Lo que se sabe hoy (queda guardado con la decisión)</b>
       <div class="kv-grid sm">${[["Precio", `${nf(r.precio, 2)} ${esc(r.moneda || "")}`], ["Cierre", fmtDate(r.fecha_precio)], ["Nota (tus pesos)", r.score ?? "—"], ["Técnico", esc(r.veredicto || "—")]]
         .map(([k, v]) => `<div class="kvc"><span>${k}</span><b class="num">${v}</b></div>`).join("")}</div></div>
@@ -102,7 +105,8 @@ function saveForm() {
   if (mot.length < 5) { msg.textContent = "Escribe el motivo (al menos unas palabras)."; msg.className = "chg n"; return; }
   const r = window.SCRUni().find((x) => x.sym === F.sym);
   D.list.push({ id: Date.now().toString(36), f: new Date().toISOString(), sym: F.sym, nombre: r.nombre || "", dec: F.dec, hz: F.hz, motivo: mot.slice(0, 300), inval: inv.slice(0, 200) || null,
-    p0: r.precio, fp: r.fecha_precio, mon: r.moneda || "", nota: r.score ?? null, tec: r.veredicto || null, anulada: null });
+    p0: r.precio, fp: r.fecha_precio, mon: r.moneda || "", nota: r.score ?? null, tec: r.veredicto || null, anulada: null,
+    ...(F.tipo ? { tipo: F.tipo, tema: F.tema || null } : {}) });
   save(); D.form = null; H.closeDrawer(); H.render();
 }
 
@@ -151,7 +155,7 @@ function render() {
     <div class="bar" style="margin-top:0">${filt}<span style="flex:1"></span><input id="dsym" class="txt" placeholder="Ticker (AAPL, SAN.MC…)" aria-label="Ticker para registrar" style="width:170px"><button class="icon-btn primary" data-dnewin="1">Registrar decisión</button><button class="icon-btn" data-dcsv="1">CSV</button></div>
     ${shown.length ? `<div class="tbl-wrap"><table class="ft dtab"><thead><tr><th>Fecha</th><th>Valor</th><th>Decisión</th><th style="text-align:left">Motivo</th><th>Horizonte</th><th>Precio</th><th>Nota ese día</th><th>1 mes</th><th>3 meses</th><th>6 meses</th><th>Desde entonces</th><th></th></tr></thead><tbody>
       ${shown.map((e) => `<tr class="${e.anulada ? "anul" : ""}"><td class="num">${fmtDate(e.f.slice(0, 10))}</td><td><a href="#" data-sym="${esc(e.sym)}"><b>${esc(e.sym)}</b></a></td>
-        <td><span class="dec dec-${e.dec}">${decName(e.dec)}</span></td><td style="text-align:left" class="dmot">${esc(e.motivo)}${e.inval ? `<div class="hint">Invalida: ${esc(e.inval)}</div>` : ""}${e.anulada ? `<div class="hint">Anulada el ${fmtDate(e.anulada.slice(0, 10))}</div>` : ""}</td>
+        <td><span class="dec dec-${e.dec}">${decName(e.dec)}</span>${e.tipo === "apuesta" ? `<div class="hint" title="${esc(e.tema || "")}">apuesta razonada</div>` : ""}</td><td style="text-align:left" class="dmot">${esc(e.motivo)}${e.inval ? `<div class="hint">Invalida: ${esc(e.inval)}</div>` : ""}${e.anulada ? `<div class="hint">Anulada el ${fmtDate(e.anulada.slice(0, 10))}</div>` : ""}</td>
         <td>${esc((HZ.find((x) => x[0] === e.hz) || [, "—"])[1])}</td><td class="num">${nf(e.p0, 2)} <small class="hint">${esc(e.mon)}</small></td><td class="num">${scoreB(e.nota)}</td>
         <td class="num">${cellEx(perf(e, 21), e)}</td><td class="num">${cellEx(perf(e, 63), e)}</td><td class="num">${cellEx(perf(e, 126), e)}</td><td class="num">${(() => { const p = perf(e, null); return p.loading ? "…" : p.err || p.ex == null ? "—" : `${cellEx(p, e)} <span class="hint">${p.ses} s.</span>`; })()}</td>
         <td>${e.anulada ? "" : `<button class="link-btn" data-danul="${e.id}" title="Anular (queda a la vista, no cuenta en las estadísticas)">Anular</button>`}</td></tr>`).join("")}
@@ -218,9 +222,9 @@ function keepText() { D.form.mot = document.getElementById("dmot")?.value || D.f
 function csv() {
   const q = (v) => (v == null ? "" : /[";\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   const rows = D.list.map((e) => { const p1 = perf(e, 21), p3 = perf(e, 63), p6 = perf(e, 126);
-    return [e.f.slice(0, 10), e.sym, decName(e.dec), e.hz, e.motivo, e.inval, e.p0, e.mon, e.fp, e.nota, e.tec, p1.ex?.toFixed(2), p3.ex?.toFixed(2), p6.ex?.toFixed(2), e.anulada ? e.anulada.slice(0, 10) : ""].map(q).join(";"); });
+    return [e.f.slice(0, 10), e.sym, decName(e.dec), e.hz, e.motivo, e.inval, e.p0, e.mon, e.fp, e.nota, e.tec, p1.ex?.toFixed(2), p3.ex?.toFixed(2), p6.ex?.toFixed(2), e.anulada ? e.anulada.slice(0, 10) : "", e.tipo === "apuesta" ? `apuesta razonada${e.tema ? ": " + e.tema : ""}` : ""].map(q).join(";"); });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob(["﻿" + ["fecha;valor;decision;horizonte;motivo;invalidacion;precio;moneda;cierre;nota;tecnico;exceso_1m_pp;exceso_3m_pp;exceso_6m_pp;anulada", ...rows].join("\n")], { type: "text/csv;charset=utf-8" }));
+  a.href = URL.createObjectURL(new Blob(["﻿" + ["fecha;valor;decision;horizonte;motivo;invalidacion;precio;moneda;cierre;nota;tecnico;exceso_1m_pp;exceso_3m_pp;exceso_6m_pp;anulada;tipo", ...rows].join("\n")], { type: "text/csv;charset=utf-8" }));
   a.download = `diario-decisiones-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
 }
 window.addEventListener("storage", (e) => { if (e.key === "diario") { D.list = store.get("diario", []); H.render(); } });

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       pasos:
-        description: "Pasos separados por comas: universo, riesgo, geo, estres, prob"
+        description: "Pasos separados por comas: universo, riesgo, geo, estres, prob, muestra (datos publicados de valores de ejemplo), tipos10"
         default: "riesgo,geo,estres"
 permissions:
   contents: read
@@ -48,6 +48,16 @@ jobs:
       - name: Probabilidad de acierto (examen)
         if: contains(inputs.pasos, 'prob')
         run: python scripts/fetch_prob.py
+      - name: Bono a 10 años por divisa (R3)
+        if: contains(inputs.pasos, 'tipos10')
+        run: cd scripts && python -c "import json, fetch_stress as S; print('TIPOS10', json.dumps(S.tipos10(), ensure_ascii=False)); print('ERRORES', S.ERRORS)"
+      - name: Muestra de datos publicados (para probar la web con cifras reales)
+        if: contains(inputs.pasos, 'muestra')
+        run: |
+          mkdir -p m/data/t
+          for f in universe.json stress.json geo.json risk.json prob.json macro.json; do curl -fsSL "https://baigar04.github.io/screener/data/$f" -o "m/data/$f" || true; done
+          for s in AAPL MSFT NVDA KO JNJ SAN.MC ITX.MC IBE.MC RHM.DE LDO.MI BA.L SAP.DE 7203.T 005930.KS TSLA PLTR AMZN IDR.MC ASML.AS SHEL.L; do curl -fsSL "https://baigar04.github.io/screener/data/t/$s.json" -o "m/data/t/$s.json" || true; done
+          echo "MUESTRAB64:$(tar -C m -czf - data | base64 -w0)"
       - name: Copia legible en el registro (gzip + base64)
         run: |
           [ -f data/prob.json ] && echo "PROBB64:$(gzip -9c data/prob.json | base64 -w0)" || true
